@@ -1,4 +1,16 @@
 <?
+/*!
+ * PHP SmartDb
+ * http://www.phpsmartdb.com/
+ *
+ * Copyright 2011, Cirkuit Networks
+ * Dual licensed under the MIT or GPL Version 2 licenses.
+ * http://www.phpsmartdb.com/license
+ */
+/**
+ * @package SmartDatabase
+ * @ignore
+ */
 /*
 This class will update a database to match a given db structure schema (described below)
 
