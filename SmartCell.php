@@ -1,0 +1,1277 @@
+<?
+/*!
+ * PHP SmartDb
+ * http://www.phpsmartdb.com/
+ *
+ * Copyright 2011, Cirkuit Networks
+ * Dual licensed under the MIT or GPL Version 2 licenses.
+ * http://www.phpsmartdb.com/license
+ */
+/**
+ * @package SmartDatabase
+ */
+/**
+ * Where a row and a column meet. Holds the actual data.
+ * <p><b>Note: All Column functions and properties are also available to a Cell.</b></p>
+ * @see SmartColumn
+ * @package SmartDatabase
+ */
+class SmartCell{
+	/**
+	 * @var SmartRow The row that contains this cell
+	 */
+	public $Row;
+	/**
+	 * @var SmartColumn The column that contains this cell
+	 * @ignore
+	 */
+	public $Column;
+
+	private $_value;
+
+	/**
+	 * @param SmartColumn $Column
+	 * @param SmartRow $Row
+	 * @return SmartCell
+	 */
+	public function __construct(SmartColumn $Column, SmartRow $Row){
+		if(!isset($Column)) throw new Exception('$Column must be set');
+		if(!isset($Row)) throw new Exception('$Row must be set');
+
+		$this->Column = $Column;
+		$this->Row = $Row;
+		$this->_value = null;
+	}
+
+	/**
+	 * Allows access to the value without having to explicitly use GetValue(). Example: echo $smartrow['columnname']
+	 * NOTE- Cell must be used in a string context so the value is returned as a string, otherwise you will be accessing the Cell directly.
+	 * @return string The value of this cell through GetValue() as a string (PHP requires a string be returned)
+	 * @see SmartCell::GetValue()
+	 */
+	public function __toString(){
+		return (string)$this->GetValue();
+	}
+
+	/**
+	 * NEW WITH PHP 5.3.0, A shortcut for ->GetValue() that returns the actual value of the cell.
+	 * Example usage: $smartrow['columnName']() instead of $smartrow['columnName']->GetValue(), $smartrow['columnName'](true,true) instead of $smartrow['columnName']->GetValue(true,true), and etc.
+	 * @return mixed The value of this cell through GetValue()
+	 * @see SmartCell::GetValue()
+	 * @ignore
+	 */
+	public function __invoke($returnOption1=false, $returnOption2=false){
+		return $this->GetValue($returnOption1, $returnOption2);
+	}
+
+
+/////////////////////////////// COLUMN WRAPPERS ///////////////////////////////
+	/**
+	 * Wraps up all public functionality of the containing Column
+	 * @ignore
+	 */
+	public function __call($method, $args){
+		return call_user_func_array(array($this->Column,$method), $args);
+	}
+	/**
+	 * Wraps up all public functionality of the containing Column
+	 * @ignore
+	 */
+	public function __set($key, $val){
+		$this->Column->$key = $val;
+	}
+	/**
+	 * Wraps up all public functionality of the containing Column
+	 * @ignore
+	 */
+	public function __get($key){
+		return $this->Column->$key;
+	}
+///////////////////////////////////////////////////////////////////////////////
+
+	/**
+	 * Returns the value of the cell.
+	 * <p>Note: if coming from a Row object named $row, you can use the shorthand array notation and invoke the Column/Cell directly:</p>
+	 * <code>
+	 * //this shorthand is recommended:
+	 * $columnValue = $row['YOUR_COLUMN_NAME'](); //same thing as $row['YOUR_COLUMN_NAME']->GetValue();
+	 * $columnValue = $row['YOUR_COLUMN_NAME'](true,true); //same thing as $row['YOUR_COLUMN_NAME']->GetValue(true,true);
+	 * 
+	 * //NOTE: This is not recommended, but you can skip the function call (i.e. $row['YOUR_COLUMN_NAME']) when the returned value is used as a STRING ONLY! Otherwise, $row['YOUR_COLUMN_NAME'] gives you the actual SmartCell object. For example:
+	 * echo $row['YOUR_COLUMN_NAME']; //is fine and will echo the column value
+	 * if($row['YOUR_COLUMN_NAME'] == "my data"){} //is fine and will compare the column value to "my data"
+	 * if($row['YOUR_COLUMN_NAME'] == 3){} //is NOT fine since we're not doing string comparison. this statement will try to compare the actual SmartCell object with the int 3 and will lead to bad things.
+	 * if((string)$row['YOUR_COLUMN_NAME'] == 3){} //is fine
+	 * if($row['YOUR_COLUMN_NAME']() == 3){} //is fine and RECOMMENDED (just always invoke the Column/Cell directly like this)
+	 * if($row['YOUR_COLUMN_NAME']->GetValue() == 3){} //is fine
+	 * </code>
+	 * <p>Once PHP allows overriding operators or __toInt()/__toFloat()/__toBool() etc., we will be able to handle this situation automatically so you don't need to worry about the above anymore, and won't need to even do the shorthand invoke on the Column/Cell. We may be able to look in to the SPL_Types php package for some of this stuff down the road?
+	 * @param bool $returnOption1 [optional] If this column is not a date column, setting this to true will run stripslashes() before returning. If this column is a date column, setting this value to true will run strtotime() before returning.
+	 * @param bool $returnOption2 [optional] If this column is not a date column, setting this to true will run htmlspecialchars() before returning. If this column is a date column, setting this value to true has no effect.
+	 * @return mixed The value of the cell
+	 */
+	public function GetValue($returnOption1=false, $returnOption2=false){
+		if(!$this->AllowGet) throw new Exception("AllowGet is set to false for column '{$this->ColumnName}' on table '{$this->Table->TableName}'");
+		if($this->Row->IsInitialized() == false && !$this->IsPrimaryKey) $this->Row->ForceInitialization(); //initialize the row if not a primary key. may set $this->_value
+
+		$value = $this->_value;
+		if($returnOption1){
+			if($this->IsDateColumn){ //is a date column
+				$value = strtotime($value);
+			}
+			else{ //not a date column
+				$value = stripslashes($value);
+			}
+		}
+		if($returnOption2){
+			if(!$this->IsDateColumn){ //is a date column
+				$value = htmlspecialchars($value);
+			}
+		}
+		return $value;
+	}
+
+	/**
+	 * Sets the value of the Cell.
+	 * <p>Date column values are run through PHP's strtotime() function by default to expand possible date input values</p>
+	 * <p>Note: if coming from a Row object named $row, you set the value with the shorthand array notation:</p>
+	 * <code>
+	 * $row['YOUR_COLUMN_NAME'] = $yourNewValue;
+	 * </code>
+	 * @param mixed $value The new value for the cell
+	 */
+	public function SetValue($value){
+		if(!$this->AllowSet) throw new Exception("AllowSet is set to false for column '{$this->ColumnName}' on table '{$this->Table->TableName}'");
+		$this->VerifyValueType($value);
+
+		if($this->IsPrimaryKey){ //changing a primary key column value?
+			if($this->IsAutoIncrement) throw new Exception("Setting an auto-increment key column is not allowed: column '{$this->ColumnName}', table '{$this->Table->TableName}'");
+			else if($this->Table->PrimaryKeyIsNonCompositeNonAutoIncrement()){ //setting a non-autoincrement, non composite key
+				$this->Row->SetKeyColumnValues(array($this->Table->TableName=>array($this->ColumnName=>$value)),true,false);
+				return;
+			}
+			else if($this->Table->PrimaryKeyIsComposite()) throw new Exception("Setting individual key column '{$this->ColumnName}' in composite key table '{$this->Table->TableName}' is not allowed. Use the SetKeyColumnValues() function on the Row.");
+		}
+		else { //changing a non primary key column value
+			if($this->Row->IsInitialized() == false) $this->Row->ForceInitialization();
+			$valueBeforeChanged = $this->_value;
+			if($this->_onSetValue) $this->FireCallback($this->_onSetValue, $e=array('cancel-event'=>&$cancelEvent, 'Cell'=>&$this, 'current-value'=>$valueBeforeChanged, 'new-value'=>&$value ) );
+			if($cancelEvent) return; //event cancelled, do not set the value
+
+			if($this->TrimAndStripTagsOnSet && $value!==null){
+				$value = strip_tags(trim($value));
+			}
+
+			if($this->IsDateColumn && $value!==null){
+				$value = date("Y-m-d H:i:s", strtotime($value));
+			}
+
+			if(!isset($this->_value) || $this->ValueDiffers($value)){
+				if($this->_onBeforeValueChanged) $this->FireCallback($this->_onBeforeValueChanged, $e=array('cancel-event'=>&$cancelEvent, 'Cell'=>&$this, 'current-value'=>$valueBeforeChanged, 'new-value'=>&$value ) );
+				if(!$cancelEvent){
+					$this->_value = $value;
+					$this->Row->OnCellValueChanged(); //notify the row that a cell's value had changed
+					if($this->_onAfterValueChanged) $this->FireCallback($this->_onAfterValueChanged, $e=array('Cell'=>&$this, 'current-value'=>$this->_value, 'old-value'=>$valueBeforeChanged ));
+				}
+			}
+		}
+	}
+
+	/**
+	 * Returns true if this Cell's value has been set (i.e. isset()==true)
+	 * <p>NOTE- this function is meant mostly for internal use. It is NOT to be used to determine if a Cell's value is empty or null.</p>
+	 * @return bool true if this Cell's value has been set (i.e. isset()==true)
+	 * @ignore
+	 */
+	public function IsValueSet(){
+		return isset($this->_value);
+	}
+
+	/**
+	 * Internal use only. Using this can seriously mess up the current row state and jack shit up. Don't do it.
+	 * @ignore
+	 */
+	public function ForceValue($value){
+		$this->VerifyValueType($value);
+		$this->_value = $value;
+	}
+	/**
+	 * Internal use only. Using this can seriously mess up the current row state and jack shit up. Don't do it.
+	 * @ignore
+	 */
+	public function ForceUnset(){
+		$this->_value = null; //do this instead of unset. unset loses our private $_value and forces the value to be set on the Column level next time through, thanks to magic functions
+	}
+
+	/**
+	 * Anytime we set the value of this cell, we need to fix boolean types to '1' and '0' and make sure we're not setting to an object.
+	 * @param object $value
+	 * @return bool
+	 */
+	private function VerifyValueType(&$value){
+		//handle objects. obviously we cant commit the object to the database, so try to __toString it
+		if($this->Row->Database->DEV_MODE){ //development mode
+			if(is_object($value)){
+				if(method_exists($value, "__toString")){
+					$value = $value->__toString();
+					return;
+				}
+				else{
+					$type = gettype($value);
+					throw new Exception("Cannot set a Cell's value to an object of type $type. You can only set Cell values with simple types (ie string, int, etc.). Table: '{$this->Table->TableName}', Column: '{$this->ColumnName}' ");
+				}
+			}
+			else if(is_array($value) || is_resource($value)){
+				$type = gettype($value);
+				throw new Exception("Cannot set a Cell's value to a '$type' type. You can only set Cell values with simple types (ie string, int, etc.). Table: '{$this->Table->TableName}', Column: '{$this->ColumnName}' ");
+			}
+		}
+		else { //production mode
+			if(is_object($value)) $value = $value->__toString();
+		}
+
+		//handle booleans.
+		if(is_bool($value)){ //boolean false is '\0'. make booleans default to 1 and 0
+			if($value) $value = 1;
+			else $value = 0;
+		}
+	}
+
+	/**
+	 * Checks the given $compareValue against the current value to see if the value is different. Returns true if the $compareValue is different from the current value, false if they are the same.
+	 * Uses type casting and stripslashes. If stripslashes has the same text as the current, then the text is not really updated
+	 * @return bool true if the $compareValue is different from the current value, false if they are the same.
+	 */
+	private function ValueDiffers($compareValue){
+		//check null first. only allow null special if this column is NOT required (ie NULL sf a valid value)
+		if( !$this->Column->IsRequired && $compareValue===null && $this->_value !== null){
+			return true;
+		}
+		
+		$strippedCompareVal = stripslashes($compareValue);
+		$strippedVal = ($this->_value==="\0"?"":stripslashes($this->_value)); //special case with /0
+
+		switch(strtolower($this->DataType)){
+			case("float"):
+				return ((float)$strippedVal !== (float)$strippedCompareVal && (float)$this->_value !== (float)$compareValue);
+			case("binary"):
+				$thisCompareVal = $this->_value;
+				if($thisCompareVal==="\0"){ //special case with \0 not recognized as null/false
+					$strippedVal = $thisCompareVal = 0;
+				}
+				if($compareValue==="\0"){ //special case with \0 not recognized as null/false
+					$strippedCompareVal = $compareValue = 0;
+				}
+				return ((bool)$strippedVal !== (bool)$strippedCompareVal && (bool)$thisCompareVal !== (bool)$compareValue);
+			case("int"):
+			case("bigint"):
+			case("tinyint"):
+			case("smallint"):
+				return ((int)$strippedVal !== (int)$strippedCompareVal && (int)$this->_value !== (int)$compareValue);
+			case("double"):
+			case("decimal"):
+				return ((double)$strippedVal !== (double)$strippedCompareVal && (double)$this->_value !== (double)$compareValue);
+			case("varchar"):
+			case("char"):
+			case("text"):
+			case("enum"):
+				return ((string)$strippedVal !== (string)$strippedCompareVal && (string)$this->_value !== (string)$compareValue);
+			default:
+				return ($strippedVal !== $strippedCompareVal && $this->_value !== $compareValue);
+		}
+	}
+
+	/**
+	 * Returns an array of all rows from $tableName whose $columnName value matches the value of this Cell. If there are no matching rows, an empty array is returned.
+	 * <p>To execute this function, the related table must have a primary key.</p>
+	 * <p>Options are as follows:</p>
+	 * <code>
+	 * $options = array(
+	 * 	'sort-by'=>null, //Either a string of the column to sort ASC by, or an assoc array of "ColumnName"=>"ASC"|"DESC" to sort by. An exception will be thrown if a column does not exist.
+	 * 	'return-assoc'=>false, //if true, the returned assoc-array will have the row's primary key column value as its key and the row as its value. ie array("2"=>$row,...) instead of just array($row,...);
+	 *  'limit'=>null, // With one argument (ie $limit="10"), the value specifies the number of rows to return from the beginning of the result set
+	 *				   // With two arguments (ie $limit="100,10"), the first argument specifies the offset of the first row to return, and the second specifies the maximum number of rows to return. The offset of the initial row is 0 (not 1):
+	 *  'return-count'=>null, //OUT variable only. integer. after this function is executed, this variable will be set with the number of rows being returned. Usage ex: array('return-count'=>&$count)
+	 *  'return-count-only'=>false, //if true, the return-count will be returned instead of the rows. A good optimization if you dont need to read any data from the rows and just need the rowcount of the search.
+	 *  }
+	 * </code>
+	 * @param string $tableName The table containing the related data
+	 * @param string $columnName The column within given $tableName that contains the data related to this cell
+	 * @param array $options [optional] See description
+	 * @return array An array of all rows from $tableName whose $columnName value matches the value of this Cell. If there are no matching rows, an empty array is returned.
+	 */
+	public function GetRelatedRows($tableName, $columnName=null, array $options=null){
+		if(is_array($columnName)){ //shortcut support for GetRelatedRows(tableName, options)
+			$options = $columnName;
+			$columnName = $this->ColumnName;
+		}
+		else if($columnName == null){ //shortcut support for GetRelatedRows(tableName)
+			$columnName = $this->ColumnName;
+		}
+		if(!$this->HasRelation($tableName, $columnName)) throw new Exception("No relation specified between table '$tableName', column '$columnName' and table '{$this->Table->TableName}', column '{$this->ColumnName}'. ");
+
+		$relatedTable = $this->Table->Database->GetTable($tableName);
+		if(!$relatedTable->PrimaryKeyExists()) throw new Exception("Function '".__FUNCTION__."' can only get related Rows from Tables that contain a primary key. Related Table '$tableName' has no primary key specified.");
+
+		
+		
+		return $relatedTable->GetColumn($columnName)->LookupRows($this->GetValue(), $options);
+	}
+
+	/**
+	 * Returns a Row instance from $tableName whose $columnName value matches the value of this Cell. If there is no match, an instance is still returned but ->Exists() will be false. The returned row will have the searched column=>value set by default (excluding auto-increment primary key columns)
+	 * <p>To execute this function, the related table must have a primary key and the column $columnName must be unique.</p>
+	 * <p>Options are as follows:</p>
+	 * @param string $tableName The table containing the related data
+	 * @param string $columnName The column within given $tableName that contains the data related to this cell
+	 * @return SmartRow A Row instance from $tableName whose $columnName value matches the value of this Cell. If there is no match, an instance is still returned but ->Exists() will be false. The returned row will have the searched column=>value set by default (excluding auto-increment primary key columns)
+	 * @see SmartRow::Exists()
+	 */
+	public function GetRelatedRow($tableName, $columnName=null){
+		if(!$columnName) $columnName = $this->ColumnName;
+		if(!$this->HasRelation($tableName, $columnName)) throw new Exception("No relation specified between table '$tableName', column '$columnName' and table '{$this->Table->TableName}', column '{$this->ColumnName}'. ");
+
+		$relatedTable = $this->Table->Database->GetTable($tableName);
+		if(!$relatedTable->PrimaryKeyExists()) throw new Exception("Function '".__FUNCTION__."' can only get related Rows from Tables that contain a primary key. Related Table '$tableName' has no primary key specified.");
+
+		$relatedColumn = $relatedTable->GetColumn($columnName);
+		if(!$relatedColumn->IsUnique) throw new Exception("Function '".__FUNCTION__."' only works on columns specified as Unique. Table '$tableName', column '$columnName' is not specified as unique.");
+
+		return $relatedColumn->LookupRow($this->GetValue(), $options);
+	}
+
+
+/////////////////////////////// CALLBACK STUFF ///////////////////////////////////
+	//event callback arrays
+	private $_onSetValue; //callbacks to be fired when this column has been set (not necessarily 'changed')
+	private $_onBeforeValueChanged; //callbacks to be fired before this column has been changed
+	private $_onAfterValueChanged; //callbacks to be fired after this column has been changed
+
+	/**
+	 * @var bool If set to true, no callbacks will be fired for this Cell.
+	 */
+	public $DisableCallbacks = false;
+
+	/**
+	 * Fires all callbacks for the given callback array
+	 */
+	private function FireCallback($callbackArr, &$eventArgs=null){
+		if($this->DisableCallbacks || count($callbackArr)<=0) return; //no callbacks defined or callbacks disabled
+		foreach($callbackArr as $callback){
+			call_user_func($callback, $this->Row, &$eventArgs); //pass $this->Row reference back through to the callback
+		}
+	}
+
+	/**
+	 * Adds a $callbackFunction to be fired when this column has been set (though not necessarily 'changed')
+	 * <p>The signature of your $callbackFunction should be as follows: yourCallbackFunctionName($eventObject, $eventArgs)</p>
+	 * <p>$eventObject in your $callbackFunction will be the ROW containing the Cell that is firing the event callback</p>
+	 * <p>$eventArgs in your $callbackFunction will have the following keys:</p>
+	 * <code>
+	 * array(
+	 * 	'cancel-event'=>&false,  //setting 'cancel-event' to true within your $callbackFunction will prevent the event from continuing
+	 * 	'Cell'=>&$this, //a reference to the Cell that fired the event
+	 * 	'current-value'=>object, //the current value of this column, BEFORE it has changed to 'new-value'
+	 * 	'new-value'=>&object, //the value that this column is going to be set to, replacing the 'current-value'. Changing this value in your $callbackFunction will change the value that the column will be set to.
+	 * );
+	 * </code>
+	 * @param mixed $callbackFunction the name of the function to callback that exists within the given $functionScope
+	 * @param mixed $functionScope [optional] the scope of the $callbackFunction, this may be an instance reference (a class that the function is within), a string that specifies the name of a class (that contains the static $callbackFunction), , or NULL if the function is in global scope
+	*/
+	public function OnSetValue($callbackFunction, $functionScope=null){
+		if(!$functionScope){
+			$this->_onSetValue[] = $callbackFunction;
+		}
+		else {
+			$this->_onSetValue[] = array($functionScope, $callbackFunction);
+		}
+	}
+	/**
+	 * Adds a $callbackFunction to be fired right before this column has been changed.
+	 * <p>The signature of your $callbackFunction should be as follows: yourCallbackFunctionName($eventObject, $eventArgs)</p>
+	 * <p>$eventObject in your $callbackFunction will be the ROW containing the Cell that is firing the event callback</p>
+	 * <p>$eventArgs in your $callbackFunction will have the following keys:</p>
+	 * <code>
+	 * array(
+	 * 	'cancel-event'=>&false,  //setting 'cancel-event' to true within your $callbackFunction will prevent the event from continuing
+	 * 	'Cell'=>&$this, //a reference to the Cell that fired the event
+	 * 	'current-value'=>object, //the current value of this column, BEFORE it has changed to 'new-value'
+	 * 	'new-value'=>&object, //the value that this column is going to be set to, replacing the 'current-value'. Changing this value in your $callbackFunction will change the value that the column will be set to.
+	 * );
+	 * </code>
+	 * @param mixed $callbackFunction the name of the function to callback that exists within the given $functionScope
+	 * @param mixed $functionScope [optional] the scope of the $callbackFunction, this may be an instance reference (a class that the function is within), a string that specifies the name of a class (that contains the static $callbackFunction), , or NULL if the function is in global scope
+	*/
+	public function OnBeforeValueChanged($callbackFunction, $functionScope=null){
+		if(!$functionScope){
+			$this->_onBeforeValueChanged[] = $callbackFunction;
+		}
+		else {
+			$this->_onBeforeValueChanged[] = array($functionScope, $callbackFunction);
+		}
+	}
+	/**
+	 * Adds a $callbackFunction to be fired right after this column has been changed.
+	 * <p>The signature of your $callbackFunction should be as follows: yourCallbackFunctionName($eventObject, $eventArgs)</p>
+	 * <p>$eventObject in your $callbackFunction will be the ROW containing the Cell that is firing the event callback</p>
+	 * <p>$eventArgs in your $callbackFunction will have the following keys:</p>
+	 * <code>
+	 * array(
+	 * 	'Cell'=>&$this, //a reference to the Cell that fired the event
+	 * 	'current-value'=>object, //the current value of this column, AFTER it has been changed from 'old-value'
+	 * 	'old-value'=>object, //the value that this column was set to before it was updated with the 'current-value'
+	 * );
+	 * </code>
+	 * @param mixed $callbackFunction the name of the function to callback that exists within the given $functionScope
+	 * @param mixed $functionScope [optional] the scope of the $callbackFunction, this may be an instance reference (a class that the function is within), a string that specifies the name of a class (that contains the static $callbackFunction), , or NULL if the function is in global scope
+	*/
+	public function OnAfterValueChanged($callbackFunction, $functionScope=null){
+		if(!$functionScope) {
+			$this->_onAfterValueChanged[] = $callbackFunction;
+		}
+		else {
+			$this->_onAfterValueChanged[] = array($functionScope, $callbackFunction);
+		}
+	}
+
+/////////////////////////////// FORM STUFF ///////////////////////////////////
+	/**
+	 * Returns a string of HTML representing a form textbox object for this Cell.
+	 * @param string $formObjectType [optional] Will use the column's default form object type if not specified or NULL. Can be: "text" | "password" | "checkbox" | "select" | "textarea" | "hidden"
+	 * 			| "radio" | "colorpicker" | "datepicker" | "slider"
+	 * @param mixed $param1 [optional] Depends on the $formObjectType you use. See references for details.
+	 * @param mixed $param2 [optional] Depends on the $formObjectType you use. See references for details.
+	 * @param mixed $param3 [optional] Depends on the $formObjectType you use. See references for details.
+	 * @see SmartCell::GetTextFormObject()
+	 * @see SmartCell::GetPasswordFormObject()
+	 * @see SmartCell::GetCheckboxFormObject()
+	 * @see SmartCell::GetSelectFormObject()
+	 * @see SmartCell::GetTextareaFormObject()
+	 * @see SmartCell::GetHiddenFormObject()
+	 * @see SmartCell::GetRadioFormObject()
+	 * @see SmartCell::GetColorpickerFormObject()
+	 * @see SmartCell::GetDatepickerFormObject()
+	 * @see SmartCell::GetSliderFormObject()
+	 * @return string string of HTML representing a form textbox object for this cell
+	 */
+	public function GetFormObject($formObjectType=null, $param1=null, $param2=null, $param3=null){
+		if(!$formObjectType){
+			$formObjectType = $this->DefaultFormType;
+		}
+		$formObjectType = strtolower($formObjectType);
+		switch($formObjectType){
+			case 'text': return $this->GetTextFormObject($param1, $param2, $param3);
+			case 'password': return $this->GetPasswordFormObject($param1, $param2, $param3);
+			case 'checkbox': return $this->GetCheckboxFormObject($param1, $param2, $param3);
+			case 'select': return $this->GetSelectFormObject($param1, $param2, $param3);
+			case 'textarea': return $this->GetTextareaFormObject($param1, $param2, $param3);
+			case 'hidden': return $this->GetHiddenFormObject($param1, $param2, $param3);
+			case 'radio': return $this->GetRadioFormObject($param1, $param2, $param3);
+			case 'colorpicker': return $this->GetColorpickerFormObject($param1, $param2, $param3);
+			case 'datepicker': return $this->GetDatepickerFormObject($param1, $param2, $param3);
+			case 'slider': return $this->GetSliderFormObject($param1, $param2, $param3);
+			default: throw new Exception("Invalid Form Object Type: $formObjectType");
+		}
+	}
+
+	/**
+	 * Returns a string of HTML representing a form textbox object for this cell.
+	 * $options are as follows:
+	 * <code>
+	 * $options = array(
+	 * 	'show-required-marker' => $this->IsRequired, //if true, a '*' will be appended to the end of the input field (note: default value may be set on the Column. use this field to overwrite the default value)
+	 * 	'custom-formatter-callback' =>null, //can be either: 1. array("functionName", $obj) if function belongs to $obj, 2. array("functionName", "className") if the function is static within class "classname", or 3. just "functionName" if function is in global scope. this function will be called when getting the form object and the value returned by it will be used as the form object's value. the callback's signiture is functionName($value), where $value is the current cell value
+	 * );
+	 * </code>
+	 * @param array $customAttribs [optional] An assoc-array of attributes to set in this form object's html (ie 'class'=>'yourClass'). If this array contains 'name', a custom name will be set for this form object, though 'name' should be left blank on most cases as the default name will be generated so it can be tracked by this class; custom names require you to handle getting/setting POST/GET values
+	 * @param array $options [optional] Array of key-value pairs, see description
+	 * @see SmartCell::GetFormObject()
+	 * @return string string of HTML representing a form textbox object for this cell
+	 */
+	public function GetTextFormObject(array $customAttribs=null, array $options=null){
+		//OPTIONS
+		$defaultOptions = array( //default options
+			"show-required-marker"=>$this->IsRequired,
+		);
+		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
+			$options = array_merge($defaultOptions, $options);
+		}
+		else $options = $defaultOptions;
+
+
+		//get formatted $value
+		if($this->IsDateColumn) //date column
+			$value = $this->GetValue(false);
+		else $value = $this->GetValue(true,true);
+
+
+		//ATTRIBS
+		$defaultAttribs = array(
+			'id'=>$this->GetDefaultFormObjectId(),
+			'name'=>$this->GetDefaultFormObjectName(),
+			'class'=>'inputText',
+			'value'=>$value,
+			'size'=>$this->MaxSize,
+			'maxlength'=>$this->MaxSize,
+			'disabled'=>(!$this->AllowSet ? 'disabled' : null),
+		);
+		if(is_array($customAttribs)){ //overwrite $defaultAttribs with any $customAttribs specified
+			$customAttribs = array_change_key_case($customAttribs, CASE_LOWER);
+			$customAttribs = array_merge($defaultAttribs, $customAttribs);
+		}
+		else $customAttribs = $defaultAttribs;
+
+		//formatter callback
+		if($options['custom-formatter-callback']) $customAttribs['value'] = call_user_func($options['custom-formatter-callback'], $customAttribs['value']);
+
+		$attribsHtml = $this->BuildAttribsHtml($customAttribs);
+		$formObjHtml = '<input type="text"'.$attribsHtml.'>';
+		if($options['show-required-marker']) $formObjHtml .= '<span class="formFieldRequiredMarker">*</span>';
+		return $formObjHtml;
+	}
+
+	/**
+	 * @var string The value that is used as a password form object value when a password cell is set.
+	 */
+	public $FakePasswordFormObjectValue = "__fake__"; //should be something unique, doesnt matter what
+	/**
+	 * Returns a string of HTML representing a form password input object for this cell.
+	 * $options are as follows:
+	 * <code>
+	 * $options = array(
+	 * 	'show-required-marker' => $this->IsRequired, //if true, a '*' will be appended to the end of the input field (note: default value may be set on the Column. use this field to overwrite the default value)
+	 * 	'custom-formatter-callback' =>null, //can be either: 1. array("functionName", $obj) if function belongs to $obj, 2. array("functionName", "className") if the function is static within class "classname", or 3. just "functionName" if function is in global scope. this function will be called when getting the form object and the value returned by it will be used as the form object's value. the callback's signiture is functionName($value), where $value is the current cell value
+	 * );
+	 * </code>
+	 * @param array $customAttribs [optional] An assoc-array of attributes to set in this form object's html (ie 'class'=>'yourClass'). If this array contains 'name', a custom name will be set for this form object, though 'name' should be left blank on most cases as the default name will be generated so it can be tracked by this class; custom names require you to handle getting/setting POST/GET values
+	 * @param array $options [optional] Array of key-value pairs, see description
+	 * @see SmartCell::GetFormObject()
+	 * @return string string of HTML representing a form password input object for this cell
+	 */
+	public function GetPasswordFormObject(array $customAttribs=null, array $options=null){
+		//OPTIONS
+		$defaultOptions = array( //default options
+			"show-required-marker"=>$this->IsRequired,
+		);
+		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
+			$options = array_merge($defaultOptions, $options);
+		}
+		else $options = $defaultOptions;
+
+
+		//get formatted value
+		$pwd = $this->GetValue();
+		if (!empty($pwd))
+			$pwd = $this->FakePasswordFormObjectValue;
+		else $pwd = "";
+
+
+		//ATTRIBS
+		$defaultAttribs = array(
+			'id'=>$this->GetDefaultFormObjectId(),
+			'name'=>$this->GetDefaultFormObjectName(),
+			'class'=>'inputText inputPassword',
+			'value'=>$pwd,
+			'size'=>$this->MaxSize,
+			'maxlength'=>$this->MaxSize,
+			'disabled'=>(!$this->AllowSet ? 'disabled' : null),
+		);
+		if(is_array($customAttribs)){ //overwrite $defaultAttribs with any $customAttribs specified
+			$customAttribs = array_change_key_case($customAttribs, CASE_LOWER);
+			$customAttribs = array_merge($defaultAttribs, $customAttribs);
+		}
+		else $customAttribs = $defaultAttribs;
+
+		//formatter callback
+		if($options['custom-formatter-callback']) $customAttribs['value'] = call_user_func($options['custom-formatter-callback'], $customAttribs['value']);
+
+		$attribsHtml = $this->BuildAttribsHtml($customAttribs);
+		$formObjHtml = '<input type="password"'.$attribsHtml.'>';
+		if($options['show-required-marker']) $formObjHtml .= '<span class="formFieldRequiredMarker">*</span>';
+		return $formObjHtml;
+	}
+
+
+	/**
+	 * Returns a string of HTML representing a form checkbox input object for this cell.
+	 * $options are as follows:
+	 * <code>
+	 * $options = array(
+	 * 	'show-required-marker' => $this->IsRequired, //if true, a '*' will be appended to the end of the input field (note: default value may be set on the Column. use this field to overwrite the default value)
+	 * 	'custom-formatter-callback' =>null, //can be either: 1. array("functionName", $obj) if function belongs to $obj, 2. array("functionName", "className") if the function is static within class "classname", or 3. just "functionName" if function is in global scope. this function will be called when getting the form object and the value returned by it will be used as the form object's value. the callback's signiture is functionName($value), where $value is the current cell value
+	 * );
+	 * </code>
+	 * @param array $customAttribs [optional] An assoc-array of attributes to set in this form object's html (ie 'class'=>'yourClass'). If this array contains 'name', a custom name will be set for this form object, though 'name' should be left blank on most cases as the default name will be generated so it can be tracked by this class; custom names require you to handle getting/setting POST/GET values
+	 * @param array $hiddenNotifierCustomAttribs [optional] An array of custom attributes for this checkbox's corresponding hidden field. (the hidden field must exist so if this checkbox is not checked, POST still contains information that will let Codegen know that the checkbox value should be updated to 'not checked')
+	 * @param array $options [optional] Array of key-value pairs, see description
+	 * @see SmartCell::GetFormObject()
+	 * @return string string of HTML representing a form checkbox input object for this cell
+	 */
+	public function GetCheckboxFormObject(array $customAttribs=null, $hiddenNotifierCustomAttribs=null, array $options=null){
+		//OPTIONS
+		$defaultOptions = array( //default options
+			"show-required-marker"=>$this->IsRequired,
+		);
+		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
+			$options = array_merge($defaultOptions, $options);
+		}
+		else $options = $defaultOptions;
+
+
+		//get formatted $value
+		$currentValue = $this->GetValue();
+		$checked = null;
+		if($currentValue && ($currentValue!=="\0")){
+			$checked = 'checked';
+		}
+		else $currentValue = "1";
+
+
+		//ATTRIBS
+		$defaultAttribs = array(
+			'id'=>$this->GetDefaultFormObjectId(),
+			'name'=>$this->GetDefaultFormObjectName(),
+			'class'=>'inputCheckbox',
+			'value'=>$currentValue,
+			'disabled'=>(!$this->AllowSet ? 'disabled' : null),
+			'checked'=>$checked,
+		);
+		if(is_array($customAttribs)){ //overwrite $defaultAttribs with any $customAttribs specified
+			$customAttribs = array_change_key_case($customAttribs, CASE_LOWER);
+			$customAttribs = array_merge($defaultAttribs, $customAttribs);
+		}
+		else $customAttribs = $defaultAttribs;
+
+		//formatter callback
+		if($options['custom-formatter-callback']) $customAttribs['value'] = call_user_func($options['custom-formatter-callback'], $customAttribs['value']);
+
+
+		$attribsHtml = $this->BuildAttribsHtml($customAttribs);
+		$formObjHtml = '<input type="checkbox"'.$attribsHtml.'>';
+		if($options['show-required-marker']) $formObjHtml .= '<span class="formFieldRequiredMarker">*</span>';
+
+
+		//HIDDEN NOTIFIER ATTRIBS
+		$defaultNotifierAttribs = array(
+			'id'=>$this->GetDefaultFormObjectId('_Notifier'),
+			'name'=>$this->GetDefaultFormObjectName('_Notifier'),
+			'class'=>'inputHidden',
+			'value'=>'0',
+			'disabled'=>(!$this->AllowSet ? 'disabled' : null),
+			'checked'=>($this->GetValue()==true ? 'checked' : null)
+		);
+		if(is_array($hiddenNotifierCustomAttribs)){ //overwrite $defaultAttribs with any $customAttribs specified
+			$hiddenNotifierCustomAttribs = array_change_key_case($hiddenNotifierCustomAttribs, CASE_LOWER);
+			$hiddenNotifierCustomAttribs = array_merge($defaultNotifierAttribs, $hiddenNotifierCustomAttribs);
+		}
+		else $hiddenNotifierCustomAttribs = $defaultNotifierAttribs;
+
+		$notifierAttribsHtml = $this->BuildAttribsHtml($hiddenNotifierCustomAttribs);
+		$hiddenNotifier = '<input type="hidden"'.$notifierAttribsHtml.'>';
+
+
+		return $formObjHtml . $hiddenNotifier;
+	}
+
+	/**
+	 * Returns a string of HTML representing a select dropdown input object for this cell.
+	 * $options are as follows:
+	 * <code>
+	 * $options = array(
+	 * 	'show-required-marker' => $this->IsRequired, //if true, a '*' will be appended to the end of the input field (note: default value may be set on the Column. use this field to overwrite the default value)
+	 * 	'custom-formatter-callback' =>null, //can be either: 1. array("functionName", $obj) if function belongs to $obj, 2. array("functionName", "className") if the function is static within class "classname", or 3. just "functionName" if function is in global scope. this function will be called when getting the form object and the value returned by it will be used as the form object's value. the callback's signiture is functionName($value), where $value is the current cell value
+	 * 	'print-empty-option' => !$this->IsRequired, //if true, an empty option will be the first option printed
+	 * 	'force-selected-key' => null, //string. if set, the given key within $keyValuePairs will be forced as the selected option (if found. if not found, the browser's default choice will be selected, probably the first in the list)
+	 * );
+	 * </code>
+	 * @param array $keyValuePairs [optional] The key-value pairs that set the values for the input dropdown html tag. ie each key-value pair generates &lt;option name="KEY"&gt;VALUE&lt;/option&gt;
+	 * @param array $customAttribs [optional] An assoc-array of attributes to set in this form object's html (ie 'class'=>'yourClass'). If this array contains 'name', a custom name will be set for this form object, though 'name' should be left blank on most cases as the default name will be generated so it can be tracked by this class; custom names require you to handle getting/setting POST/GET values
+	 * @param array $options [optional] Array of key-value pairs, see description
+	 * @see SmartCell::GetFormObject()
+	 * @return string string of HTML representing a select dropdown input object for this cell
+	 */
+	public function GetSelectFormObject(array $keyValuePairs=null, array $customAttribs=null, array $options=null){
+		//OPTIONS
+		$defaultOptions = array( //default options
+			"show-required-marker"=>$this->IsRequired,
+			"print-empty-option"=>!$this->IsRequired,
+		);
+		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
+			$options = array_merge($defaultOptions, $options);
+		}
+		else $options = $defaultOptions;
+
+
+		//ATTRIBS
+		$defaultAttribs = array(
+			'id'=>$this->GetDefaultFormObjectId(),
+			'name'=>$this->GetDefaultFormObjectName(),
+			'class'=>'inputSelect',
+			'disabled'=>(!$this->AllowSet ? 'disabled' : null),
+		);
+		if(is_array($customAttribs)){ //overwrite $defaultAttribs with any $customAttribs specified
+			$customAttribs = array_change_key_case($customAttribs, CASE_LOWER);
+			$customAttribs = array_merge($defaultAttribs, $customAttribs);
+		}
+		else $customAttribs = $defaultAttribs;
+
+		//SELECT TAG
+		$attribsHtml = $this->BuildAttribsHtml($customAttribs);
+		$formObjHtml = '<select'.$attribsHtml.'>';
+
+		//OPTIONS
+		if($this->IsRequired==false && $options['print-empty-option']){
+			$formObjHtml .= '<option value=""';
+			$value = $this->GetValue();
+			if( $value=="" && !$options['force-selected-key'] ) { $formObjHtml .= ' selected="selected"'; }
+			$formObjHtml.='> </option>';
+		}
+
+		if($this->IsDateColumn) //date column
+			$currentValue = $this->GetValue(false);
+		else $currentValue = $this->GetValue(true,true);
+
+		if(count($keyValuePairs)>0){
+			foreach ($keyValuePairs as $key => $value){
+				$key = htmlspecialchars($key);
+				$value = htmlspecialchars($value);
+				$formObjHtml .= '<option value="'.$key.'"';
+
+				if( (!$options['force-selected-key'] && $key==$currentValue) || ($options['force-selected-key']==$key) ) $formObjHtml .= ' selected="selected"';
+				$formObjHtml .= '>'.$value.'</option>';
+			}
+		}
+		$formObjHtml .= '</select>';
+		if($options['show-required-marker']) $formObjHtml .= '<span class="formFieldRequiredMarker">*</span>';
+		return $formObjHtml;
+	}
+
+	/**
+	 * Returns a string of HTML representing a form textarea input object for this cell.
+	 * $options are as follows:
+	 * <code>
+	 * $options = array(
+	 * 	'show-required-marker' => $this->IsRequired, //if true, a '*' will be appended to the end of the input field (note: default value may be set on the Column. use this field to overwrite the default value)
+	 * 	'custom-formatter-callback' =>null, //can be either: 1. array("functionName", $obj) if function belongs to $obj, 2. array("functionName", "className") if the function is static within class "classname", or 3. just "functionName" if function is in global scope. this function will be called when getting the form object and the value returned by it will be used as the form object's value. the callback's signiture is functionName($value), where $value is the current cell value
+	 *  'value' => null, //the actual shown value of the text area (if not using the default value from this cell)
+	 * );
+	 * </code>
+	 * @param array $customAttribs [optional] An assoc-array of attributes to set in this form object's html (ie 'class'=>'yourClass'). If this array contains 'name', a custom name will be set for this form object, though 'name' should be left blank on most cases as the default name will be generated so it can be tracked by this class; custom names require you to handle getting/setting POST/GET values
+	 * @param array $options [optional] Array of key-value pairs, see description
+	 * @see SmartCell::GetFormObject()
+	 * @return string string of HTML representing a form textarea input object for this cell
+	 */
+	public function GetTextareaFormObject(array $customAttribs=null, array $options=null){
+		//get formatted value
+		if($this->IsDateColumn) //date column
+			$currentValue = $this->GetValue(false);
+		else $currentValue = $this->GetValue(true,true);
+
+		//OPTIONS
+		$defaultOptions = array( //default options
+			"show-required-marker"=>$this->IsRequired,
+			"value"=>$currentValue
+		);
+		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
+			$options = array_merge($defaultOptions, $options);
+		}
+		else $options = $defaultOptions;
+
+
+		//ATTRIBS
+		$defaultAttribs = array(
+			'id'=>$this->GetDefaultFormObjectId(),
+			'name'=>$this->GetDefaultFormObjectName(),
+			'class'=>'inputText inputTextarea',
+			'disabled'=>(!$this->AllowSet ? 'disabled' : null),
+		);
+		if(is_array($customAttribs)){ //overwrite $defaultAttribs with any $customAttribs specified
+			$customAttribs = array_change_key_case($customAttribs, CASE_LOWER);
+			$customAttribs = array_merge($defaultAttribs, $customAttribs);
+		}
+		else $customAttribs = $defaultAttribs;
+
+
+		if($options['custom-formatter-callback']) $options['value'] = call_user_func($options['custom-formatter-callback'], $options['value']);
+
+		$attribsHtml = $this->BuildAttribsHtml($customAttribs);
+		$formObjHtml = '<textarea '.$attribsHtml.'>'.$options['value'].'</textarea>';
+		if($options['show-required-marker']) $formObjHtml .= '<span class="formFieldRequiredMarker">*</span>';
+		return $formObjHtml;
+	}
+
+	/**
+	 * Returns a string of HTML representing a form hidden input object for this cell.
+	 * $options are as follows:
+	 * <code>
+	 * $options = array(
+	 * 	'custom-formatter-callback' =>null, //can be either: 1. array("functionName", $obj) if function belongs to $obj, 2. array("functionName", "className") if the function is static within class "classname", or 3. just "functionName" if function is in global scope. this function will be called when getting the form object and the value returned by it will be used as the form object's value. the callback's signiture is functionName($value), where $value is the current cell value
+	 * );
+	 * </code>
+	 * @param array $customAttribs [optional] An assoc-array of attributes to set in this form object's html (ie 'class'=>'yourClass'). If this array contains 'name', a custom name will be set for this form object, though 'name' should be left blank on most cases as the default name will be generated so it can be tracked by this class; custom names require you to handle getting/setting POST/GET values
+	 * @param array $options [optional] Array of key-value pairs, see description
+	 * @see SmartCell::GetFormObject()
+	 * @return string string of HTML representing a form hidden input object for this cell
+	 */
+	public function GetHiddenFormObject(array $customAttribs=null, array $options=null){
+		//OPTIONS
+		/*
+		$defaultOptions = array( //default options
+		);
+		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
+			$options = array_merge($defaultOptions, $options);
+		}
+		else $options = $defaultOptions;
+		*/
+
+		//get formatted $value
+		if($this->IsDateColumn) //date column
+			$value = $this->GetValue(false);
+		else $value = $this->GetValue(true,true);
+
+
+		//ATTRIBS
+		$defaultAttribs = array(
+			'id'=>$this->GetDefaultFormObjectId(),
+			'name'=>$this->GetDefaultFormObjectName(),
+			'class'=>'inputHidden',
+			'value'=>$value,
+			'disabled'=>(!$this->AllowSet ? 'disabled' : null),
+		);
+		if(is_array($customAttribs)){ //overwrite $defaultAttribs with any $customAttribs specified
+			$customAttribs = array_change_key_case($customAttribs, CASE_LOWER);
+			$customAttribs = array_merge($defaultAttribs, $customAttribs);
+		}
+		else $customAttribs = $defaultAttribs;
+
+		//formatter callback
+		if($options['custom-formatter-callback']) $customAttribs['value'] = call_user_func($options['custom-formatter-callback'], $customAttribs['value']);
+
+		$attribsHtml = $this->BuildAttribsHtml($customAttribs);
+
+		return '<input type="hidden"'.$attribsHtml.'>';
+	}
+
+	/**
+	 * Returns string string of HTML representing a radio button input object for this cell.
+	 * <p>If $customAttribs contains 'name', a custom name will be set for this form object. 'name' should be left blank on most cases as the default name will be generated so it can be tracked by this class; custom names require you to handle getting/setting POST/GET values</p>
+	 * <p>$options are as follows:</p>
+	 * <code>
+	 * $options = array(
+	 * 	'force-checked' => false, //if true, this radio button will be checked regardless of the current Cell value. if false, this radio button will be checked only if the value matches the one currently in the Cell
+	 * 	'checked-if-dbtable-value-is-null' => false, //if true, this radio button will be checked only if the current Cell value for thi column is null
+	 * 	'label-text' => "", //a string for the text of the label next to the radio button. if this field is left empty, no label will be included with the button
+	 * 	'label-position' => "left", //can be "left" or "right", relative to the radio button (only if ['include-label']=true)
+	 * 	'custom-formatter-callback' =>null, //can be either: 1. array("functionName", $obj) if function belongs to $obj, 2. array("functionName", "className") if the function is static within class "classname", or 3. just "functionName" if function is in global scope. this function will be called when getting the form object and the value returned by it will be used as the form object's value. the callback's signiture is functionName($value), where $value is the current cell value
+	 * );
+	 * </code>
+	 * @param string $labelText [optional] The text for the html label that is included. Empty string or null will not print a label.
+	 * @param string $formValue [optional] The html value that this radio button will have
+	 * @param array $customAttribs [optional] An assoc-array of attributes to set in this form object's html (ie 'class'=>'yourClass'). If this array contains 'name', a custom name will be set for this form object, though 'name' should be left blank on most cases as the default name will be generated so it can be tracked by this class; custom names require you to handle getting/setting POST/GET values
+	 * @param array $options [optional] See function description
+	 * @see SmartCell::GetFormObject()
+	 * @return string string of HTML representing a radio button input object for this cell
+	 */
+	public function GetRadioFormObject($labelText="", $formValue="", array $customAttribs=null, array $options=null){
+		//OPTIONS
+		$defaultOptions = array( //default options
+			"force-checked"=>false,
+			"checked-if-dbtable-value-is-null"=>false,
+			"label-text"=>$labelText,
+			"label-position"=>"left",
+		);
+		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
+			$options = array_merge($defaultOptions, $options);
+		}
+		else $options = $defaultOptions;
+
+		$currentValue = $this->GetValue();
+		$formValue = htmlspecialchars($formValue);
+
+		$checked=null;
+		if ($options['force-checked'] || ($currentValue==$formValue) || ($currentValue=="" && $options['checked-if-dbtable-value-is-null'])){
+			$checked='checked';
+		}
+
+		//ATTRIBS
+		$defaultAttribs = array(
+			'id'=>$this->GetDefaultFormObjectId("_".self::MakeValidHtmlId($formValue)),
+			'name'=>$this->GetDefaultFormObjectName(),
+			'class'=>'inputRadio',
+			'value'=>$formValue,
+			'disabled'=>(!$this->AllowSet ? 'disabled' : null),
+			'checked'=>$checked,
+		);
+		if(is_array($customAttribs)){ //overwrite $defaultAttribs with any $customAttribs specified
+			$customAttribs = array_change_key_case($customAttribs, CASE_LOWER);
+			$customAttribs = array_merge($defaultAttribs, $customAttribs);
+		}
+		else $customAttribs = $defaultAttribs;
+
+		//formatter callback
+		if($options['custom-formatter-callback']) $customAttribs['value'] = call_user_func($options['custom-formatter-callback'], $customAttribs['value']);
+
+		if ($options['label-text']){
+			$labelTag = '<label for="'.$customAttribs['id'].'">'.$options['label-text'].'</label>';
+		}
+
+		$attribsHtml = $this->BuildAttribsHtml($customAttribs);
+		$formObjHtml = '<input type="radio"'.$attribsHtml.'>';
+		if ($options['label-position']!="right") return $labelTag.' '.$formObjHtml;
+		else return $formObjHtml.' '.$labelTag;
+	}
+	
+	/**
+	 * Strips out and returns any characters that are not valid for use as an HTML ID attribute
+	 * @param $str string The string to cleanup
+	 */
+	public static function MakeValidHtmlId($str){ //strips any characters not valid for an HTML ID
+		$lastIsUnderscore=false;
+		$strlen = strlen($str);
+		$final = "";
+		for($i=0; $i<$strlen; $i++){
+			if(!ctype_alnum($str[$i])){
+				if(!$lastIsUnderscore) { $final.="_"; $lastIsUnderscore=true; }
+			}
+			else { $final.=$str[$i]; $lastIsUnderscore=false; }
+		}
+		return trim($final,"_ \n\r");
+	}
+
+	/**
+	 * Returns a string of HTML for use with the jQuery UI colorpicker (which may have been removed from jquery ui?). Uses appropriate the name/value for this SmartCell.
+	 * $options are as follows:
+	 * <code>
+	 * $options = array(
+	 * 	'show-required-marker' => $this->IsRequired, //if true, a '*' will be appended to the end of the input field (note: default value may be set on the Column. use this field to overwrite the default value)
+	 * 	'custom-formatter-callback' =>null, //can be either: 1. array("functionName", $obj) if function belongs to $obj, 2. array("functionName", "className") if the function is static within class "classname", or 3. just "functionName" if function is in global scope. this function will be called when getting the form object and the value returned by it will be used as the form object's value. the callback's signiture is functionName($value), where $value is the current cell value
+	 * );
+	 * </code>
+	 * @param array $customAttribs [optional] An assoc-array of attributes to set in this form object's html (ie 'class'=>'yourClass'). If this array contains 'name', a custom name will be set for this form object, though 'name' should be left blank on most cases as the default name will be generated so it can be tracked by this class; custom names require you to handle getting/setting POST/GET values
+	 * @param array $options [optional] Array of key-value pairs, see description
+	 * @see SmartCell::GetFormObject()
+	 * @return string string of HTML representing a form color picker input object for this cell
+	 */
+	public function GetColorpickerFormObject(array $customAttribs=null, array $options=null){
+		//OPTIONS
+		$defaultOptions = array( //default options
+			"show-required-marker"=>$this->IsRequired,
+		);
+		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
+			$options = array_merge($defaultOptions, $options);
+		}
+		else $options = $defaultOptions;
+
+
+		//get formatted $value
+		if($this->IsDateColumn) //date column
+			$value = $this->GetValue(false);
+		else $value = $this->GetValue(true,true);
+
+
+		//ATTRIBS
+		$defaultAttribs = array(
+			'id'=>$this->GetDefaultFormObjectId(),
+			'name'=>$this->GetDefaultFormObjectName(),
+			'class'=>'inputText inputColorpicker',
+			'value'=>$value,
+			'size'=>$this->MaxSize,
+			'maxlength'=>$this->MaxSize,
+			'disabled'=>(!$this->AllowSet ? 'disabled' : null),
+		);
+		if(is_array($customAttribs)){ //overwrite $defaultAttribs with any $customAttribs specified
+			$customAttribs = array_change_key_case($customAttribs, CASE_LOWER);
+			$customAttribs = array_merge($defaultAttribs, $customAttribs);
+		}
+		else $customAttribs = $defaultAttribs;
+
+		//formatter callback
+		if($options['custom-formatter-callback']) $customAttribs['value'] = call_user_func($options['custom-formatter-callback'], $customAttribs['value']);
+
+		$attribsHtml = $this->BuildAttribsHtml($customAttribs);
+		$formObjHtml = '<input type="text"'.$attribsHtml.'>';
+		if($options['show-required-marker']) $formObjHtml .= '<span class="formFieldRequiredMarker">*</span>';
+		return $formObjHtml;
+	}
+
+	/**
+	 * Returns a string of HTML for use with the jQuery UI date picker. Uses appropriate the name/value for this SmartCell.
+	 * $options are as follows:
+	 * <code>
+	 * $options = array(
+	 * 	'show-required-marker' => $this->IsRequired, //if true, a '*' will be appended to the end of the input field (note: default value may be set on the Column. use this field to overwrite the default value)
+	 * 	'custom-formatter-callback' =>null, //can be either: 1. array("functionName", $obj) if function belongs to $obj, 2. array("functionName", "className") if the function is static within class "classname", or 3. just "functionName" if function is in global scope. this function will be called when getting the form object and the value returned by it will be used as the form object's value. the callback's signiture is functionName($value), where $value is the current cell value
+	 * );
+	 * </code>
+	 * @param array $customAttribs [optional] An assoc-array of attributes to set in this form object's html (ie 'class'=>'yourClass'). If this array contains 'name', a custom name will be set for this form object, though 'name' should be left blank on most cases as the default name will be generated so it can be tracked by this class; custom names require you to handle getting/setting POST/GET values
+	 * @param array $options [optional] Array of key-value pairs, see description
+	 * @see SmartCell::GetFormObject()
+	 * @return string string of HTML representing a form date picker input object for this cell
+	 */
+	public function GetDatepickerFormObject(array $customAttribs=null, array $options=null){
+		//OPTIONS
+		$defaultOptions = array( //default options
+			"show-required-marker"=>$this->IsRequired,
+		);
+		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
+			$options = array_merge($defaultOptions, $options);
+		}
+		else $options = $defaultOptions;
+
+
+		//get formatted $value
+		if($this->IsDateColumn) //date column
+			$value = $this->GetValue(false);
+		else $value = $this->GetValue(true,true);
+
+
+		//ATTRIBS
+		$defaultAttribs = array(
+			'id'=>$this->GetDefaultFormObjectId(),
+			'name'=>$this->GetDefaultFormObjectName(),
+			'class'=>'inputText inputDatepicker',
+			'value'=>$value,
+			'size'=>$this->MaxSize,
+			'maxlength'=>$this->MaxSize,
+			'disabled'=>(!$this->AllowSet ? 'disabled' : null),
+		);
+		if(is_array($customAttribs)){ //overwrite $defaultAttribs with any $customAttribs specified
+			$customAttribs = array_change_key_case($customAttribs, CASE_LOWER);
+			$customAttribs = array_merge($defaultAttribs, $customAttribs);
+		}
+		else $customAttribs = $defaultAttribs;
+
+		//formatter callback
+		if($options['custom-formatter-callback']) $customAttribs['value'] = call_user_func($options['custom-formatter-callback'], $customAttribs['value']);
+
+		$attribsHtml = $this->BuildAttribsHtml($customAttribs);
+		$formObjHtml = '<input type="text"'.$attribsHtml.'>';
+		if($options['show-required-marker']) $formObjHtml .= '<span class="formFieldRequiredMarker">*</span>';
+		return $formObjHtml;
+	}
+
+	/**
+	 * Returns a string of HTML for use with the jQuery UI slider. Uses appropriate the name/value for this SmartCell.
+	 * $options are as follows:
+	 * <code>
+	 * $options = array(
+	 * 	'show-required-marker' => $this->IsRequired, //if true, a '*' will be appended to the end of the input field (note: default value may be set on the Column. use this field to overwrite the default value)
+	 * 	'custom-formatter-callback' =>null, //can be either: 1. array("functionName", $obj) if function belongs to $obj, 2. array("functionName", "className") if the function is static within class "classname", or 3. just "functionName" if function is in global scope. this function will be called when getting the form object and the value returned by it will be used as the form object's value. the callback's signiture is functionName($value), where $value is the current cell value
+	 * );
+	 * </code>
+	 * @param array $customAttribs [optional] An assoc-array of attributes to set in this form object's html (ie 'class'=>'yourClass'). If this array contains 'name', a custom name will be set for this form object, though 'name' should be left blank on most cases as the default name will be generated so it can be tracked by this class; custom names require you to handle getting/setting POST/GET values
+	 * @param array $options [optional] Array of key-value pairs, see description
+	 * @see SmartCell::GetFormObject()
+	 * @return string string of HTML representing a form slider input object for this cell
+	 */
+	public function GetSliderFormObject(array $customAttribs=null, array $options=null){
+		//OPTIONS
+		$defaultOptions = array( //default options
+			"show-required-marker"=>$this->IsRequired,
+		);
+		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
+			$options = array_merge($defaultOptions, $options);
+		}
+		else $options = $defaultOptions;
+
+
+		//get formatted $value
+		if($this->IsDateColumn) //date column
+			$value = $this->GetValue(false);
+		else $value = $this->GetValue(true,true);
+
+
+		//ATTRIBS
+		$defaultAttribs = array(
+			'id'=>$this->GetDefaultFormObjectId(),
+			'name'=>$this->GetDefaultFormObjectName(),
+			'class'=>'inputText inputSlider',
+			'value'=>$value,
+			'size'=>$this->MaxSize,
+			'maxlength'=>$this->MaxSize,
+			'disabled'=>(!$this->AllowSet ? 'disabled' : null),
+		);
+		if(is_array($customAttribs)){ //overwrite $defaultAttribs with any $customAttribs specified
+			$customAttribs = array_change_key_case($customAttribs, CASE_LOWER);
+			$customAttribs = array_merge($defaultAttribs, $customAttribs);
+		}
+		else $customAttribs = $defaultAttribs;
+
+		//formatter callback
+		if($options['custom-formatter-callback']) $customAttribs['value'] = call_user_func($options['custom-formatter-callback'], $customAttribs['value']);
+
+		$attribsHtml = $this->BuildAttribsHtml($customAttribs);
+		$formObjHtml = '<input type="text"'.$attribsHtml.'>';
+		$slider = '<div class="ui-slider"><div class="ui-slider-handle"></div></div>';
+		if($options['show-required-marker']) $requiredMark = '<span class="formFieldRequiredMarker">*</span>';
+		return $formObjHtml.$slider.$requiredMark;
+	}
+
+	/**
+	 * Builds a string of HTML of the giben attribtutes. ie ' class="myclass" id="someId" disable="disabled"'
+	 * @param array $attribsAssoc [optional]
+	 * @return string HTML of the given attributes
+	 */
+	private function BuildAttribsHtml(array $attribsAssoc){
+		$html = '';
+		foreach($attribsAssoc as $key=>$val){
+			if($val !== null) $html .= " $key=\"$val\"";
+		}
+		return $html;
+	}
+
+	/**
+	 * Returns a string of HTML representing a label for this cell's form input object.
+	 * $options are as follows:
+	 * <code>
+	 * $options = array(
+	 * 	'for-form-obj-name' => $this->Table->TableName.$this->ColumnName, //the form name this label is for. this should be left as default on most cases as the default name will be generated so it can be tracked by this class; custom names require you to handle organization of matching label names to form object names
+	 * 	'label-text' => $this->DisplayName, //the text of the label. this can be set in codegen
+	 * 	'prefix' => "", //adds a text prefix to the label
+	 * 	'suffix' => ": ", //adds a text suffix to the label
+	 * );
+	 * </code>
+	 * @param array $options [optional] See description
+	 * @return string a string of HTML representing a label for this cell's form input object
+	 */
+	public function GetFormObjectLabel(array $options=null){
+		$defaultOptions = array( //default options
+			"for-form-obj-name"=>$this->GetDefaultFormObjectId(),
+			"label-text"=>($this->DisplayName ? $this->DisplayName : $this->ColumnName),
+			"prefix"=>"",
+			"suffix"=>": ",
+		);
+		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
+			$options = array_merge($defaultOptions, $options);
+		}
+		else $options = $defaultOptions;
+
+		return '<label for="'.$options['for-form-obj-name'].'">'.$options['prefix'].$options['label-text'].$options['suffix'].'</label>';
+	}
+
+/////////////////////////////// INPUT VALIDATION ///////////////////////////////////
+	/**
+	 * Returns a string of current errors that exist within this cell, or FALSE if no errors were found
+	 * The row should not be committed until there are no more errors on any cell of the row
+	 * <code>
+	 * $options = array(
+	 *  'ignore-key-errors'=>false //If true: does not validate the key columns. If false: validates all columns
+	 *  'only-verify-set-cells'=>false //If true: only cells that have been set (i.e. isset()==true) will be verified (not recommended if this info will be committed to db). If false: all cells will be verified (should be used if this info will be committed to db).
+	 *  'error-message-suffix'=>"<br>\n" //appended to each error message
+	 * </code>
+	 * @param array $options [optional] See description.
+	 * @returns mixed A string of current errors that exist within this cell, or FALSE if no errors were found
+	*/
+	public function HasErrors(array $options=null){
+		$defaultOptions = array( //default options
+			"error-message-suffix"=>"<br>\n",
+		);
+		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
+			$options = array_merge($defaultOptions, $options);
+		}
+		else $options = $defaultOptions;
+
+		$value = $this->GetValue();
+
+		if ($this->IsPrimaryKey && $options['ignore-key-errors']) return false;
+		if($options['only-verify-set-cells'] && !isset($value)) return false;
+
+		$errors = false;
+
+		if($this->PossibleValues){ //need to validate that the value is valid (mostly for enumerations)
+		 	//for mysql, enum has null and "" as separate valid values and "" is ALWAYS valid... wtf? make it so "" and null are equal and always valid. will be caught later if null is not allowed
+			if($value !== '0' && !$value){
+				$value = null;
+			}
+			else { //non-null value
+				//for mysql, enums are case-insensetitive! "AAA"=="aAa" as valid enum values
+				$isValidValue = in_array(strtolower($value), array_map('strtolower', $this->PossibleValues)); //case-insensitive array search
+				if(!$isValidValue){
+					$errorMsg = "Invalid value '$value' specified for Table: '{$this->Table->TableName}', Column: '{$this->ColumnName}'";
+					$errors .= $errorMsg . $options['error-message-suffix'];
+				}
+			}
+		}
+
+		if ($this->IsRequired){
+			if($value==null || strlen($value)<=0){
+				$errorMsg = ( trim($this->IsRequiredMessage)!="" ? $this->IsRequiredMessage : "'{$this->DisplayName}' field is required." );
+				$errors .= $errorMsg . $options['error-message-suffix'];
+				$inputRequiredErrorFound = true;
+			}
+		}
+
+		if($this->MaxSize) {
+			if (strlen($value) > $this->MaxSize){
+				$errors .= "Number of characters allowed for '{$this->DisplayName}' exceeds the {$this->MaxSize} character limit.";
+				$errors .= $options['error-message-suffix'];
+			}
+		}
+
+		if($this->MinSize) {
+			if(!$inputRequiredErrorFound){ //ignore this if the field is required and empty. already have that error message
+				$strlen = strlen($value);
+				if(!$this->IsRequired && $strlen == 0){
+					//let this case pass because input is not required
+				}
+				else if ($strlen < $this->MinSize){
+					$errors .= "Minimum of {$this->MinSize} characters are required for '{$this->DisplayName}'.";
+					$errors .= $options['error-message-suffix'];
+				}
+			}
+		}
+
+		if($this->RegexCheck) {
+			if(!$inputRequiredErrorFound){ //ignore regex if the field is required and empty. already have that error message
+				if(!$this->IsRequired && strlen($value) == 0){
+					//let this case pass because input is not required
+				}
+				else if (!preg_match('/'.$this->RegexCheck.'/i', $value)){ //both PHP and javascript do case-insensitive regex checking
+					$errorMsg = ( trim($this->RegexFailMessage)!="" ? $this->RegexFailMessage : "Invalid valid for '{$this->DisplayName}'." );
+					$errors .= $errorMsg . $options['error-message-suffix'];
+					$inputRegexCheckErrorFound = true;
+				}
+			}
+		}
+
+		if ($this->IsUnique && !$this->IsPrimaryKey) {
+			if(!$inputRequiredErrorFound && !$inputRegexCheckErrorFound){
+				if($value !== null){ //ignore 'null' values when checking uniqueness
+					$dbManager = $this->Row->Database->DbManager;
+					if(!$dbManager) throw new Exception("DbManager is not set. DbManager must be set to verify column value uniqueness within function '".__FUNCTION__."'. ");
+					$numRowsFound = $dbManager->Select(array("*"), $this->Table->TableName, array( array($this->ColumnName => $value) ), '', 1);
+					if ($numRowsFound > 0 ){
+						if(!$this->Row->Exists()){ //$this row doesnt exist, so the found value is in use in another row
+							$errors .= "Selected '{$this->DisplayName}' (".$this->GetValue(true,true).") is already in use. Please select another value.";
+							$errors .= $options['error-message-suffix'];
+						}
+						else if($this->Table->PrimaryKeyExists()){ //$this row does exist. see if the found value is part of $this row by comparing key column(s)
+							$row = $dbManager->FetchArray();
+							$keyColumns = $this->Table->GetKeyColumns();
+							foreach($keyColumns as $columnName=>$Column){
+								if($row[$columnName] != $this->Row->Cell($columnName)->GetValue()){
+									//found row is not $this row, so found value is in use in another row
+									$errors .= "Selected '{$this->DisplayName}' (".$this->GetValue(true,true).") is already in use. Please select another value.";
+									$errors .= $options['error-message-suffix'];
+									break;
+								}
+							}
+						} else {
+						//no other way to automatically determine if the found value is part of this row. leave it to the programmer/mysql errors for duplicates
+						}
+					}
+				}
+			}
+		}
+
+		return $errors;
+	}
+
+/////////////////////////////// PREVENT SERIALIZATION B/C IT IS RECURSIVELY HUGE //////////////////////////
+	/**
+	 * @ignore
+	 */
+	public function __sleep(){
+		return array();
+	}
+} //end class

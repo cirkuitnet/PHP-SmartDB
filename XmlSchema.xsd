@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema targetNamespace="http://www.w3.org/2001/XMLSchema" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata" xmlns:msprop="urn:schemas-microsoft-com:xml-msprop" elementFormDefault="qualified" attributeFormDefault="unqualified">
+  <xs:element name="CodeGenSchema">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="Class" maxOccurs="unbounded">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="Database" maxOccurs="1">
+                <xs:complexType>
+                  <xs:sequence>
+                    <xs:element name="Field" maxOccurs="unbounded" minOccurs="0">
+                      <xs:complexType>
+                        <xs:attribute name="Name" type="xs:string" use="required" />
+                        <xs:attribute name="Aliases" use="optional">
+                        	<xs:simpleType>
+                            <xs:restriction base="xs:string">
+                              <xs:pattern value="(\s*[a-zA-Z0-9_-]+\s*,?)+"/>
+                            </xs:restriction>
+                          </xs:simpleType>
+                        </xs:attribute>
+                        <xs:attribute name="DisplayName" type="xs:string" use="optional" />
+                        <xs:attribute name="DataType" use="optional" default="varchar">
+                          <xs:simpleType>
+                            <xs:restriction base="xs:string">
+                              <xs:pattern value="char|varchar|text|mediumtext|longtext|blob|mediumblob|longblob|tinyint|smallint|mediumint|int|bigint|float|double|decimal|date|datetime|timestamp|time|binary|enum\((\s*'[ a-zA-Z0-9/_-]+'\s*,)*(\s*'[ a-zA-Z0-9/_-]+'\s*)\)"/>
+                            </xs:restriction>
+                          </xs:simpleType>
+                        </xs:attribute>
+						<xs:attribute name="Collation" id="Collation" use="optional">
+                          <xs:simpleType>
+                            <xs:restriction base="xs:string">
+                              <xs:enumeration value="" />
+                              <xs:enumeration value="utf8_general_ci" id="utf8_general_ci" />
+                              <xs:enumeration value="latin1_swedish_ci" id="latin1_swedish_ci" />
+                            </xs:restriction>
+                          </xs:simpleType>
+                        </xs:attribute>
+						<xs:attribute name="PossibleValues" use="optional">
+							<xs:simpleType>
+                            <xs:restriction base="xs:string">
+                              <xs:pattern value="(\s*[a-zA-Z0-9_-]+\s*,?)+" />
+                            </xs:restriction>
+                          </xs:simpleType>
+                        </xs:attribute>
+                        <xs:attribute name="MinSize" type="xs:integer" use="optional" />
+                        <xs:attribute name="MaxSize" type="xs:integer" use="optional" />
+                        <xs:attribute name="AllowSet" type="xs:boolean" default="true" />
+                        <xs:attribute name="TrimAndStripTagsOnSet" type="xs:boolean" default="false" use="optional" />
+                        <xs:attribute name="AllowGet" type="xs:boolean" default="true" />
+                        <xs:attribute name="AllowLookup" type="xs:boolean" default="true" />
+                        <xs:attribute name="AllowGetAll" type="xs:boolean" default="false" />
+                        <xs:attribute name="DefaultValue" type="xs:string" default="" use="optional" />
+                        <xs:attribute name="InputRequired" type="xs:boolean" default="false" use="optional" />
+                        <xs:attribute name="InputEmptyError" type="xs:string" use="optional" />
+                        <xs:attribute name="InputRegexCheck" type="xs:string" use="optional" />
+                        <xs:attribute name="InputRegexFailError" type="xs:string" use="optional" />
+                        <xs:attribute name="FormType" id="FormType" default="text">
+                          <xs:simpleType>
+                            <xs:restriction base="xs:string">
+                              <xs:enumeration value="text" id="text" />
+                              <xs:enumeration value="password" id="password" />
+                              <xs:enumeration value="checkbox" id="checkbox" />
+                              <xs:enumeration value="radio" id="radio" />
+                              <xs:enumeration value="select" id="select" />
+                              <xs:enumeration value="textarea" id="textarea" />
+                              <xs:enumeration value="hidden" id="hidden" />
+                              <xs:enumeration value="colorpicker" />
+                              <xs:enumeration value="datepicker" />
+                              <xs:enumeration value="slider" />
+                            </xs:restriction>
+                          </xs:simpleType>
+                        </xs:attribute>
+                        <xs:attribute name="IsUnique" type="xs:boolean" default="false" />
+                        <xs:attribute name="SortOrder" type="xs:integer" use="optional" />
+                        <xs:attribute name="PrimaryKey" type="xs:boolean" use="optional" />
+                        <xs:attribute name="AutoIncrement" type="xs:boolean" use="optional" />
+                        <xs:attribute name="ForeignKeyID" type="xs:int" use="optional" />
+                      </xs:complexType>
+                    </xs:element>
+                  </xs:sequence>
+                  <xs:attribute name="IsAbstract" type="xs:boolean" default="false" />
+                  <xs:attribute name="TableName" type="xs:string" use="optional" />
+                  <xs:attribute name="InheritsTableName" type="xs:string" use="optional" />
+                  <xs:attribute name="CommitChangesAutomatically" type="xs:boolean" default="false" />
+                </xs:complexType>
+              </xs:element>
+            </xs:sequence>
+            <xs:attribute name="Name" type="xs:string" use="optional" />
+          </xs:complexType>
+        </xs:element>
+        <xs:element name="ForeignKey" maxOccurs="unbounded" minOccurs="0">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="Relation" maxOccurs="unbounded" minOccurs="0">
+                <xs:complexType>
+                  <xs:attribute name="ClassName" type="xs:string" use="optional" />
+                  <xs:attribute name="TableName" type="xs:string" use="required" />
+                  <xs:attribute name="FieldName" type="xs:string" use="required" />
+                </xs:complexType>
+              </xs:element>
+            </xs:sequence>
+            <xs:attribute name="Name" type="xs:string" use="optional" />
+            <xs:attribute name="ForeignKeyID" type="xs:int" />
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+    <xs:key name="ForeignKey_ForeignKeyID">
+      <xs:selector xpath=".//xs:ForeignKey" />
+      <xs:field xpath="@ForeignKeyID" />
+    </xs:key>
+    <xs:keyref name="ForeignKeyField" refer="xs:ForeignKey_ForeignKeyID">
+      <xs:selector xpath=".//xs:Field" />
+      <xs:field xpath="@ForeignKeyID" />
+    </xs:keyref>
+  </xs:element>
+</xs:schema>

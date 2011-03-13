@@ -1,0 +1,75 @@
+<?xml version="1.0" standalone="yes"?>
+<CodeGenSchema xmlns="http://www.w3.org/2001/XMLSchema">
+  <Class Name="Setting">
+    <Database CommitChangesAutomatically="false" TableName="Setting">
+      <Field Name="Id" DataType="int" AllowSet="true" TrimAndStripTagsOnSet="false" AllowGet="true" AllowLookup="true" AllowGetAll="true" InputRequired="false" FormType="hidden" IsUnique="true" PrimaryKey="true" AutoIncrement="false" />
+      <Field Name="Name" DataType="varchar" MaxSize="255" AllowSet="true" TrimAndStripTagsOnSet="false" AllowGet="true" AllowLookup="true" AllowGetAll="true" InputRequired="true" FormType="text" IsUnique="false" AutoIncrement="false" />
+	  <Field Name="Enabled" DataType="binary" MaxSize="1" AllowSet="true" TrimAndStripTagsOnSet="false" AllowGet="true" AllowLookup="true" AllowGetAll="false" InputRequired="false" FormType="checkbox" IsUnique="false" />
+    </Database>
+  </Class>
+  <Class Name="User">
+    <Database CommitChangesAutomatically="false" TableName="User">
+      <Field Name="Id" DataType="int" AllowSet="true" TrimAndStripTagsOnSet="false" AllowGet="true" AllowLookup="true" AllowGetAll="true" InputRequired="false" FormType="hidden" IsUnique="true" PrimaryKey="true" AutoIncrement="true" />
+      <Field Name="Name" DataType="varchar" MaxSize="255" AllowSet="true" TrimAndStripTagsOnSet="false" AllowGet="true" AllowLookup="true" AllowGetAll="true" InputRequired="false" FormType="text" IsUnique="false" AutoIncrement="false" />
+	  <Field Name="UserType" DataType="enum( 'a','b', 'c/d' )" AllowSet="true" TrimAndStripTagsOnSet="false" AllowGet="true" AllowLookup="true" AllowGetAll="true" InputRequired="false" FormType="text" IsUnique="false" AutoIncrement="false" />
+    </Database>
+  </Class>
+  <Class Name="Log">
+    <Database CommitChangesAutomatically="false" TableName="Log">
+      <Field Name="Id" Aliases="LogId" DataType="int" AllowSet="true" TrimAndStripTagsOnSet="false" AllowGet="true" AllowLookup="true" AllowGetAll="true" InputRequired="false" FormType="hidden" IsUnique="true" PrimaryKey="true" AutoIncrement="true"  ForeignKeyID="1" />
+      <Field Name="Name" DataType="varchar" MaxSize="255" AllowSet="true" TrimAndStripTagsOnSet="true" AllowGet="true" AllowLookup="true" AllowGetAll="true" InputRequired="false" FormType="text" IsUnique="false" AutoIncrement="false" />
+      <Field Name="Timestamp" DataType="timestamp" AllowSet="true" TrimAndStripTagsOnSet="false" AllowGet="true" AllowLookup="true" AllowGetAll="true" InputRequired="false" FormType="hidden" IsUnique="false" PrimaryKey="false" AutoIncrement="false" />
+      <Field Name="Level" DataType="double" AllowSet="true" TrimAndStripTagsOnSet="false" AllowGet="true" AllowLookup="true" AllowGetAll="true" InputRequired="false" FormType="text" IsUnique="false" AutoIncrement="false" />
+	  <Field Name="NumViews" DataType="int" AllowSet="true" TrimAndStripTagsOnSet="false" AllowGet="true" AllowLookup="true" AllowGetAll="true" InputRequired="false" FormType="text" IsUnique="false" AutoIncrement="false" />
+    </Database>
+  </Class>
+  <Class Name="Questionare">
+    <Database CommitChangesAutomatically="false" TableName="Questionare">
+      <Field Name="QuestionareId" DataType="int" AllowSet="true" TrimAndStripTagsOnSet="false" AllowGet="true" AllowLookup="true" AllowGetAll="true" DefaultValue="" InputRequired="false" FormType="hidden" IsUnique="false" PrimaryKey="true" AutoIncrement="true" />
+      <Field Name="Name" DisplayName="Your Name" DataType="varchar" MaxSize="55" AllowSet="true" TrimAndStripTagsOnSet="true" AllowGet="true" AllowLookup="true" AllowGetAll="true" DefaultValue="" InputRequired="true" FormType="text" IsUnique="false" />
+      <Field Name="Agree" DisplayName="I Agree" DataType="binary" MaxSize="1" AllowSet="true" TrimAndStripTagsOnSet="false" AllowGet="true" AllowLookup="true" AllowGetAll="false" DefaultValue="" InputRequired="false" FormType="checkbox" IsUnique="false" />
+      <Field Name="Password" DataType="varchar" MaxSize="55" AllowSet="true" TrimAndStripTagsOnSet="false" AllowGet="true" AllowLookup="true" AllowGetAll="false" DefaultValue="" InputRequired="false" FormType="password" IsUnique="false" />
+      <Field Name="Sex" DataType="varchar" PossibleValues="M,F" MaxSize="55" AllowSet="true" TrimAndStripTagsOnSet="true" AllowGet="true" AllowLookup="true" AllowGetAll="false" DefaultValue="" InputRequired="false" FormType="radio" IsUnique="false" />
+      <Field Name="AgeGroup" DisplayName="Age Group" DataType="varchar" MaxSize="55" AllowSet="true" TrimAndStripTagsOnSet="true" AllowGet="true" AllowLookup="true" AllowGetAll="false" DefaultValue="" InputRequired="false" FormType="select" IsUnique="false" />
+      <Field Name="Notes" DataType="text" AllowSet="true" TrimAndStripTagsOnSet="true" MinSize="5" MaxSize="10" AllowGet="true" AllowLookup="true" AllowGetAll="false" DefaultValue="default" InputRequired="false" FormType="textarea" IsUnique="false" />
+	  <Field Name="Email" DisplayName="Your Email Address" DataType="varchar" MaxSize="55" AllowSet="true" TrimAndStripTagsOnSet="true" AllowGet="true" AllowLookup="true" AllowGetAll="true" DefaultValue="" InputRequired="true" InputEmptyError="Put in an email address, damnit!" InputRegexCheck="^[A-Z0-9._%-]+@[A-Z0-9.-]+\.[A-Z]{2,4}$" InputRegexFailError="Invalid email format" FormType="text" IsUnique="false" />
+    </Database>
+  </Class>
+  <Class Name="FastSetting">
+    <Database CommitChangesAutomatically="true" TableName="FastSetting">
+      <Field Name="Id" DataType="int" AllowSet="true" TrimAndStripTagsOnSet="false" AllowGet="true" AllowLookup="true" AllowGetAll="true" InputRequired="true" FormType="text" IsUnique="true" PrimaryKey="true" AutoIncrement="false"  ForeignKeyID="1" />
+      <Field Name="Name" DataType="varchar" MaxSize="255" AllowSet="true" TrimAndStripTagsOnSet="false" AllowGet="true" AllowLookup="true" AllowGetAll="true" InputRequired="true" InputEmptyError="Put in a name, damnit!" InputRegexCheck="^[A-Z0-9._%-]+@[A-Z0-9.-]+\.[A-Z]{2,4}$" InputRegexFailError="Regex failed!" FormType="text" IsUnique="true" AutoIncrement="false" />
+	  <Field Name="ShortName" Aliases="NotLongName" DataType="varchar" MaxSize="10" MinSize="5" AllowSet="true" TrimAndStripTagsOnSet="false" AllowGet="true" AllowLookup="true" AllowGetAll="true" InputRequired="false" FormType="text" IsUnique="false" AutoIncrement="false" />
+    </Database>
+  </Class>
+
+
+  <Class Name="JunkExtended">
+    <Database TableName="JunkExtended" InheritsTableName="Junk">
+      <Field Name="JunkExtended" DataType="varchar" MaxSize="255" AllowSet="true" TrimAndStripTagsOnSet="true" AllowGet="true" AllowLookup="true" AllowGetAll="true" InputRequired="false" FormType="text" IsUnique="false" AutoIncrement="false" />
+    </Database>
+  </Class>
+  <Class Name="Junk">
+    <Database TableName="Junk" InheritsTableName="_CommonFields">
+      <Field Name="JunkName" Aliases="JunkName2, Junk3" DataType="varchar" MaxSize="255" AllowSet="true" TrimAndStripTagsOnSet="false" AllowGet="true" AllowLookup="true" AllowGetAll="true" InputRequired="false" FormType="text" IsUnique="false" AutoIncrement="false" />
+	  <Field Name="ShortName" Aliases="ShortName2" DataType="varchar" MaxSize="10" AllowSet="true" TrimAndStripTagsOnSet="false" AllowGet="true" AllowLookup="true" AllowGetAll="true" InputRequired="false" FormType="text" IsUnique="false" AutoIncrement="false" />
+    </Database>
+  </Class>
+
+  <Class Name="CommonFields">
+    <Database TableName="_CommonFields" IsAbstract="true">
+      <Field Name="CommonFieldsId" DataType="int" AllowSet="true" TrimAndStripTagsOnSet="false" AllowGet="true" AllowLookup="true" AllowGetAll="true" InputRequired="false" FormType="hidden" IsUnique="true" PrimaryKey="true" AutoIncrement="true" />
+      <Field Name="CommonFieldsName" DataType="varchar" MaxSize="255" AllowSet="true" TrimAndStripTagsOnSet="false" AllowGet="true" AllowLookup="true" AllowGetAll="true" InputRequired="false" FormType="text" IsUnique="false" AutoIncrement="false" />
+	  <Field Name="ShortName" DataType="varchar" MaxSize="255" AllowSet="true" TrimAndStripTagsOnSet="false" AllowGet="true" AllowLookup="true" AllowGetAll="true" InputRequired="false" FormType="text" IsUnique="false" AutoIncrement="false" />
+    </Database>
+  </Class>
+
+  <ForeignKey Name="Id" ForeignKeyID="1">
+    <Relation TableName="Log" FieldName="Id" />
+    <Relation TableName="FastSetting" FieldName="Id" />
+  </ForeignKey>
+  <ForeignKey Name="CommonFieldsId" ForeignKeyID="2">
+    <Relation TableName="_CommonFields" FieldName="CommonFieldsId" />
+    <Relation TableName="Questionare" FieldName="QuestionareId" />
+  </ForeignKey>
+</CodeGenSchema>
