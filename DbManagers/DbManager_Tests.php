@@ -7,7 +7,10 @@
  */
 require_once(dirname(__FILE__).'/DbManager.php');
 
-
+/**
+ * @package SmartDatabase
+ * @ignore
+ */
 class DbManager_Tests extends DbManager_MySQL{
 
 	public function TestAll(){

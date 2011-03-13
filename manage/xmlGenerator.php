@@ -1,4 +1,16 @@
 <?
+/*!
+ * PHP SmartDb
+ * http://www.phpsmartdb.com/
+ *
+ * Copyright 2011, Cirkuit Networks
+ * Dual licensed under the MIT or GPL Version 2 licenses.
+ * http://www.phpsmartdb.com/license
+ */
+/**
+ * @package SmartDatabase
+ * @ignore
+ */
 $smartDbDir = dirname(__FILE__)."/..";
 require_once($smartDbDir."/SmartDatabase.php");
 
