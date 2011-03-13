@@ -9,7 +9,6 @@
  */
 /**
  * @package SmartDatabase
- * @ignore
  */
 /*
 This class will update a database to match a given db structure schema (described below)
@@ -72,7 +71,7 @@ function getDbStructure(){
 );
 
 */
-class SyncDb{
+class SyncDb_MySQL{
 
 	private $_dbManager;
 
@@ -117,7 +116,7 @@ class SyncDb{
     public static function Instance()
     {
         if (!isset(self::$instance)) {
-            self::$instance = new SyncDb();
+            self::$instance = new self();
         }
 
         return self::$instance;

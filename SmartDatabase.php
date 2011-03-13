@@ -474,10 +474,12 @@ class SmartDatabase implements ArrayAccess, Countable{
 		if(!$this->DbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
 		$syncStructure = $this->BuildSyncStructure();
 
-		require_once (dirname(__FILE__)."/SyncDb/SyncDb_MySQL.php"); //TODO: support other databases
+		//TODO: support other databases
+		require_once (dirname(__FILE__)."/SyncDb/SyncDb_MySQL.php");
 
 		//parameters: DoSync($dbManager, $newDbStructure, $backupTables=true, $doInsert=true, $doUpdate=true, $doDelete=true, $debugMode=false)
-		$results = SyncDb::Instance()->DoSync($this->DbManager, $syncStructure, true, true, true, true, false);
+		$results = SyncDb_MySQL::Instance()->DoSync($this->DbManager, $syncStructure, true, true, true, true, false);
+		
 		if($printResults) echo $results;
 		return $results;
 	}
