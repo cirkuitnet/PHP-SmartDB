@@ -5,7 +5,7 @@
  */
 /**
  */
-require_once(dirname(__FILE__).'/DbManager.php');
+require_once(dirname(__FILE__).'/DbManager_MySQL.php');
 
 /**
  * @package SmartDatabase
