@@ -10,67 +10,70 @@
 /**
  * @package SmartDatabase
  */
-/*
-This class will update a database to match a given db structure schema (described below)
-
-********* db structure layout guide *********
-array(
-	"<table name>"=>array(
-		"<column name>"=>array(
-			"Field"=>"<column name>",
-			"Type"=>"<column type>",
-			"Null"=>"<YES|NO>",
-			"Key"=>"<PRI|UNI|MUL|empty>", //note: PRI=Primary Key, UNI=Unique index, MUL=multiple... seems to mean the same as UNI though
-			"Default"=>"<default value|empty>",
-			"Extra"=>"<auto_increment|empty>",
-			"Collation=>"<utf8_general_ci|latin1_swedish_ci|empty>" //other collations can easily be added if needed
-		),
-		...(more columns)...
-	),
-	...(more tables)...
-)
-**********************************************
-
---- EXAMPLE ---
-function getDbStructure(){
-	return array(
-		"Template"=>array(
-			"TemplateId"=>array(
-				"Field"=>"TemplateId",
-				"Type"=>"int(1) unsigned",
-				"Null"=>"NO",
-				"Key"=>"PRI",
-				"Default"=>"",
-				"Extra"=>"auto_increment"
-			),
-			"Name"=>array(
-				"Field"=>"Name",
-				"Type"=>"varchar(255)",
-				"Null"=>"NO",
-				"Key"=>"UNI",
-				"Default"=>"",
-				"Extra"=>""
-			),
-			"Html"=>array(
-				"Field"=>"Html",
-				"Type"=>"text",
-				"Null"=>"YES",
-				"Key"=>"",
-				"Default"=>"",
-				"Extra"=>""
-			),
-			"__sqlCreateTable"=>"
-				CREATE TABLE `Template` (
-					 `TemplateId` int(1) UNSIGNED NOT NULL AUTO_INCREMENT
-					,`Name` varchar(255) NOT NULL UNIQUE
-					,`Html` text NULL
-					,PRIMARY KEY (`TemplateId`)
-				);
-			"
-		)
-);
-
-*/
+/**
+ * This class will update a database to match a given db structure schema (described below)
+ * 
+ * -- db structure layout guide --
+ * <code>
+ * array(
+ * 	"<table name>"=>array(
+ * 		"<column name>"=>array(
+ * 			"Field"=>"<column name>",
+ * 			"Type"=>"<column type>",
+ * 			"Null"=>"<YES|NO>",
+ * 			"Key"=>"<PRI|UNI|MUL|empty>", //note: PRI=Primary Key, UNI=Unique index, MUL=multiple... seems to mean the same as UNI though
+ * 			"Default"=>"<default value|empty>",
+ * 			"Extra"=>"<auto_increment|empty>",
+ * 			"Collation=>"<utf8_general_ci|latin1_swedish_ci|empty>" //other collations can easily be added if needed
+ * 		),
+ * 		...(more columns)...
+ * 	),
+ * 	...(more tables)...
+ * )
+ * </code>
+ * 
+ * --- EXAMPLE ---
+ * <code>
+ * function getDbStructure(){
+ * 	return array(
+ * 		"Template"=>array(
+ * 			"TemplateId"=>array(
+ * 				"Field"=>"TemplateId",
+ * 				"Type"=>"int(1) unsigned",
+ * 				"Null"=>"NO",
+ * 				"Key"=>"PRI",
+ * 				"Default"=>"",
+ * 				"Extra"=>"auto_increment"
+ * 			),
+ * 			"Name"=>array(
+ * 				"Field"=>"Name",
+ * 				"Type"=>"varchar(255)",
+ * 				"Null"=>"NO",
+ * 				"Key"=>"UNI",
+ * 				"Default"=>"",
+ * 				"Extra"=>""
+ * 			),
+ * 			"Html"=>array(
+ * 				"Field"=>"Html",
+ * 				"Type"=>"text",
+ * 				"Null"=>"YES",
+ * 				"Key"=>"",
+ * 				"Default"=>"",
+ * 				"Extra"=>""
+ * 			),
+ * 			"__sqlCreateTable"=>"
+ * 				CREATE TABLE `Template` (
+ *  					 `TemplateId` int(1) UNSIGNED NOT NULL AUTO_INCREMENT
+ * 					,`Name` varchar(255) NOT NULL UNIQUE
+ * 					,`Html` text NULL
+ * 					,PRIMARY KEY (`TemplateId`)
+ * 				);
+ * 			"
+ * 		)
+ * );
+ * </code>
+ * @package SmartDatabase
+ */
 class SyncDb_MySQL{
 
 	private $_dbManager;

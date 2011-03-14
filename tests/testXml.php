@@ -93,7 +93,7 @@ class JunkExtended extends Junk{
 }
 
 //--create db manager
-$dbManager = $t['dbManager'] = new DbManager_MySQL('localhost','adam','akmakm14','adam_test');
+$dbManager = $t['dbManager'] = new DbManager_MySQL('SERVER','USERNAME','PASSWORD','DATABASE_NAME');
 
 //--build the Database instance
 $database = $t['database'] = new SmartDatabase($dbManager, dirname(__FILE__).'/test.xml');
