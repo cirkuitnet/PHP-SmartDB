@@ -126,6 +126,6 @@ $cTable = $GLOBALS["db"]["Customer"];
 <?
 
 ', 'java');
-
+DisplayHelper::PrintSourceLink("https://github.com/cirkuitnet/PHP-SmartDB/blob/master/samples/basic/list-all-rows.php");
 DisplayHelper::PrintTemplateBottom();
 ?>

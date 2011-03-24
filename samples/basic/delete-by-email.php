@@ -35,7 +35,7 @@ $numRowsDeleted = $Customer->Delete();
 
 // -- AFTER DELETE --
 ');
-
+DisplayHelper::PrintSourceLink("https://github.com/cirkuitnet/PHP-SmartDB/blob/master/samples/basic/delete-by-email.php");
 DisplayHelper::PrintOutputTitle();
 
 //lookup the Customer row with the EmailAddress = "queen@muppets.com"

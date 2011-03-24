@@ -52,7 +52,7 @@ else{
 
 //-- AFTER UPDATE AND COMMIT --
 ');
-
+DisplayHelper::PrintSourceLink("https://github.com/cirkuitnet/PHP-SmartDB/blob/master/samples/basic/lookup-update-by-email.php");
 DisplayHelper::PrintOutputTitle();
 
 //lookup the Customer row with the EmailAddress = "jfrost@winter.com"

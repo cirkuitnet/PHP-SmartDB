@@ -53,7 +53,7 @@ else{
 
 // -- AFTER UPDATE AND COMMIT --
 ');
-
+DisplayHelper::PrintSourceLink("https://github.com/cirkuitnet/PHP-SmartDB/blob/master/samples/basic/lookup-update-by-id.php");
 DisplayHelper::PrintOutputTitle();
 
 //lookup the Customer row with a primay key (CustomerId) of 1 

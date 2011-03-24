@@ -37,7 +37,7 @@ $totalNumRows = count($GLOBALS["db"]["Customer"]);
 
 // -- AFTER TRUNCATE --
 ');
-
+DisplayHelper::PrintSourceLink("https://github.com/cirkuitnet/PHP-SmartDB/blob/master/samples/basic/custom-truncate-sql.php");
 DisplayHelper::PrintOutputTitle();
 
 //using "count" on a table will return the total number of rows in that table

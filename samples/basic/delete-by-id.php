@@ -36,7 +36,7 @@ $numRowsDeleted = $Customer->Delete();
 
 // -- AFTER DELETE --
 ');
-
+DisplayHelper::PrintSourceLink("https://github.com/cirkuitnet/PHP-SmartDB/blob/master/samples/basic/delete-by-id.php");
 DisplayHelper::PrintOutputTitle();
 
 //lookup the Customer row with the CustomerId of 1

@@ -24,7 +24,7 @@ class DisplayHelper{
             ChiliBook.recipeFolder = "/cirkuit/includes/js/jquery/plugins/chili/2.2/";
         </script>
 		<link rel="shortcut icon" href="/favicon.ico">
-		<link rel="stylesheet" href="css/style.css">
+		<link rel="stylesheet" href="css/style.css?v=2">
 	</head>
 	<body>
 		<div class="page">
@@ -76,17 +76,16 @@ class DisplayHelper{
 		echo '</h2>';
 	}
 	
+	public static function PrintSourceLink($url){
+		if(!$url) return;
+		echo '<a href="'.$url.'" class="sourceLink">'.$url.'</a>';
+	}
+	
 	/**
 	 * @ignore
 	 */
 	public static function PrintCode($code, $type="php"){
 		if(!$code) return;
-		
-		$code = str_replace(
-			array('<?','?>'),
-			array('<?', '?>'),
-			$code
-		);
 		
 		$code = htmlspecialchars($code);
 		

@@ -3,20 +3,21 @@ require_once("include/include.php");
 
 /*
 BEFORE YOU BEGIN, DO THE FOLLOWING TO CUSTOMIZE YOUR APP:
-	- UPDATE THE 'database/db.xml' XML FILE TO THE DATABASE SCHEMA YOU NEED FOR YOUR APP
-		- ADD/EDIT TABLES, COLUMNS, AND FOREIGN KEYS AS NEEDED. YOU CAN ALWAYS TWEAK THESE AS YOU WORK.
-	- UPDATE 'include/include.php' AS FOLLOWS:
-		- SET $smartDbPath AND $dbManagerPath TO THE LOCATIONS OF THE SmartDatabase AND YOUR DbManager
-		- SET $db_server, $db_username, $db_password, AND $database_name FOR YOUR DATABASE CONNECTION
-			- NOTE - THE USER AND DATABASE SHOULD ALREADY EXIST! CONTACT YOUR DATABASE ADMIN IF YOU NEED CREDENTIALS
-			- MAKE SURE THIS 'include/include.php' FILE IS SECURE AND NOT WORLD-READABLE! KEEP YOUR CREDENTIALS SAFE.
-	- EXECUTE 'include/_sync.php' TO SYNC YOUR DATABASE SCHEMA TO THE ACTUAL BACKEND DATABASE
-		- ANYTIME YOU MAKE A CHANGE TO YOUR 'database/db.xml' XML FILE, YOU SHOULD RE-SYNC YOUR DATABASE
- 	- UPDATE/RENAME 'include/MyObject1.php' and 'include/MyObject2.php' TO MATCH YOUR TABLE NAMES
- 		- FOR EXAMPLE, IF YOU HAVE TABLES "Customer" and "Invoice", THESE WILL BE CALLED "Customer.php" AND "Invoice.php".
- 		  THESE NAMES SHOULD MATCH THE CLASS NAME YOU HAVE SET IN YOUR db.xml XML SCHEMA. EX: <Class Name="Customer"> 
- 		- YOU SHOULD HAVE 1 INCLUDE FILE/CLASS FOR EACH TABLE IN YOUR db.xml XML SCHEMA
- 		- EACH OF THESE CLASSES SHOULD BE NAMED THE SAME AS IN YOUR db.xml XML SCHEMA. EX: <Class Name="Customer">
+   1. Update the 'database/db.xml' XML file. This schema defines the database structure of your application.
+          * Add/edit tables, columns, and foreign keys as needed. You can always tweak these as you work.
+          * See Overview and Basics for specifics on this XML file.
+   2. Update 'include/include.php' as follows:
+          * Set $smartDbPath and $dbManagerPath to the locations of the SmartDB Framework's SmartDatabase class and a DbManager.
+          * Set $db_server, $db_username, $db_password, and $database_name for your database connection.
+                o Note - the user and database should already exist! Contact your database admin if you need credentials.
+                o Make sure this 'include/include.php' file is secure and not world-readable! Keep your credentials safe.
+   3. Execute 'include/_sync.php' to sync your database schema to the actual backend database.
+          * Anytime you make a change to your 'database/db.xml' xml file, you should re-sync with your backend database.
+   4. Update/rename/edit/delete 'include/MyObject1.php' and 'include/MyObject2.php'
+          * You should have 1 include file/class for each table defined in your 'database/db.xml'XML schema.
+                o If you have tables "Customer", "Invoice", and "Transaction", you should have 3 of these files created: "Customer.php", "Invoice.php", and "Transaction.php". These names should match the class name you have set in your 'database/db.xml' XML schema. Ex: <Class Name="Customer"> (so the autoloader will work!)
+                o Each of these files should contain classes named the same as in your 'database/db.xml' XML schema. Ex: <Class Name="Customer"> (namespaces are supported)
+          * You should edit these quick-start classes. The TableName constants will need to be set to your table names, and these classes have some basic example functionality in them that should be altered or removed.
 
 
 IMPLEMENT YOUR APPLICATION HERE. $GLOBALS['db'] IS AVAILABLE FROM THE ABOVE require_once("include/include.php");

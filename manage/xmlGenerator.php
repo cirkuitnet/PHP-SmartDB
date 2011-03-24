@@ -9,6 +9,10 @@
  */
 /**
  * @package SmartDatabase
+ * Eventually, this script will be an HTML UI for creating/managing XML database schemas.
+ * It will eventually be able to load and save XML schemas, and easily update them with a nice web UI.
+ * It is far from completed. Currently it just programmatically defines a database structure's structure.
+ * Must to do here.
  * @ignore
  */
 $smartDbDir = dirname(__FILE__)."/..";

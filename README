@@ -1,1 +1,6 @@
 Requires at least PHP version 5.3.0
+
+You only need to require SmartDatabase.php and a DbManager for your project.
+
+See the samples folder for live examples. Use the 'quickstart' folder for a
+skeleton project to help get started.

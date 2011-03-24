@@ -51,7 +51,7 @@ else{
 
 // -- AFTER COMMIT --
 ');
-
+DisplayHelper::PrintSourceLink("https://github.com/cirkuitnet/PHP-SmartDB/blob/master/samples/basic/insert-callback.php");
 DisplayHelper::PrintOutputTitle();
 
 //create a new Customer row
