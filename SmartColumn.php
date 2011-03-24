@@ -56,27 +56,27 @@ class SmartColumn{
 	 */
 	public $MaxSize;
 	/**
-	 * @var bool Controls access to retrieving values from this column (defaults to true in XmlSchema.xsd if using an xml schema as your db structure)
+	 * @var bool Default it true. Controls access to retrieving values from this column (defaults to true in XmlSchema.xsd if using an xml schema as your db structure)
 	 */
-	public $AllowGet;
+	public $AllowGet = true;
 	/**
-	 * @var bool Controls access to setting values from this column (defaults to true in XmlSchema.xsd if using an xml schema as your db structure)
+	 * @var bool Default it true. Controls access to setting values from this column (defaults to true in XmlSchema.xsd if using an xml schema as your db structure)
 	 */
-	public $AllowSet;
+	public $AllowSet = true;
 	/**
 	 * @var bool If true, will trim() and strip_tags() anytime a value is set in this column (defaults to false in XmlSchema.xsd if using an xml schema as your db structure)
 	 */
 	public $TrimAndStripTagsOnSet;
 	/**
-	 * @var bool Controls access to looking up values from this column (defaults to true in XmlSchema.xsd if using an xml schema as your db structure)
+	 * @var bool Default it true. Controls access to looking up values from this column (defaults to true in XmlSchema.xsd if using an xml schema as your db structure)
 	 * @todo implement this
 	 */
-	public $AllowLookup;
+	public $AllowLookup = true;
 	/**
-	 * @var bool Controls access to getting all values from this column (defaults to false in XmlSchema.xsd if using an xml schema as your db structure (why false?))
+	 * @var bool Default it true. Controls access to getting all values from this column (defaults to false in XmlSchema.xsd if using an xml schema as your db structure (why false?))
 	 * @todo implement this. and maybe default to true instead of false
 	 */
-	public $AllowGetAll;
+	public $AllowGetAll = true;
 	/**
 	 * @var mixed The default value for this column. Can be null.
 	 */
@@ -94,10 +94,10 @@ class SmartColumn{
 	 */
 	public $IsAutoIncrement;
 	/**
-	 * @var string See XmlSchema.xsd for possible values (Last I checked, it was: "text", "password", "checkbox", "radio", "select", "textarea", "hidden", "colorpicker", "datepicker", "slider" ... the last 3, are for use with jQuery UI)
+	 * @var string Default it "text". See XmlSchema.xsd for possible values (Last I checked, it was: "text", "password", "checkbox", "radio", "select", "textarea", "hidden", "colorpicker", "datepicker", "slider" ... the last 3, are for use with jQuery UI)
 	 * @see SmartCell::GetFormObject()
 	 */
-	public $DefaultFormType;
+	public $DefaultFormType = "text";
 
 	/**
 	 * @var bool True if data is required for this column, false if null is an acceptable value

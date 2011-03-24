@@ -24,21 +24,31 @@ class DbManager_MySQL implements DbManager {
 	private $_connection;
 	private $_lastResult;
 	private $_databaseName;
+	private $_isDbSelected = false;
 
 	private $_server;
 	private $_user;
 	private $_password; //encrypted. use $this->GetPassword();
 	private $_connectParams;
 	
-	private $PHP_INT_MAX; //the PHP_INT_MAX constant doesnt work in sourceguardian
+	private $PHP_INT_MAX; //the PHP_INT_MAX constant doesnt work in some encrypters
 	private $PHP_INT_MAX_HALF;
 
-	// Constructor: pass connection values, set the db settings. note: $extra_params is an ARRAY
-	//$extra_params = array(
-	//	'new_link'=>false,	//this is the 4th parameters for mysql_connect. see mysql_connect documentation
-	//	'client_flags'=>"",	//this is the 5th parameters for mysql_connect. see mysql_connect documentation
-	//	'charset'=>'',		//if set, OpenConnection does a mysql_set_charset() with the given option (ie 'utf8')
-	//)
+	/**
+	 * Constructor: pass connection values, set the db settings. note: $extra_params is an ARRAY
+	 * <code>
+	 * $extra_params = array(
+	 * 	'new_link'=>false,	//this is the 4th parameters for mysql_connect. see mysql_connect documentation
+	 * 	'client_flags'=>"",	//this is the 5th parameters for mysql_connect. see mysql_connect documentation
+	 * 	'charset'=>'',		//if set, OpenConnection does a mysql_set_charset() with the given option (ie 'utf8')
+	 * );
+	 * </code>
+	 * @param string $server The server to connect to. Ex: "localhost"
+	 * @param string $user The username to connect with. Ex: "smartdb"
+	 * @param string $password The password to connect with. Ex: "smartdb123"
+	 * @param string $databaseName The database name to connect to.
+	 * @param array $extra_params Assoc-array of key => value options. See description above.
+	 */
 	public function __construct($server, $user, $password, $databaseName=null, $extra_params=null) {
 		if(!$server || !$user || !$password) throw new Exception("Not all connection variables are set.");
 		$this->_server = $server;
@@ -52,18 +62,40 @@ class DbManager_MySQL implements DbManager {
 		$this->PHP_INT_MAX_HALF = $this->PHP_INT_MAX/2;
 	}
 	
-	//encrypts the password when stored locally
+	/**
+	 * Encrypts the password when stored locally so it won't be visible in most stacktraces
+	 * @param string $password The password for this database connection. It will be encrypted and set to $this->_password
+	 * @return null
+	 */
 	private function SetPassword($password){
 		$this->_password = $this->Encrypt($password, $this->_server.$this->_user); //$this->_server.$this->_user will be our encrypt key
 	}
 	
-	//encrypts the password when stored locally
+	/**
+	 * encrypts the password when stored locally so it won't be visible in most stacktraces
+	 * @return string The decrypted password for this database connection
+	 */
 	private function GetPassword(){
 		return $this->Decrypt($this->_password, $this->_server.$this->_user); //$this->_server.$this->_user will be our encrypt key
 	}
 
-	public function OpenConnection(){
-		if($this->_isConnected) return true;
+	/**
+	 * Establishes the connection with the MySql database based off credentials and options passed to the DbManager constructor
+	 * This function is AUTOMATICALLY invoked when the first query is made. You likely won't need to call it.
+	 * <code>
+	 * $options = array(
+	 * 	'skip-select-db'=>false, //doesn't do a mysql_select_db. good for creating databases and etc management
+	 * );
+	 * </code>
+	 * @param array $options See description above
+	 * @return bool true when connected (or already connected), throws exception if there is an error
+	 * @see DbManager_MySQL::CloseConnection()
+	 */
+	public function OpenConnection($options = null){
+		if($this->_isConnected){
+			if(!$this->_isDbSelected && !$options['skip-select-db']) $this->SelectDatabase();
+			return true;
+		}
 		try {
 			$this->_connection = mysql_connect($this->_server, $this->_user, $this->GetPassword(), $this->_connectParams['new_link'], $this->_connectParams['client_flags']);
 			if(!$this->_connection) throw new Exception("Couldn't connect to the server. Please check your settings.");
@@ -73,9 +105,9 @@ class DbManager_MySQL implements DbManager {
 				mysql_set_charset($this->_connectParams['charset'], $this->_connection);
 			}
 
-			if(!$this->_databaseName) throw new Exception("Database Name is not set.");
-			$dbSelected = mysql_select_db($this->_databaseName, $this->_connection);
-			if(!$dbSelected) throw new Exception("Couldn't select database '".$this->_databaseName."'. Please make sure it exists.");
+			if(!$options['skip-select-db']){
+				$this->SelectDatabase();			
+			}
 
 			$this->_isConnected = true;
 			return true;
@@ -83,48 +115,95 @@ class DbManager_MySQL implements DbManager {
 		catch (Exception $e){
 			$this->_isConnected = false;
 			//exception show's the password passed through the constructor. only use for debugging
-			throw new Exception("Bad arguments for DbManager constructor. Server: '$server', User: '$user'. Msg: ".$e->getMessage());
+			throw new Exception("Bad arguments for DbManager constructor. Server: '".$this->_server."', User: '".$this->_user."'. Msg: ".$e->getMessage());
 			//die("Bad arguments for DbManager constructor. Msg: ".$e->getMessage());
 		}
 	}
+	
+	/**
+	 * Closes the MySQL connection if connected. Note that the connection is automatically closed when the PHP script has finished executing.
+	 * @return bool true if the connection is successfull closed, false if there is no connection to close
+	 * @see DbManager_MySQL::OpenConnection() 
+	 */
+	public function CloseConnection() {
+		if($this->_isConnected){
+			mysql_close($this->_connection);
+			$this->_isConnected = false;
+			return true;
+		}
+		return false;
+	}
 
-	//$databaseName - the database to make active
-	//$options: (array of key=>value pairs)
-	//	['force-select-db'] - default: false - if true, will immediately call mysql_select_db() with the database passed to this class
+	/**
+	 * Sets the database to use for this connection
+	 * @param string $databaseName The database to use for this connection
+	 * @param array $options - default: false - if true, will immediately call mysql_select_db() with the database passed to this class
+	 * @return null
+	 * @see DbManager_MySQL::GetDatabaseName()
+	 */
 	public function SetDatabaseName($databaseName, $options=null){
 		$this->_databaseName = $databaseName;
 		if($this->_isConnected && $options['force-select-db'] && $this->_databaseName){
-			$dbSelected = mysql_select_db($this->_databaseName, $this->_connection);
-			if(!$dbSelected) throw new Exception("Couldn't select database '".$this->_databaseName."'. Ensure that it exists and permissions are set properly.");
+			$this->SelectDatabase();
 		}
 	}
 
+	/**
+	 * Gets the database name in use for this connection
+	 * @return string the database name currently set for this connection
+	 * @see DbManager_MySQL::SetDatabaseName()
+	 */
 	public function GetDatabaseName(){
 		return $this->_databaseName;
 	}
+	
+	/**
+	 * Internal. Does a mysql_select_db() using $this->_databaseName and $this->_connection
+	 * @return null 
+	 */
+	private function SelectDatabase(){
+		if(!$this->_databaseName) throw new Exception("Database Name is not set.");
+		
+		$dbSelected = mysql_select_db($this->_databaseName, $this->_connection);
+		if(!$dbSelected) throw new Exception("Couldn't select database '".$this->_databaseName."'. Please make sure it exists.");
+		
+		$this->_isDbSelected = true;			
+	}
 
-	//$array_select_fields - the fields to select. ex: array("id", "col1", "col2")
-	//$table - the table name. ex: "Users"
-	//$array_where - the where clause. ex: array( array("id"=>5, "col1"=>"foo"), array("col2"=>"bar") ) - ...WHERE (id=5 AND col1='foo') OR (col2='bar')
-	//$array_order - order by clause. ex: array("id"=>"asc", "col1"=>"desc") ... ORDER BY id ASC, col1 DESC
-	//$limit - With one argument (ie $limit="10"), the value specifies the number of rows to return from the beginning of the result set
-	//       - With two arguments (ie $limit="100,10"), the first argument specifies the offset of the first row to return, and the second specifies the maximum number of rows to return. The offset of the initial row is 0 (not 1):
-	//$options: (array of key=>value pairs)
-	//	['distinct'] - default: false - if true, does a SELECT DISTINCT for the select. Note: there must only be 1 select field, otherwise an exception is thrown
-	//
-	//	['add-column-quotes'] - default: false - if true, overwrites any other 'column-quotes' options (below) and will add column quotes to everything
-	//	['add-select-fields-column-quotes'] - default: false - if true, automatically adds `quotes` around the `column names` in select fields
-	//	['add-where-clause-column-quotes'] - default: false - if true, automatically adds `quotes` around the `column names` in the where clause
-	//	['add-order-clause-column-quotes'] - default: false - if true, automatically adds `quotes` around the `column names` in the order clause
-	//
-	//	['add-dot-notation'] - default: false - if true, overwrites any other 'dot-notation' options (below) and will add dot notation to everything
-	//	['add-select-fields-dot-notation'] - default: false - if true, automatically adds dot.notation before column names in select fields
-	//	['add-where-clause-dot-notation'] - default: false - if true, automatically adds dot.notation before column names in the where clause
-	//	['add-order-clause-dot-notation'] - default: false - if true, automatically adds dot.notation before column names in the order clause
-	//
-	//	['quote-numerics'] - default: false - if true, numerics will always be quoted in the where clause (ie ...WHERE `price`='123'... instead of ... WHERE `price`=123...)
-	//
-	//	['force-select-db'] - default: false - if true, will call mysql_select_db() with the database passed to this class
+	/**
+	 * Executes a SELECT statement on the currently selected database
+	 * <code>
+	 * $options = array(
+	 * 	'distinct' => false, //if true, does a SELECT DISTINCT for the select. Note: there must only be 1 select field, otherwise an exception is thrown
+	 * 
+	 * 	'add-column-quotes' => false, //if true, overwrites any other 'column-quotes' options (below) and will add column quotes to everything
+	 *  'add-select-fields-column-quotes' => false, //if true, automatically adds `quotes` around the `column names` in select fields
+	 *  'add-where-clause-column-quotes' => false, //if true, automatically adds `quotes` around the `column names` in the where clause
+	 *  'add-order-clause-column-quotes' => false, //if true, automatically adds `quotes` around the `column names` in the order clause
+	 *  
+	 *  'add-dot-notation' => false, //if true, overwrites any other 'dot-notation' options (below) and will add dot notation to everything
+	 *  'add-select-fields-dot-notation' => false, //if true, automatically adds dot.notation before column names in select fields
+	 *  'add-where-clause-dot-notation' => false, //if true, automatically adds dot.notation before column names in the where clause
+	 *  'add-order-clause-dot-notation' => false, //if true, automatically adds dot.notation before column names in the order clause
+	 *  
+	 *  'quote-numerics' => false, //if true, numerics will always be quoted in the where clause (ie "WHERE `price`='123'" instead of "WHERE `price`=123")
+	 *  'force-select-db' => false, //if true, will always call mysql_select_db() with the database passed to this class
+	 * );
+	 * </code>
+	 * @param array $array_select_fields The columns to select. Ex: array("CustomerId", "Name", "EmailAddress")
+	 * @param string $table The table name. Ex: "Customer"
+	 * @param array $array_where The WHERE clause of the query. Ex: array( array("CustomerId"=>5, "CustomerName"=>"Jack"), array("CustomerName"=>"Cindy") ) - ...WHERE (CustomerId=5 AND CustomerName='Jack') OR (CustomerName='Cindy')
+	 * @param array $array_order The "ORDER BY" clause. Ex: array("CustomerId"=>"asc", "CustomerName"=>"desc") ... ORDER BY CustomerId ASC, CustomerName DESC
+	 * @param string $limit With one argument (ie $limit="10"), the value specifies the number of rows to return from the beginning of the result set. With two arguments (ie $limit="100,10"), the first argument specifies the offset of the first row to return, and the second specifies the maximum number of rows to return. The offset of the initial row is 0 (not 1).
+	 * @param array $options An array of key=>value pairs. See description above.
+	 * @return int Returns the number of selected rows
+	 * @see DbManager_MySQL::NumRows()
+	 * @see DbManager_MySQL::AffectedRows()
+	 * @see DbManager_MySQL::FetchAssocList()
+	 * @see DbManager_MySQL::FetchArrayList()
+	 * @see DbManager_MySQL::FetchAssoc()
+	 * @see DbManager_MySQL::FetchArray()
+	 */
 	public function Select($array_select_fields, $table, $array_where='', $array_order='', $limit = '', $options=null) {
 		if(!is_array($array_select_fields) || count($array_select_fields)==0){
 			$array_select_fields = array("*"); //default to "SELECT * ..."
@@ -160,12 +239,26 @@ class DbManager_MySQL implements DbManager {
 		return $this->AffectedRows();
 	}
 
-	//$table - the table name. ex: "Users"
-	//$field_val_array - assoc array of columnName=value of values to insert. ex: array('col1'=>5, 'col2'=>'foo') ... INSERT INTO $table (col1, col2) VALUES (5, 'foo')
-	//$options: (array of key=>value pairs)
-	//	['add-column-quotes'] - default: false - if true, overwrites any other 'column-quotes' options (below) and will add column quotes to everything
-	//	['add-dot-notation'] - default: false - if true, overwrites any other 'dot-notation' options (below) and will add dot notation to everything
-	//	['force-select-db'] - default: false - if true, will call mysql_select_db() with the database passed to this class
+	/**
+	 * Executes an INSERT statement on the currently selected database
+	 * <code>
+	 * $options = array(
+	 * 	'add-column-quotes' => false, //if true, overwrites any other 'column-quotes' options (below) and will add column quotes to everything
+	 * 	'add-dot-notation' => false, //if true, overwrites any other 'dot-notation' options (below) and will add dot notation to everything
+	 * 	'force-select-db' => false, //if true, will call mysql_select_db() with the database passed to this class
+	 * );
+	 * </code>
+	 * @param string $table The table name. ex: "Customer"
+	 * @param array $field_val_array Assoc array of columnName=value of values to insert. Ex: array('Name'=>'Jack', 'EmailAddress'=>'jack@frost.com') ... INSERT INTO Customer (Name, EmailAddress) VALUES ('Jack', 'jack@frost.com')
+	 * @param array $options An array of key=>value pairs. See description above.
+	 * @return int Returns the number of inserted rows (1 or 0)
+	 * @see DbManager_MySQL::NumRows()
+	 * @see DbManager_MySQL::AffectedRows()
+	 * @see DbManager_MySQL::FetchAssocList()
+	 * @see DbManager_MySQL::FetchArrayList()
+	 * @see DbManager_MySQL::FetchAssoc()
+	 * @see DbManager_MySQL::FetchArray()
+	 */
 	public function Insert($table, $field_val_array, $options=null) {
 		$sql_fields = "";
 		$sql_values = null;
@@ -192,15 +285,29 @@ class DbManager_MySQL implements DbManager {
 		return $this->AffectedRows();
 	}
 
-	//$table - the table name. ex: "Users"
-	//$field_val_array - assoc array of columnName=value of data to update. ex: array('col1'=>5, 'col2'=>'foo') ... UPDATE $table SET col1=5, col2='foo' ...
-	//$array_where - the where clause. ex: array( array("id"=>5, "col1"=>"foo"), array("col2"=>"bar") ) - ...WHERE (id=5 AND col1='foo') OR (col2='bar')
-	//$limit - the amount of rows to limit the update to (if any) from the beginning of the result set
-	//$options: (array of key=>value pairs)
-	//	['add-column-quotes'] - default: false - if true, overwrites any other 'column-quotes' options (below) and will add column quotes to everything
-	//	['add-dot-notation'] - default: false - if true, overwrites any other 'dot-notation' options (below) and will add dot notation to everything
-	//	['force-select-db'] - default: false - if true, will call mysql_select_db() with the database passed to this class
-	//	['quote-numerics'] - default: false - if true, numerics will always be quoted in the where clause (ie ...WHERE `price`='123'... instead of ... WHERE `price`=123...)
+	/**
+	 * Executes an UPDATE statement on the currently selected database
+	 * <code>
+	 * $options = array(
+	 * 	'add-column-quotes' => false, //if true, overwrites any other 'column-quotes' options (below) and will add column quotes to everything
+	 * 	'add-dot-notation' => false, //if true, overwrites any other 'dot-notation' options (below) and will add dot notation to everything
+	 * 	'force-select-db' => false, //if true, will call mysql_select_db() with the database passed to this class
+	 * 	'quote-numerics' => false, //if true, numerics will always be quoted in the where clause (ie ...WHERE `price`='123'... instead of ... WHERE `price`=123...)
+	 * );
+	 * </code>
+	 * @param string $table The table name. Ex: "Customers"
+	 * @param array $field_val_array Assoc array of columnName=value of data to update. ex: array('col1'=>5, 'col2'=>'foo') ... UPDATE $table SET col1=5, col2='foo' ...
+	 * @param array $array_where The where clause. ex: array( array("id"=>5, "col1"=>"foo"), array("col2"=>"bar") ) - ...WHERE (id=5 AND col1='foo') OR (col2='bar')
+	 * @param string $limit The amount of rows to limit the update to (if any) from the beginning of the result set
+	 * @param array $options An array of key=>value pairs. See description above.
+	 * @return int Returns the number of updated rows
+	 * @see DbManager_MySQL::NumRows()
+	 * @see DbManager_MySQL::AffectedRows()
+	 * @see DbManager_MySQL::FetchAssocList()
+	 * @see DbManager_MySQL::FetchArrayList()
+	 * @see DbManager_MySQL::FetchAssoc()
+	 * @see DbManager_MySQL::FetchArray()
+	 */
 	public function Update($table, $field_val_array, $array_where='', $limit = '', $options=null) {
 		$arg = "";
 		foreach ($field_val_array as $field => $value) {
@@ -234,14 +341,28 @@ class DbManager_MySQL implements DbManager {
 		return $this->AffectedRows();
 	}
 
-	//$table - the table name. ex: "Users"
-	//$array_where - the where clause. ex: array( array("id"=>5, "col1"=>"foo"), array("col2"=>"bar") ) - ...WHERE (id=5 AND col1='foo') OR (col2='bar')
-	//$limit - the amount of rows to limit the delete to (if any) from the beginning of the result set
-	//$options: (array of key=>value pairs)
-	//	['add-column-quotes'] - default: false - if true, overwrites any other 'column-quotes' options (below) and will add column quotes to everything
-	//	['add-dot-notation'] - default: false - if true, overwrites any other 'dot-notation' options (below) and will add dot notation to everything
-	//	['force-select-db'] - default: false - if true, will call mysql_select_db() with the database passed to this class
-	//	['quote-numerics'] - default: false - if true, numerics will always be quoted in the where clause (ie ...WHERE `price`='123'... instead of ... WHERE `price`=123...)
+	/**
+	 * Executes a DELETE statement on the currently selected database
+	 * <code>
+	 * $options = array(
+	 * 	'add-column-quotes' => false, //if true, overwrites any other 'column-quotes' options (below) and will add column quotes to everything
+	 * 	'add-dot-notation' => false, //if true, overwrites any other 'dot-notation' options (below) and will add dot notation to everything
+	 * 	'force-select-db' => false, //if true, will call mysql_select_db() with the database passed to this class
+	 * 	'quote-numerics' => false, //if true, numerics will always be quoted in the where clause (ie ...WHERE `price`='123'... instead of ... WHERE `price`=123...)
+	 * );
+	 * </code>
+	 * @param string The table name. Ex: "Customer"
+	 * @param array $array_where The WHERE clause. Ex: array( array("id"=>5, "col1"=>"foo"), array("col2"=>"bar") ) - ...WHERE (id=5 AND col1='foo') OR (col2='bar')
+	 * @param string $limit The amount of rows to limit the delete to (if any) from the beginning of the result set
+	 * @param array $options An array of key=>value pairs. See description above.
+	 * @return int Returns the number of selected rows
+	 * @see DbManager_MySQL::NumRows()
+	 * @see DbManager_MySQL::AffectedRows()
+	 * @see DbManager_MySQL::FetchAssocList()
+	 * @see DbManager_MySQL::FetchArrayList()
+	 * @see DbManager_MySQL::FetchAssoc()
+	 * @see DbManager_MySQL::FetchArray()
+	 */
 	public function Delete($table, $array_where='', $limit='', $options=null) {
 		$where_clause = $this->GenerateWhereClause($table, $array_where, $options['add-dot-notation'], $options['add-column-quotes'], array(
 			//extended options
@@ -259,20 +380,36 @@ class DbManager_MySQL implements DbManager {
 		return $this->AffectedRows();
 	}
 
-	// Query(): accept the query then run it
-	//$options: (array of key=>value pairs)
-	//	['force-select-db'] - default: false - set to true if writing a query without dot notation (database.table.field) AND your app uses multiple databases with 1 connection (ie not using the 'new_link' flag on any database connection)
+	/**
+	 * Executes a query against the selected database. IT IS NOT RECOMMENDED THAT YOU USE THIS FUNCTION DIRECTLY.
+	 * <code>
+	 * $options = array(
+	 * 	'force-select-db' => false, //set to true if writing a query without dot notation (database.table.field) AND your app uses multiple databases with 1 connection (ie not using the 'new_link' flag on any database connection)
+	 * 	'skip-select-db' => false, //if true, will skip any call to mysql_select_db. good for creating databases and etc management
+	 * );
+	 * </code>
+	 * @param string $query The query to execute. Ex: "SELECT * FROM Customers WHERE CustomerId=1"
+	 * @param array $options An array of key=>value pairs. See description above.
+	 * @return mixed Returns the result of mysql_query() - For SELECT, SHOW, DESCRIBE, EXPLAIN and other statements returning resultset, mysql_query() returns a resource. For other type of SQL statements, INSERT, UPDATE, DELETE, DROP, etc, mysql_query() returns TRUE  on success or FALSE on error.
+	 * @see DbManager_MySQL::NumRows()
+	 * @see DbManager_MySQL::AffectedRows()
+	 * @see DbManager_MySQL::FetchAssocList()
+	 * @see DbManager_MySQL::FetchArrayList()
+	 * @see DbManager_MySQL::FetchAssoc()
+	 * @see DbManager_MySQL::FetchArray()
+	 */
 	public function Query($query, $options=null) {
 		if($GLOBALS['SQL_DEBUG_MODE']){
 			echo "DbManager->Query - ".$query."<br>\n";	// Troubleshoot Query command
 		}
 
 		if(!$this->_isConnected){
-			$this->OpenConnection(); //lazy connect
+			$this->OpenConnection(array(
+				'skip-select-db' => $options['skip-select-db']
+			)); //lazy connect
 		}
 		else if($options['force-select-db']){ //the reason for this else: if we just connected, database was just selected. no need to select it again here.
-			$dbSelected = mysql_select_db($this->_databaseName, $this->_connection);
-			if(!$dbSelected) throw new Exception("Couldn't select database '".$this->_databaseName."'. Please make sure it exists.");
+			$this->SelectDatabase();
 		}
 
 		$this->_lastResult = mysql_query($query, $this->_connection);
@@ -283,7 +420,35 @@ class DbManager_MySQL implements DbManager {
 		return $this->_lastResult;
 	}
 
-	// FetchArrayList(): place the query results into an array
+	/**
+	 * Places the last query results into an array of ASSOC arrays, and returns it. Each row is an index in the array.
+	 * Example:
+	 * <code>
+	 * returns:
+	 * array(
+	 * 	0 => array(
+	 * 		"CustomerId" => "4",
+	 * 		"EmailAddress" => "jack@frost.com",
+	 * 		"Name" => "Jack",
+	 *  ),
+	 *  1 => array(
+	 *  	"CustomerId" => "6",
+	 * 		"EmailAddress" => "queen@muppets.com",
+	 * 		"Name" => "Miss Piggy",
+	 *  ),
+	 *  ...
+	 * )
+	 * </code> 
+	 * @return array An array of ASSOC arrays, and returns it. Each row is an index in the array.
+	 * @see DbManager_MySQL::FetchArrayList()
+	 * @see DbManager_MySQL::FetchAssoc()
+	 * @see DbManager_MySQL::FetchArray() 
+	 * @see DbManager_MySQL::Select()
+	 * @see DbManager_MySQL::Insert()
+	 * @see DbManager_MySQL::Update()
+	 * @see DbManager_MySQL::Delete()
+	 * @see DbManager_MySQL::NumRows()
+	 */
 	public function FetchAssocList() {
    		for ($i = 0; $i < $this->NumRows(); $i++) {
        		$data[$i] = $this->FetchAssoc();
@@ -291,7 +456,35 @@ class DbManager_MySQL implements DbManager {
    		return $data;
 	}
 
-	// FetchArrayList(): place the query results into an array
+	/**
+	 * Places the last query results into an array of NON-ASSOC arrays, and returns the array.
+	 * Example:
+	 * <code>
+	 * returns:
+	 * array(
+	 * 	0 => array(
+	 * 		0 => "4",
+	 * 		1 => "jack@frost.com",
+	 * 		2 => "Jack",
+	 *  ),
+	 *  1 => array(
+	 *  	0 => "6",
+	 * 		1 => "queen@muppets.com",
+	 * 		2 => "Miss Piggy",
+	 *  ),
+	 *  ...
+	 * );
+	 * </code> 
+	 * @return array An array of NON-ASSOC arrays, and returns the array.
+	 * @see DbManager_MySQL::FetchAssocList()
+	 * @see DbManager_MySQL::FetchAssoc()
+	 * @see DbManager_MySQL::FetchArray()
+	 * @see DbManager_MySQL::Select()
+	 * @see DbManager_MySQL::Insert()
+	 * @see DbManager_MySQL::Update()
+	 * @see DbManager_MySQL::Delete()
+	 * @see DbManager_MySQL::NumRows()
+	 */
 	public function FetchArrayList() {
    		for ($i = 0; $i < $this->NumRows(); $i++) {
        		$data[$i] = $this->FetchArray();
@@ -299,42 +492,109 @@ class DbManager_MySQL implements DbManager {
    		return $data;
 	}
 
-	// FetchAssoc(): place the query results into an array
+	/**
+	 * Returns an ASSOC array of the last query results. Column names are the array keys.
+	 * Example:
+	 * <code>
+	 * returns:
+	 * array(
+	 * 		"CustomerId" => "4",
+	 * 		"EmailAddress" => "jack@frost.com",
+	 * 		"Name" => "Jack",
+	 * );
+	 * </code>
+	 * @return array An ASSOC array of the last query results. Column names are the array keys.
+	 * @see DbManager_MySQL::FetchAssocList()
+	 * @see DbManager_MySQL::FetchArrayList()
+	 * @see DbManager_MySQL::FetchArray()
+	 * @see DbManager_MySQL::Select()
+	 * @see DbManager_MySQL::Insert()
+	 * @see DbManager_MySQL::Update()
+	 * @see DbManager_MySQL::Delete()
+	 * @see DbManager_MySQL::NumRows()
+	 */
 	public function FetchAssoc() {
 		$array = mysql_fetch_assoc($this->_lastResult);
 		return $array;
 	}
 
-	// FetchArray(): place the query results into an array
+	/**
+	 * Returns a NON-ASSOC array of the last query results. Array keys are numeric.
+	 * Example:
+	 * <code>
+	 * returns:
+	 * array(
+	 * 		0 => "4",
+	 * 		1 => "jack@frost.com",
+	 * 		2 => "Jack",
+	 * );
+	 * </code>
+	 * @return array An ASSOC array of the last query results. Column names are the array keys.
+	 * @see DbManager_MySQL::FetchAssocList()
+	 * @see DbManager_MySQL::FetchArrayList()
+	 * @see DbManager_MySQL::FetchAssoc()
+	 * @see DbManager_MySQL::Select()
+	 * @see DbManager_MySQL::Insert()
+	 * @see DbManager_MySQL::Update()
+	 * @see DbManager_MySQL::Delete()
+	 * @see DbManager_MySQL::NumRows()
+	 */
 	public function FetchArray() {
 		$array = mysql_fetch_array($this->_lastResult);
 		return $array;
 	}
 
-	// NumRows(): return number of rows from a query
+	/**
+	 * Returns the number of rows returned from the last query (not affected rows!)
+	 * @return int Returns the number of rows returned from the last query
+	 * @see DbManager_MySQL::AffectedRows();
+	 * @see DbManager_MySQL::Select()
+	 * @see DbManager_MySQL::Insert()
+	 * @see DbManager_MySQL::Update()
+	 * @see DbManager_MySQL::Delete()
+	 */
 	public function NumRows() {
 		$rows = mysql_num_rows($this->_lastResult);
 		return $rows;
 	}
 
-	// Error() returns SQL error
+	/**
+	 * Returns the error text from the last MySQL function
+	 * @return string Returns the error text from the last MySQL function, or empty string ("")
+	 */
 	public function Error() {
 		if($this->_isConnected) return mysql_error($this->_connection);
 		else return false;
 	}
 
-	// InsertId() returns id from last insert
+	/**
+	 * Returns the ID generated for an AUTO_INCREMENT column by the previous query
+	 * @return int The ID generated for an AUTO_INCREMENT column by the previous query, or FALSE
+	 */
 	public function InsertId() {
 		if($this->_isConnected) return mysql_insert_id($this->_connection);
 		else return false;
 	}
 
+	/**
+	 * Returns the number of affected rows by the last INSERT, UPDATE, REPLACE or DELETE query
+	 * @return int Returns the number of affected rows by the last INSERT, UPDATE, REPLACE or DELETE query
+	 * @see DbManager_MySQL::NumRows();
+	 * @see DbManager_MySQL::Select()
+	 * @see DbManager_MySQL::Insert()
+	 * @see DbManager_MySQL::Update()
+	 * @see DbManager_MySQL::Delete() 
+	 */
 	public function AffectedRows() {
 		if($this->_isConnected) return mysql_affected_rows($this->_connection);
 		else return false;
 	}
 
-	// EscapeString($string)
+	/**
+	 * Runs stripslashes() and mysql_real_escape_string() on the given $string and returns it.
+	 * @param string $string The string to run stripslashes() and mysql_real_escape_string() on.
+	 * @return string Runs stripslashes() and mysql_real_escape_string() on the given $string and returns it.
+	 */
 	public function EscapeString($string) {
 		if ($string===null) return null;
 
@@ -350,17 +610,14 @@ class DbManager_MySQL implements DbManager {
 		return $string;
 	}
 
-	// CloseConnection(): close MySQL connection
-	public function CloseConnection() {
-		if($this->_isConnected){
-			mysql_close($this->_connection);
-			$this->_isConnected = false;
-			return true;
-		}
-		return false;
-	}
-
-	//turns a sort array of structure array("id"=>"asc", "col1"=>"desc") into a string like  "ORDER BY id ASC, col1 DESC"
+	/**
+	 * Converts a sort array of structure array("id"=>"asc", "col1"=>"desc") into a string like  "ORDER BY id ASC, col1 DESC"
+	 * @param string $table
+	 * @param array $array_order
+	 * @param bool $dotNotation
+	 * @param bool $addColumnQuotes
+	 * @return array Returns a sort array of structure array("id"=>"asc", "col1"=>"desc") into a string like  "ORDER BY id ASC, col1 DESC"
+	 */
 	private function OrderArrayToString($table, $array_order, $dotNotation=false, $addColumnQuotes=false) {
 		if(!is_array($array_order) || count($array_order)==0) return "";
 		$sortOrder = "ORDER BY ";
@@ -384,7 +641,14 @@ class DbManager_MySQL implements DbManager {
 		return $sortOrder;
 	}
 
-	//turns items in array into a comma separated value string
+	/**
+	 * Converts items in $array into a comma separated value string and returns that string
+	 * @param string $table
+	 * @param array $array
+	 * @param bool $dotNotation
+	 * @param bool $addColumnQuotes
+	 * @return string Converts items in $array into a comma separated value string and returns that string
+	 */
 	private function ArrayToCSV($table, $array, $dotNotation=false, $addColumnQuotes=false) {
 		$csv = "";
 		$i = 0;
@@ -400,7 +664,13 @@ class DbManager_MySQL implements DbManager {
 		return $csv;
 	}
 
-
+	/**
+	 * Returns a string of appropriate dot-notation/column quites for the given $table and $column
+	 * @param string $table
+	 * @param string $column
+	 * @param bool $addColumnQuotes
+	 * @return string Returns a string of appropriate dot-notation/column quites for the given $table and $column
+	 */
 	private function GetDotNotation($table, $column=null, $addColumnQuotes=false){
 		if($column){
 			if($addColumnQuotes && $column!="*") return "`{$this->_databaseName}`.`$table`.`$column`";
@@ -412,10 +682,18 @@ class DbManager_MySQL implements DbManager {
 	}
 
 	/**
-	 *  GenerateWhereClause($array_where) will prepare the where clause for an sql statement
+	 * Prepares the WHERE clause (from $array_where) for a SQL statement
+	 * <code>
 	 *  $options = array(
 	 *  	'quote-numerics' => false, //if true, numerics will always be quoted in the where clause (ie ...WHERE `price`='123'... instead of ... WHERE `price`=123...) 
-	 *  )
+	 *  );
+	 * </code>
+	 * @param string $table
+	 * @param array $array_where
+	 * @param bool $dotNotation
+	 * @param bool $addColumnQuotes
+	 * @param array $options See description above
+	 * @return string
 	 */
 	protected function GenerateWhereClause($table, $array_where, $dotNotation=false, $addColumnQuotes=false, $options=array()) {
 		if( !is_array($array_where) || count($array_where)<=0 ) return '';
@@ -435,9 +713,20 @@ class DbManager_MySQL implements DbManager {
 		else return "WHERE ".$where_clause;
 	}
 
-	
 	/**
-	 * @param $first - ignore this. only used for recursion
+	 * Helper for GenerateWhereClause()
+	 * @param string $table
+	 * @param string $key
+	 * @param mixed $val
+	 * @param bool $dotNotation
+	 * @param bool $addColumnQuotes
+	 * @param string $column
+	 * @param string $condition
+	 * @param string $operator
+	 * @param array $options
+	 * @param bool $first Ignore this. only used for recursion
+	 * @return string
+	 * @see DbManager_MySQL::GenerateWhereClause()
 	 */
 	private function GenerateWhereRecursive($table, $key, $val, $dotNotation=false, $addColumnQuotes=false, $column='', $condition='=', $operator='AND', $options=array(), $first=true){
 		$key = trim($key);
@@ -474,7 +763,19 @@ class DbManager_MySQL implements DbManager {
 		}
 		return $ret;
 	}
-	
+
+	/**
+	 * Helper for GenerateWhereRecursive()
+	 * @param string $table
+	 * @param string $column
+	 * @param string $condition
+	 * @param string $val
+	 * @param bool $dotNotation
+	 * @param bool $addColumnQuotes
+	 * @param array $options
+	 * @return string
+	 * @see DbManager_MySQL::GenerateWhereRecursive()
+	 */
 	private function GenerateWhereSingle($table, $column, $condition, $val, $dotNotation, $addColumnQuotes, $options=array()){
 		$ret = ""; //the value returned
 		$column = trim($column,"` "); //clean up field name
@@ -498,7 +799,10 @@ class DbManager_MySQL implements DbManager {
 		return $ret;
 	}
 	
-	//sourceguardian doesnt support PHP_INT_MAX
+	/**
+	 * Some encrypters dont support PHP_INT_MAX. This calculates it.
+	 * @return int PHP_INT_MAX for this machine
+	 */
 	private static function PHP_INT_MAX(){
 	    $max=0x7fff;
 	    $probe = 0x7fffffff;
@@ -512,7 +816,10 @@ class DbManager_MySQL implements DbManager {
 	
 	/**
 	 * Checks if the given $keyword is a special keyword (ie "OR", "AND", "<", "!=", etc) and returns the match. Returns false if $keyword is not a keyword.
-	 * @param string $keyword
+	 * @param string $keyword The keyword to check.
+	 * @return mixed The matched operator, condition, or FALSE if there is no match.
+	 * @see DbManager_MySQL::IsOperator()
+	 * @see DbManager_MySQL::IsCondition()
 	 */
 	public function IsKeyword($keyword){
 		if( ($operator = $this->IsOperator($keyword)) ) return $operator; //match operator
@@ -522,7 +829,10 @@ class DbManager_MySQL implements DbManager {
 	
 	/**
 	 * Returns the proper operator (AND or OR) if the $keyword is an operator (ie AND or OR). Otherwise returns false.
-	 * @param string $keyword
+	 * @param string $keyword The keyword to check
+	 * @return mixed The matched operator or FALSE if there is no match
+	 * @see DbManager_MySQL::IsKeyword()
+	 * @see DbManager_MySQL::IsCondition()
 	 */
 	public function IsOperator($keyword){
 		$keywordLower = strtolower(trim($keyword));
@@ -537,7 +847,10 @@ class DbManager_MySQL implements DbManager {
 	
 	/**
 	 * Returns the proper condition ("<",">","!=", etc) if the $keyword is an condition. Otherwise returns false.
-	 * @param string $keyword
+	 * @param string $keyword The keyword to check
+	 * @return mixed The matched condition or FALSE if there is no match
+	 * @see DbManager_MySQL::IsOperator()
+	 * @see DbManager_MySQL::IsKeyword()
 	 */
 	public function IsCondition($keyword){
 		$keyword = trim($keyword);
@@ -564,14 +877,27 @@ class DbManager_MySQL implements DbManager {
 
 
 	/*************** DATABASE MANAGEMENT ***************/
+	/**
+	 * Returns true if the given $databaseName exists, false otherwise.
+	 * @param string $databaseName The name of the database to check for existence
+	 * @return bool true if the given $databaseName exists, false otherwise.
+	 */
 	public function DatabaseExists($databaseName){
 		if(!$databaseName) throw new Exception('$databaseName not set');
 
 		$sql = "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '$databaseName'";
-		$this->Query($sql);
+		$this->Query($sql, array(
+			"skip-select-db" => true
+		));
 		$results = $this->FetchAssocList();
 		return (count($results)>0);
 	}
+	/**
+	 * Returns true if the given $tableName exists within the given $databaseName, false otherwise.
+	 * @param string $databaseName The name of the database to check for existence
+	 * @param string $tableName The name of the table to check for existence within the given $databaseName
+	 * @return bool true if the given $tableName exists within the given $databaseName, false otherwise.
+	 */
 	public function TableExists($databaseName,$tableName) {
 		if (!$databaseName) throw new Exception('$databaseName not set');
 
@@ -580,76 +906,145 @@ class DbManager_MySQL implements DbManager {
 		$results = $this->FetchArray();
 		return ($results[0]>0);
 	}
+	/**
+	 * Returns 1 if the database was created, 0 if it already exists or was not created for some reason.
+	 * @param string $databaseName The name of the database to create 
+	 * @return int Returns 1 if the database was created, 0 if it already exists or was not created for some reason.
+	 */
 	public function CreateDatabase($databaseName){
 		if(!$databaseName) throw new Exception('$databaseName not set');
 
 		$sql = "CREATE DATABASE IF NOT EXISTS `$databaseName`";
-		$this->Query($sql);
+		$this->Query($sql, array(
+			"skip-select-db" => true
+		));
 		return $this->AffectedRows();
 	}
+	/**
+	 * Returns 1 if the database was dropped, 0 if it doesn't exist or could not be dropped for some reason.
+	 * @param string $databaseName The name of the database to drop 
+	 * @return int Returns 1 if the database was dropped, 0 if it doesn't exists or could not be dropped for some reason.
+	 */
 	public function DropDatabase($databaseName){
 		if(!$databaseName) throw new Exception('$databaseName not set');
 
 		$sql = "DROP DATABASE IF EXISTS `$databaseName`";
-		$this->Query($sql);
+		$this->Query($sql, array(
+			"skip-select-db" => true
+		));
 		return $this->AffectedRows();
 	}
+	/**
+	 * Returns true if the user exists and can connect from the given $host, false otherwise
+	 * @param string $username The username to check for existence
+	 * @param string $host The host the $username can connect from
+	 * @return bool Returns true if the user exists for the given $host, false otherwise
+	 */
 	public function UserExists($username, $host="localhost"){
 		if(!$username) throw new Exception('$username not set');
 		if(!$host) throw new Exception('$host not set');
 
 		$sql = "SELECT `User` FROM `mysql`.`user` WHERE `User`='$username' AND `Host`='$host'";
-		$this->Query($sql);
+		$this->Query($sql, array(
+			"skip-select-db" => true
+		));
 		$results = $this->FetchAssocList();
 		return (count($results)>0);
 	}
+	/**
+	 * Creates a SQL user with the given $username and $password, able to connect from the given $host
+	 * @param string $username The username to create
+	 * @param string $password The password for the given $username
+	 * @param string $host The host that the given $username can connect from 
+	 * @return int Returns the number of affected rows (1 if the user was created, 0 otherwise) 
+	 */
 	public function CreateUser($username, $password, $host="localhost"){
 		if(!$username) throw new Exception('$username not set');
 		if(!$password) throw new Exception('$password not set');
 		if(!$host) throw new Exception('$host not set');
 
 		$sql = "CREATE USER '$username'@'$host' IDENTIFIED BY '$password'";
-		$this->Query($sql);
+		$this->Query($sql, array(
+			"skip-select-db" => true
+		));
 		return $this->AffectedRows();
 	}
+	/**
+	 * Drops the SQL user with the given $username, able to connect from the given $host
+	 * @param string $username The username to drop
+	 * @param string $host The host that the given $username could connect from 
+	 * @return int Returns the number of affected rows (1 if the user was dropped, 0 otherwise) 
+	 */
 	public function DropUser($username, $host="localhost"){
 		if(!$username) throw new Exception('$username not set');
 		if(!$host) throw new Exception('$host not set');
 
 		$sql = "DROP USER '$username'@'$host'";
-		$this->Query($sql);
+		$this->Query($sql, array(
+			"skip-select-db" => true
+		));
 		return $this->AffectedRows();
 	}
+	/**
+	 * Grants the given $username permission to the given $database, from the given $host
+	 * @param $databaseName The database name that the $username should be granted permission to 
+	 * @param $username The $username that should have permission to connect to the given $databaseName
+	 * @param $host The host that the $username can connect from to connect to the given $databaseName
+	 * @return int Returns the number of affected rows (1 if the user was granted permission, 0 otherwise) 
+	 */
 	public function GrantUserPermissions($databaseName, $username, $host="localhost"){
 		if(!$databaseName) throw new Exception('$databaseName not set');
 		if(!$username) throw new Exception('$username not set');
 		if(!$host) throw new Exception('$host not set');
 
 		$sql = "GRANT ALL PRIVILEGES ON `$databaseName`.* TO '$username'@'$host'";
-		$this->Query($sql);
+		$this->Query($sql, array(
+			"skip-select-db" => true
+		));
 		return $this->AffectedRows();
 	}
+	/**
+	 * Grants the given $username FILE permissions when connecting from the given $host
+	 * @param $username The username to grant FILE permissions to
+	 * @param $host The host the given $username can connect from for FILE permissions
+	 * @return int Returns the number of affected rows (1 if the user was granted permission, 0 otherwise) 
+	 */
 	public function GrantGlobalFilePermissions($username, $host="localhost"){
 		if(!$username) throw new Exception('$username not set');
 		if(!$host) throw new Exception('$host not set');
 
 		$sql = "GRANT FILE ON *.* TO '$username'@'$host'";
-		$this->Query($sql);
+		$this->Query($sql, array(
+			"skip-select-db" => true
+		));
 		return $this->AffectedRows();
 	}
+	/**
+	 * Revokes all permissions for the given $username to the given $databaseName, when connecting from the given $host
+	 * @param $databaseName The database name to revoke the given $username permissions from
+	 * @param $username The username to revoke permissions from
+	 * @param $host The host the given $username could connect from that should have permissions revoked
+	 * @return int Returns the number of affected rows (1 if the user was revoked permissions, 0 otherwise)
+	 */
 	public function RevokeUserPermissions($databaseName, $username, $host="localhost"){
 		if(!$databaseName) throw new Exception('$databaseName not set');
 		if(!$username) throw new Exception('$username not set');
 		if(!$host) throw new Exception('$host not set');
 
 		$sql = "REVOKE ALL PRIVILEGES ON `$databaseName`.* FROM '$username'@'$host'";
-		$this->Query($sql);
+		$this->Query($sql, array(
+			"skip-select-db" => true
+		));
 
 		return $this->AffectedRows();
 	}
 	
 	//********************* password management ********************************
-	//Encrypt Function
+	/**
+	 * A basic encrypt function for storing the password locally in this class
+	 * @param string $decrypt
+	 * @param string $key
+	 */
 	private function Encrypt($encrypt,$key) {
 		$iv = mcrypt_create_iv(mcrypt_get_iv_size(MCRYPT_RIJNDAEL_256, MCRYPT_MODE_ECB), MCRYPT_RAND);
 		$passcrypt = mcrypt_encrypt(MCRYPT_RIJNDAEL_256, $key, $encrypt, MCRYPT_MODE_ECB, $iv);
@@ -657,7 +1052,11 @@ class DbManager_MySQL implements DbManager {
 		return trim($encode);
 	}
 
-	//Decrypt Function
+	/**
+	 * A basic decrypt function for storing the password locally in this class
+	 * @param string $decrypt
+	 * @param string $key
+	 */
 	private function Decrypt($decrypt,$key) {
 		$decoded = base64_decode($decrypt);
 		$iv = mcrypt_create_iv(mcrypt_get_iv_size(MCRYPT_RIJNDAEL_256, MCRYPT_MODE_ECB), MCRYPT_RAND);

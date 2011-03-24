@@ -144,7 +144,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 		//validate the xml with the schema
 		if(!$this->IsXmlFileValid($xmlSchemaFilePath, $xsdFilePath)) throw new Exception("XML file ($xmlSchemaFilePath) does not validate with XSD schema ($xsdFilePath)");
 
-		$xmlAssoc = $this->GetAssocFromXml($xmlSchemaFilePath);
+		$xmlAssoc = $this->GetAssocFromXml($xmlSchemaFilePath, $xsdFilePath);
 		$this->BuildDatabase($xmlAssoc);
 	}
 
@@ -310,16 +310,16 @@ class SmartDatabase implements ArrayAccess, Countable{
 					$column->Collation = $xmlColumn['a']['Collation'];
 					$column->MinSize = $xmlColumn['a']['MinSize'];
 					$column->MaxSize = $xmlColumn['a']['MaxSize'];
-					$column->AllowGet = (strtolower($xmlColumn['a']['AllowGet']) === 'true' ? true : false);
-					$column->AllowSet = (strtolower($xmlColumn['a']['AllowSet']) === 'true' ? true : false);
+					$column->AllowGet = (strtolower($xmlColumn['a']['AllowGet']) === 'false' ? false : true); //default value is true
+					$column->AllowSet = (strtolower($xmlColumn['a']['AllowSet']) === 'false' ? false : true); //default value is true
 					$column->TrimAndStripTagsOnSet = (strtolower($xmlColumn['a']['TrimAndStripTagsOnSet']) === 'true' ? true : false);
-					$column->AllowLookup =(strtolower($xmlColumn['a']['AllowLookup']) === 'true' ? true : false);
-					$column->AllowGetAll = (strtolower($xmlColumn['a']['AllowGetAll']) === 'true' ? true : false);
+					$column->AllowLookup =(strtolower($xmlColumn['a']['AllowLookup']) === 'false' ? false : true); //default value is true
+					$column->AllowGetAll = (strtolower($xmlColumn['a']['AllowGetAll']) === 'false' ? false : true); //default value is true
 					$column->DefaultValue = $xmlColumn['a']['DefaultValue'];
 					$column->IsUnique = (strtolower($xmlColumn['a']['IsUnique']) === 'true' ? true : false);
 					$column->IsPrimaryKey = (strtolower($xmlColumn['a']['PrimaryKey']) === 'true' ? true : false);
 					$column->IsAutoIncrement = (strtolower($xmlColumn['a']['AutoIncrement']) === 'true' ? true : false);
-					$column->DefaultFormType = $xmlColumn['a']['FormType'];
+					$column->DefaultFormType = ($xmlColumn['a']['FormType'] ? $xmlColumn['a']['FormType'] : "text"); //"text" is default value
 					$column->IsRequired = (strtolower($xmlColumn['a']['InputRequired']) === 'true' ? true : false);
 					$column->IsRequiredMessage = $xmlColumn['a']['InputEmptyError'];
 					$column->RegexCheck = $xmlColumn['a']['InputRegexCheck'];
@@ -412,9 +412,16 @@ class SmartDatabase implements ArrayAccess, Countable{
 	/**
 	 * @return array parses the XML file into a structured assoc array
 	 */
-	private function GetAssocFromXml($xmlPath) {
+	private function GetAssocFromXml($xmlPath, $xsdFilePath=null) {
+		//libxml_use_internal_errors(true); //uncomment to show xml parse errors
+		
 	    $reader = new XMLReader();
-	    $reader->open($xmlPath);
+	    $reader->open($xmlPath, null, LIBXML_ERR_WARNING);
+	    
+	    //tried to pull in default values from the XSD document (for "AllowSet", "AllowGet", etc). could never get it to work. instead, we just set those default values in the XML parser and in the SmartColumn class itself
+		//if($xsdFilePath){
+	    //	$reader->setSchema($xsdFilePath);
+	    //}
 
 	    return $this->Xml2assoc($reader);
 	}

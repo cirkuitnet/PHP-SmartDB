@@ -1,0 +1,29 @@
+<?xml version="1.0" standalone="yes"?>
+<CodeGenSchema xmlns="http://www.w3.org/2001/XMLSchema">
+  <Class>
+    <Database TableName="Customer" InheritsTableName="_Common">
+      <Field Name="CustomerId" DataType="int" InputRequired="false" IsUnique="true" PrimaryKey="true" AutoIncrement="true" ForeignKeyID="1" />
+      <Field Name="Name" DataType="varchar" MaxSize="255" TrimAndStripTagsOnSet="true" InputRequired="true" />
+      <Field Name="EmailAddress" DisplayName="Email Address" DataType="varchar" MaxSize="255" TrimAndStripTagsOnSet="true" InputRequired="true" IsUnique="true" />
+      <Field Name="Gender" DataType="enum('Male','Female')" InputRequired="true" />
+      <Field Name="EmailVerified" DisplayName="Email address has been verified" DataType="binary" MaxSize="1" DefaultValue="0" InputRequired="false" />
+    </Database>
+  </Class>
+  <Class>
+    <Database TableName="Invoice" InheritsTableName="_Common">
+      <Field Name="InvoiceId" DataType="int" InputRequired="false" IsUnique="true" PrimaryKey="true" AutoIncrement="true" />
+      <Field Name="CustomerId" DataType="int" InputRequired="true" IsUnique="false" PrimaryKey="false" AutoIncrement="false" ForeignKeyID="1" />
+      <Field Name="Amount" DataType="double" InputRequired="true" />
+    </Database>
+  </Class>
+  <Class>
+    <Database TableName="_Common" IsAbstract="true">
+      <Field Name="DateLastModified" Aliases="Timestamp" DisplayName="Date Last Modified" DataType="timestamp" />
+      <Field Name="DateCreated" DisplayName="Date Created" DataType="timestamp" />
+    </Database>
+  </Class>
+  <ForeignKey Name="CustomerId" ForeignKeyID="1">
+    <Relation TableName="Customer" FieldName="CustomerId" />
+    <Relation TableName="Invoice" FieldName="CustomerId" />
+  </ForeignKey>
+</CodeGenSchema>

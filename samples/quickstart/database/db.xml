@@ -1,0 +1,31 @@
+<?xml version="1.0" standalone="yes"?>
+<CodeGenSchema xmlns="http://www.w3.org/2001/XMLSchema">
+  <Class Name="MyObject1">
+    <Database TableName="MyObject1" InheritsTableName="_Common">
+      <Field Name="MyObject1Id" DisplayName="My Auto-Increment Primary Key Column" DataType="int" InputRequired="false" IsUnique="true" PrimaryKey="true" AutoIncrement="true" ForeignKeyID="1" />
+      <Field Name="MyString" DisplayName="My Required String Column" DataType="varchar" MaxSize="255" TrimAndStripTagsOnSet="true" InputRequired="true" />
+	  <Field Name="MyLongString" DisplayName="My Long String Column" DataType="text" TrimAndStripTagsOnSet="true" InputRequired="false" />
+      <Field Name="MyEnum" DisplayName="My Required Enum Column" DataType="enum('Value 1','Value 2','Value 3')" InputRequired="true" />
+      <Field Name="MyBoolean" DisplayName="My Boolean Column" DataType="binary" MaxSize="1" InputRequired="false" />
+	  <Field Name="MyInt" DisplayName="My Int Column" DataType="int" InputRequired="false" />
+    </Database>
+  </Class>
+  <Class Name="MyObject2">
+    <Database TableName="MyObject2" InheritsTableName="_Common">
+      <Field Name="MyObject2Id" DisplayName="My Auto-Increment Primary Key Column" DataType="int" InputRequired="false" IsUnique="true" PrimaryKey="true" AutoIncrement="true" />
+      <Field Name="MyObject1Id" DisplayName="My Required MyObject1Id Reference" DataType="int" InputRequired="true" IsUnique="false" PrimaryKey="false" AutoIncrement="false" ForeignKeyID="1" />
+      <Field Name="MyDecimal" DisplayName="My Required Decimal Column" DataType="double" InputRequired="true" />
+	  <Field Name="MyShortString" DisplayName="My Short String Column" DataType="varchar" MaxSize="25" TrimAndStripTagsOnSet="false" InputRequired="false" />
+    </Database>
+  </Class>
+  <Class>
+    <Database TableName="_Common" IsAbstract="true">
+      <Field Name="DateLastModified" Aliases="Timestamp" DisplayName="Date Last Modified" DataType="timestamp" />
+      <Field Name="DateCreated" DisplayName="Date Created" DataType="timestamp" />
+    </Database>
+  </Class>
+  <ForeignKey Name="MyObject1Id" ForeignKeyID="1">
+    <Relation TableName="MyObject1" FieldName="MyObject1Id" />
+    <Relation TableName="MyObject2" FieldName="MyObject1Id" />
+  </ForeignKey>
+</CodeGenSchema>

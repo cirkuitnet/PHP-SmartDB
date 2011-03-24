@@ -371,5 +371,6 @@ class DbManager_Tests extends DbManager_MySQL{
 }
 
 
-$tests = new DbManager_Tests('SERVER','USERNAME','PASSWORD','DATABASE_NAME');
+//$tests = new DbManager_Tests('SERVER','USERNAME','PASSWORD','DATABASE_NAME');
+$tests = new DbManager_Tests('localhost','smartdb','smartdb123','smartdb_test');
 $tests->TestAll();

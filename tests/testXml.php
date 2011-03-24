@@ -93,7 +93,7 @@ class JunkExtended extends Junk{
 }
 
 //--create db manager
-$dbManager = $t['dbManager'] = new DbManager_MySQL('SERVER','USERNAME','PASSWORD','DATABASE_NAME');
+$dbManager = $t['dbManager'] = new DbManager_MySQL('localhost','smartdb','smartdb123','smartdb_test');
 
 //--build the Database instance
 $database = $t['database'] = new SmartDatabase($dbManager, dirname(__FILE__).'/test.xml');
@@ -105,7 +105,10 @@ $database->DEV_MODE_WARNINGS = false; //turn off warnings for now
 $t['database']['Setting']->TableName = "Settings"; //change name of database table "Settings"
 
 $GLOBALS['SQL_DEBUG_MODE'] = false; //set to true to see all SQL commands run through the db manager
-SyncDbTables($t);
+
+if(!$t['dbManager']->TableExists("smartdb_test", "Questionare")){
+	SyncDbTables($t);
+}
 
 //////////////////////////////////////
 ?>
@@ -889,6 +892,15 @@ function Test11($t, $debug=false){
 
 	if(!$db['Log']['Id']->HasRelation('FastSetting','Id')) Ex("No relation found between columns");
 	if(!$db['FastSetting']['Id']->HasRelation('Log','Id')) Ex("No relation found between columns");
+	
+	$newLogRow = $t['database']['Log'](34);
+	if(!$newLogRow->Exists()){
+		$t['database']->DbManager->Insert("Log", array(
+			"Id"=>34,
+			"Name"=>"Test",
+			"Timestamp"=>"2009-08-21 00:59:11",
+		));
+	}
 
 	//GetRelatedRows
 	$setting = new SmartRow('FastSetting', $db, 35);

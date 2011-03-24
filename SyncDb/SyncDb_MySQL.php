@@ -144,7 +144,7 @@ class SyncDb_MySQL{
 			else { //table exists
 			    $this->Message("Table '<b>$tableName</b>' exists. Comparing all fields and properties...");
 
-				$this->_dbManager->Query("SHOW FULL FIELDS FROM $tableName");
+				$this->_dbManager->Query("SHOW FULL FIELDS FROM `$tableName`");
 			    $result = $this->_dbManager->FetchAssocList();
 			    
 				//first- delete fields and 'track' updates, removal of keys, and removal of indexes

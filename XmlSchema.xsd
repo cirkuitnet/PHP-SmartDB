@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<xs:schema targetNamespace="http://www.w3.org/2001/XMLSchema" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata" xmlns:msprop="urn:schemas-microsoft-com:xml-msprop" elementFormDefault="qualified" attributeFormDefault="unqualified">
+<xs:schema targetNamespace="http://www.w3.org/2001/XMLSchema" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified" attributeFormDefault="unqualified">
   <xs:element name="CodeGenSchema">
     <xs:complexType>
       <xs:sequence>
@@ -20,7 +20,7 @@
                           </xs:simpleType>
                         </xs:attribute>
                         <xs:attribute name="DisplayName" type="xs:string" use="optional" />
-                        <xs:attribute name="DataType" use="optional" default="varchar">
+                        <xs:attribute name="DataType" use="required">
                           <xs:simpleType>
                             <xs:restriction base="xs:string">
                               <xs:pattern value="char|varchar|text|mediumtext|longtext|blob|mediumblob|longblob|tinyint|smallint|mediumint|int|bigint|float|double|decimal|date|datetime|timestamp|time|binary|enum\((\s*'[ a-zA-Z0-9/_-]+'\s*,)*(\s*'[ a-zA-Z0-9/_-]+'\s*)\)"/>
@@ -49,7 +49,7 @@
                         <xs:attribute name="TrimAndStripTagsOnSet" type="xs:boolean" default="false" use="optional" />
                         <xs:attribute name="AllowGet" type="xs:boolean" default="true" />
                         <xs:attribute name="AllowLookup" type="xs:boolean" default="true" />
-                        <xs:attribute name="AllowGetAll" type="xs:boolean" default="false" />
+                        <xs:attribute name="AllowGetAll" type="xs:boolean" default="true" />
                         <xs:attribute name="DefaultValue" type="xs:string" default="" use="optional" />
                         <xs:attribute name="InputRequired" type="xs:boolean" default="false" use="optional" />
                         <xs:attribute name="InputEmptyError" type="xs:string" use="optional" />
