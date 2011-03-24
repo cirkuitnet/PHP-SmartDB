@@ -4,3 +4,6 @@ You only need to require SmartDatabase.php and a DbManager for your project.
 
 See the samples folder for live examples. Use the 'quickstart' folder for a
 skeleton project to help get started.
+
+View an overview, full documentation, and examples at:
+http://www.phpsmartdb.com/
