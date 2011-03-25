@@ -14,7 +14,7 @@
     <Database TableName="MyObject2" InheritsTableName="_Common">
       <Field Name="MyObject2Id" DisplayName="My Auto-Increment Primary Key Column" DataType="int" InputRequired="false" IsUnique="true" PrimaryKey="true" AutoIncrement="true" />
       <Field Name="MyObject1Id" DisplayName="My Required MyObject1Id Reference" DataType="int" InputRequired="true" IsUnique="false" PrimaryKey="false" AutoIncrement="false" ForeignKeyID="1" />
-      <Field Name="MyDecimal" DisplayName="My Required Decimal Column" DataType="double" InputRequired="true" />
+      <Field Name="MyDecimal" DisplayName="My Required Decimal Column" DataType="float" InputRequired="true" />
 	  <Field Name="MyShortString" DisplayName="My Short String Column" DataType="varchar" MaxSize="25" TrimAndStripTagsOnSet="false" InputRequired="false" />
     </Database>
   </Class>
