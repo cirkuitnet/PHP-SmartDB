@@ -24,6 +24,7 @@ class Setting extends SmartRow{
 class Log extends SmartRow{
 	public function __construct($Database, $id=null ,$opts=null){
 		parent::__construct('Log', $Database, $id);
+		$x = $this['Name'](); //causes the row to be initialized. was a bug previously
 	}
 }
 /**

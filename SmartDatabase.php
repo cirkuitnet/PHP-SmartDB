@@ -555,6 +555,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 			}
 		}
 
+		//TODO: get this hard-coded SQL out of here... move to Sync class for a MySQL database
 		foreach($structure as $tableName=>$columns){
 			$sqlCreateTable = "CREATE TABLE `$tableName` (";
 
@@ -661,21 +662,18 @@ class SmartDatabase implements ArrayAccess, Countable{
 
 /////////////////////////////// ERROR ON INVALID FUNCTIONS/VARS //////////////////////////
 	/**
-	 * Wraps up all public functionality of the containing Column
 	 * @ignore
 	 */
 	public function __call($method, $args){
 		throw new Exception("Undefined method: $method. Passed args: ".print_r($args,true));
 	}
 	/**
-	 * Wraps up all public functionality of the containing Column
 	 * @ignore
 	 */
 	public function __set($key, $val){
 		throw new Exception("Undefined var: $key. Attempted set value: $val");
 	}
 	/**
-	 * Wraps up all public functionality of the containing Column
 	 * @ignore
 	 */
 	public function __get($key){

@@ -421,10 +421,10 @@ class DbManager_MySQL implements DbManager {
 	}
 
 	/**
-	 * Places the last query results into an array of ASSOC arrays, and returns it. Each row is an index in the array.
+	 * Places the last query results into an array of ASSOC arrays, and returns it. Each row is an index in the array. Returns an empty array if there are no results.
 	 * Example:
 	 * <code>
-	 * returns:
+	 * Function returns an array similar to:
 	 * array(
 	 * 	0 => array(
 	 * 		"CustomerId" => "4",
@@ -439,7 +439,7 @@ class DbManager_MySQL implements DbManager {
 	 *  ...
 	 * )
 	 * </code> 
-	 * @return array An array of ASSOC arrays, and returns it. Each row is an index in the array.
+	 * @return array An array of ASSOC arrays, and returns it. Each row is an index in the array. Returns an empty array if there are no results.
 	 * @see DbManager_MySQL::FetchArrayList()
 	 * @see DbManager_MySQL::FetchAssoc()
 	 * @see DbManager_MySQL::FetchArray() 
@@ -450,6 +450,7 @@ class DbManager_MySQL implements DbManager {
 	 * @see DbManager_MySQL::NumRows()
 	 */
 	public function FetchAssocList() {
+		$data = array(); //so an empty array is returned if no rows are set. avoids "Warning: Invalid argument supplied for foreach()"
    		for ($i = 0; $i < $this->NumRows(); $i++) {
        		$data[$i] = $this->FetchAssoc();
    		}
@@ -457,10 +458,10 @@ class DbManager_MySQL implements DbManager {
 	}
 
 	/**
-	 * Places the last query results into an array of NON-ASSOC arrays, and returns the array.
+	 * Places the last query results into an array of NON-ASSOC arrays, and returns the array. Returns an empty array if there are no results.
 	 * Example:
 	 * <code>
-	 * returns:
+	 * Function returns an array similar to:
 	 * array(
 	 * 	0 => array(
 	 * 		0 => "4",
@@ -475,7 +476,7 @@ class DbManager_MySQL implements DbManager {
 	 *  ...
 	 * );
 	 * </code> 
-	 * @return array An array of NON-ASSOC arrays, and returns the array.
+	 * @return array An array of NON-ASSOC arrays, and returns the array. Returns an empty array if there are no results.
 	 * @see DbManager_MySQL::FetchAssocList()
 	 * @see DbManager_MySQL::FetchAssoc()
 	 * @see DbManager_MySQL::FetchArray()
@@ -486,6 +487,7 @@ class DbManager_MySQL implements DbManager {
 	 * @see DbManager_MySQL::NumRows()
 	 */
 	public function FetchArrayList() {
+		$data = array(); //so an empty array is returned if no rows are set. avoids "Warning: Invalid argument supplied for foreach()"
    		for ($i = 0; $i < $this->NumRows(); $i++) {
        		$data[$i] = $this->FetchArray();
    		}
@@ -493,17 +495,18 @@ class DbManager_MySQL implements DbManager {
 	}
 
 	/**
-	 * Returns an ASSOC array of the last query results. Column names are the array keys.
+	 * Returns an ASSOC array of the last query results. Column names are the array keys. False is returned if there are no more results.
 	 * Example:
+	 * if( (row = $dbManager->FetchAssoc()) ){ $row['id']...
 	 * <code>
-	 * returns:
+	 * Function returns an array similar to:
 	 * array(
 	 * 		"CustomerId" => "4",
 	 * 		"EmailAddress" => "jack@frost.com",
 	 * 		"Name" => "Jack",
 	 * );
 	 * </code>
-	 * @return array An ASSOC array of the last query results. Column names are the array keys.
+	 * @return array An ASSOC array of the last query results. Column names are the array keys. False is returned if there are no more results.
 	 * @see DbManager_MySQL::FetchAssocList()
 	 * @see DbManager_MySQL::FetchArrayList()
 	 * @see DbManager_MySQL::FetchArray()
@@ -519,17 +522,17 @@ class DbManager_MySQL implements DbManager {
 	}
 
 	/**
-	 * Returns a NON-ASSOC array of the last query results. Array keys are numeric.
+	 * Returns a NON-ASSOC array of the last query results. Array keys are numeric. False is returned if there are no more results.
 	 * Example:
 	 * <code>
-	 * returns:
+	 * Function returns an array similar to:
 	 * array(
 	 * 		0 => "4",
 	 * 		1 => "jack@frost.com",
 	 * 		2 => "Jack",
 	 * );
 	 * </code>
-	 * @return array An ASSOC array of the last query results. Column names are the array keys.
+	 * @return array An ASSOC array of the last query results. Column names are the array keys. False is returned if there are no more results.
 	 * @see DbManager_MySQL::FetchAssocList()
 	 * @see DbManager_MySQL::FetchArrayList()
 	 * @see DbManager_MySQL::FetchAssoc()

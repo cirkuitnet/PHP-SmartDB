@@ -487,16 +487,19 @@ class SmartTable implements ArrayAccess, Countable{
 
 		//check the 'return-count-only' option
 		if($options['return-count-only']) return $numRowsSelected;
+		
+		//get an array of all of the rows
+		$results = $dbManager->FetchAssocList();
 
 		$returnVals = array();
 		if($this->ExtendedByClassName && class_exists($this->ExtendedByClassName,true)){
 			if($options['return-assoc']){ //return an assoc array
-				while ($row = $dbManager->FetchAssoc()) {
+				foreach($results as $row){
 					$returnVals[$row[$keyColumnName]] = new $this->ExtendedByClassName($this->Database, $row[$keyColumnName]);
 				}
 			}
 			else{ //return a regular array
-				while ($row = $dbManager->FetchAssoc()) {
+				foreach($results as $row){
 					$returnVals[] = new $this->ExtendedByClassName($this->Database, $row[$keyColumnName]);
 				}
 			}
@@ -506,12 +509,12 @@ class SmartTable implements ArrayAccess, Countable{
 				trigger_error("Warning: no class reference found for Table '{$this->TableName}'. ExtendedByClassName = '{$this->ExtendedByClassName}'. Make sure this value is not empty and that the file containing that class is included.", E_USER_WARNING);
 
 			if($options['return-assoc']){ //return an assoc array
-				while ($row = $dbManager->FetchAssoc()) {
+				foreach($results as $row){
 					$returnVals[$row[$keyColumnName]] = new SmartRow($this->TableName, $this->Database,$row[$keyColumnName]);
 				}
 			}
 			else{ //return a regular array
-				while ($row = $dbManager->FetchAssoc()) {
+				foreach($results as $row){
 					$returnVals[] = new SmartRow($this->TableName, $this->Database,$row[$keyColumnName]);
 				}
 			}
@@ -839,16 +842,19 @@ class SmartTable implements ArrayAccess, Countable{
 
 		//check the 'return-count-only' option
 		if($options['return-count-only']) return $numRowsSelected;
+		
+		//get an array of all of the rows
+		$results = $dbManager->FetchAssocList();
 
 		$returnVals = array();
 		if($this->ExtendedByClassName && class_exists($this->ExtendedByClassName,true)){
 			if($options['return-assoc']){ //return an assoc array
-				while ($row = $dbManager->FetchAssoc()) {
+				foreach ($results as $row) {
 					$returnVals[$row[$keyColumnName]] = new $this->ExtendedByClassName($this->Database, $row[$keyColumnName]);
 				}
 			}
 			else{ //return a regular array
-				while ($row = $dbManager->FetchAssoc()) {
+				foreach ($results as $row) {
 					$returnVals[] = new $this->ExtendedByClassName($this->Database, $row[$keyColumnName]);
 				}
 			}
@@ -858,12 +864,12 @@ class SmartTable implements ArrayAccess, Countable{
 				trigger_error("Warning: no class reference found for Table '{$this->TableName}'. ExtendedByClassName = '{$this->ExtendedByClassName}'. Make sure this value is not empty and that the file containing that class is included.", E_USER_WARNING);
 
 			if($options['return-assoc']){ //return an assoc array
-				while ($row = $dbManager->FetchAssoc()) {
+				foreach ($results as $row) {
 					$returnVals[$row[$keyColumnName]] = new SmartRow($this->TableName, $this->Database,$row[$keyColumnName]);
 				}
 			}
 			else{
-				while ($row = $dbManager->FetchAssoc()) {
+				foreach ($results as $row) {
 					$returnVals[] = new SmartRow($this->TableName, $this->Database,$row[$keyColumnName]);
 				}
 			}

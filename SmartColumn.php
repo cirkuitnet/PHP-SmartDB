@@ -436,16 +436,19 @@ class SmartColumn{
 
 		//check the 'return-count-only' option
 		if($options['return-count-only']) return $numRowsSelected;
+		
+		//get an array of all of the rows
+		$results = $dbManager->FetchAssocList();
 
 		$returnVals = array();
 		if($this->Table->ExtendedByClassName && class_exists($this->Table->ExtendedByClassName,true)){
 			if($options['return-assoc']){ //return an assoc array
-				while ($row = $dbManager->FetchAssoc()) {
+				foreach($results as $row){
 					$returnVals[$row[$keyColumnName]] = new $this->Table->ExtendedByClassName($this->Table->Database, $row[$keyColumnName]);
 				}
 			}
 			else{ //return a regular array
-				while ($row = $dbManager->FetchAssoc()) {
+				foreach($results as $row){
 					$returnVals[] = new $this->Table->ExtendedByClassName($this->Table->Database, $row[$keyColumnName]);
 				}
 			}
@@ -455,12 +458,12 @@ class SmartColumn{
 				trigger_error("Warning: no class reference found for Table '{$this->Table->TableName}'. ExtendedByClassName = '{$this->Table->ExtendedByClassName}'. Make sure this value is not empty and that the file containing that class is included.", E_USER_WARNING);
 
 			if($options['return-assoc']){ //return an assoc array
-				while ($row = $dbManager->FetchAssoc()) {
+				foreach($results as $row){
 					$returnVals[$row[$keyColumnName]] = new SmartRow($this->TableName, $this->Table->Database,$row[$keyColumnName]);
 				}
 			}
 			else{
-				while ($row = $dbManager->FetchAssoc()) {
+				foreach($results as $row){
 					$returnVals[] = new SmartRow($this->TableName, $this->Table->Database,$row[$keyColumnName]);
 				}
 			}
