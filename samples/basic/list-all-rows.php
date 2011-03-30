@@ -18,6 +18,13 @@ $cTable = $GLOBALS['db']['Customer'];
 //for example, these now are exactly the same:
 //$cTable['CustomerId']->...
 //$GLOBALS['db']['Customer']['CustomerId']->...
+
+//get all rows in the Customer table
+$allRows = $cTable->GetAllRows(array(
+	'order-by'=>"CustomerId", //optional options. see documentation api
+	'return-count'=>&$numRows //optional OUT parameter. $numRows will be set to the number of rows returned
+	//other options available here... see documentation api
+));
 ?>
 <table cellspacing="1">
 	<tbody>
@@ -30,32 +37,24 @@ $cTable = $GLOBALS['db']['Customer'];
 			<th><?=$cTable['DateLastModified']->DisplayName?></th>
 		</tr>
 		<?
-		//get all rows in the Customer table
-		$allRows = $cTable->GetAllRows(array(
-			'order-by'=>"CustomerId", //optional options. see documentation api
-			'return-count'=>&$numRows //OUT parameter. number of rows returned
-		));
-		
-		if($numRows == 0){
-			?>
-			<tr>
+		if($numRows == 0){ 
+			?> <tr>
 				<td colspan="6"><strong>NO ROWS</strong></td>
-			</tr>
-			<?
+			</tr> <?
 		}
-		
-		//loop over all data and print it (if any)
-		foreach($allRows as $Customer){
-			?>
-			<tr>
-				<td><?=$Customer['CustomerId']()?></td>
-				<td><?=$Customer['Name'](true,true)?></td>
-				<td><?=$Customer['EmailAddress'](true,true)?></td>
-				<td><?=$Customer['Gender']()?></td>
-				<td><?=$Customer["DateCreated"]() ? date("M d, Y - g:i:s a",$Customer["DateCreated"](true)) : ""?></td>
-				<td><?=$Customer["DateLastModified"]()  ? date("M d, Y - g:i:s a",$Customer["DateLastModified"](true)) : ""?></td>
-			</tr>
-			<?
+		else{ //loop over all rows and print the info
+			foreach($allRows as $Customer){
+				?>
+				<tr>
+					<td><?=$Customer['CustomerId']()?></td>
+					<td><?=$Customer['Name'](true,true)?></td>
+					<td><?=$Customer['EmailAddress'](true,true)?></td>
+					<td><?=$Customer['Gender']()?></td>
+					<td><?=$Customer["DateCreated"]() ? date("M d, Y - g:i:s a",$Customer["DateCreated"](true)) : ""?></td>
+					<td><?=$Customer["DateLastModified"]()  ? date("M d, Y - g:i:s a",$Customer["DateLastModified"](true)) : ""?></td>
+				</tr>
+				<?
+			}
 		}
 		?>
 	</tbody>
@@ -73,6 +72,13 @@ $cTable = $GLOBALS["db"]["Customer"];
 //for example, these now are exactly the same:
 //$cTable["CustomerId"]->...
 //$GLOBALS["db"]["Customer"]["CustomerId"]->...
+
+//get all rows in the Customer table
+$allRows = $cTable->GetAllRows(array(
+	"order-by"=>"CustomerId", //optional options. see documentation api
+	"return-count"=>&$numRows //optional OUT parameter. $numRows will be SET
+	//other options available here... see documentation api
+));
 ?>
 <table cellspacing="1">
 	<tbody>
@@ -85,40 +91,28 @@ $cTable = $GLOBALS["db"]["Customer"];
 			<th><?=$cTable["DateLastModified"]->DisplayName?></th>
 		</tr>
 		<?
-		//get all rows in the Customer table
-		$allRows = $cTable->GetAllRows(array(
-			"order-by"=>"CustomerId", //optional options. see documentation api
-			"return-count"=>&$numRows //OUT parameter. number of rows returned
-		));
-		
-		if($numRows == 0){
-			?>
-			<tr>
+		if($numRows == 0){ 
+			?> <tr>
 				<td colspan="6"><strong>NO ROWS</strong></td>
-			</tr>
-			<?
+			</tr> <?
 		}
-		
-		//loop over all data and print it (if any)
-		foreach($allRows as $Customer){
-			?>
-			<tr>
-				<td><?=$Customer["CustomerId"]()?></td>
-				<td><?=$Customer["Name"](true,true)?></td>
-				<td><?=$Customer["EmailAddress"](true,true)?></td>
-				<td><?=$Customer["Gender"]()?></td>
-				<td><?=
-					$Customer["DateCreated"]()
-					 ? date("M d, Y - g:i:s a",$Customer["DateCreated"](true))
-					 : ""
-				?></td>
-				<td><?=
-					$Customer["DateLastModified"]()
-					 ? date("M d, Y - g:i:s a",$Customer["DateLastModified"](true))
-					 : ""
-				?></td>
-			</tr>
-			<?
+		else{ //loop over all rows and print the info
+			foreach($allRows as $Customer){
+				?>
+				<tr>
+					<td><?=$Customer["CustomerId"]()?></td>
+					<td><?=$Customer["Name"](true,true)?></td>
+					<td><?=$Customer["EmailAddress"](true,true)?></td>
+					<td><?=$Customer["Gender"]()?></td>
+					<td><?=$Customer["DateCreated"]()
+						? date("M d, Y - g:i:s a",
+								$Customer["DateCreated"](true)) : ""?></td>
+					<td><?=$Customer["DateLastModified"]()
+						? date("M d, Y - g:i:s a"
+								$Customer["DateLastModified"](true)) : ""?></td>
+				</tr>
+				<?
+			}
 		}
 		?>
 	</tbody>
