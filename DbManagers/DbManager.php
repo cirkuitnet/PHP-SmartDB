@@ -44,6 +44,7 @@ interface DbManager {
 	public function DatabaseExists($databaseName);
 	public function CreateDatabase($databaseName);
 	public function DropDatabase($databaseName);
+	public function CopyDatabase($srouceDatabaseName, $destDatabaseName, $options=null);
 	public function UserExists($username, $host="localhost");
 	public function CreateUser($username, $password, $host="localhost");
 	public function DropUser($username);

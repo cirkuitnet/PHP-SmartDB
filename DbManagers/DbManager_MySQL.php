@@ -137,7 +137,9 @@ class DbManager_MySQL implements DbManager {
 	/**
 	 * Sets the database to use for this connection
 	 * @param string $databaseName The database to use for this connection
-	 * @param array $options - default: false - if true, will immediately call mysql_select_db() with the database passed to this class
+	 * @param array $options{
+	 * 	'force-select-db' => false, //if true, will immediately call mysql_select_db() with the database passed to this class
+	 * }
 	 * @return null
 	 * @see DbManager_MySQL::GetDatabaseName()
 	 */
@@ -548,7 +550,7 @@ class DbManager_MySQL implements DbManager {
 	}
 
 	/**
-	 * Returns the number of rows returned from the last query (not affected rows!)
+	 * Returns the number of rows returned from the last query (not affected rows!). This command is only valid for statements like SELECT or SHOW that return an actual result set. To retrieve the number of rows affected by a INSERT, UPDATE, REPLACE or DELETE query, use AffectedRows()
 	 * @return int Returns the number of rows returned from the last query
 	 * @see DbManager_MySQL::AffectedRows();
 	 * @see DbManager_MySQL::Select()
@@ -901,7 +903,7 @@ class DbManager_MySQL implements DbManager {
 	 * @param string $tableName The name of the table to check for existence within the given $databaseName
 	 * @return bool true if the given $tableName exists within the given $databaseName, false otherwise.
 	 */
-	public function TableExists($databaseName,$tableName) {
+	public function TableExists($databaseName, $tableName) {
 		if (!$databaseName) throw new Exception('$databaseName not set');
 
 		$sql = "SELECT count(*) FROM information_schema.tables WHERE table_schema = '".$databaseName."' AND table_name = '".$tableName."'";
@@ -910,32 +912,138 @@ class DbManager_MySQL implements DbManager {
 		return ($results[0]>0);
 	}
 	/**
-	 * Returns 1 if the database was created, 0 if it already exists or was not created for some reason.
+	 * Removes the given $tableName from within the given $databaseName.
+	 * @param string $databaseName The database to remove the given $tableName from
+	 * @param string $tableName The name of the table to remove.
+	 * @return bool true if the table was successfully dropped or doesn't exist, false if the table exists and could not be dropped
+	 */
+	public function DropTable($databaseName, $tableName){
+		if(!$databaseName) throw new Exception('$databaseName not set');
+		if(!$tableName) throw new Exception('$$tableName not set');
+		
+		if(!$this->TableExists($databaseName, $tableName)) return true; //table doesn't exist to drop
+
+		$sql = "DROP TABLE `$databaseName`.`$tableName`";
+		$this->Query($sql, array(
+			"skip-select-db" => true
+		));
+		
+		if($this->TableExists($databaseName, $tableName)) return false; //table still exists
+		else return true; //table doesn't exist anymore
+	}
+	/**
+	 * Returns true if the database was created, false if it already exists or was not created for some reason.
 	 * @param string $databaseName The name of the database to create 
-	 * @return int Returns 1 if the database was created, 0 if it already exists or was not created for some reason.
+	 * @return int Returns true if the database was created or already exists, false if it not created for some reason
 	 */
 	public function CreateDatabase($databaseName){
 		if(!$databaseName) throw new Exception('$databaseName not set');
+		
+		if($this->DatabaseExists($databaseName)) return true; //database already exists
 
-		$sql = "CREATE DATABASE IF NOT EXISTS `$databaseName`";
+		$sql = "CREATE DATABASE `$databaseName`";
 		$this->Query($sql, array(
 			"skip-select-db" => true
 		));
-		return $this->AffectedRows();
+		
+		if(!$this->DatabaseExists($databaseName)) return false; //database wasn't created
+		else return true; //database created
 	}
 	/**
-	 * Returns 1 if the database was dropped, 0 if it doesn't exist or could not be dropped for some reason.
+	 * Returns true if the database was dropped, false if it doesn't exist or could not be dropped for some reason.
 	 * @param string $databaseName The name of the database to drop 
-	 * @return int Returns 1 if the database was dropped, 0 if it doesn't exists or could not be dropped for some reason.
+	 * @return int Returns true if the database was dropped or doesn't exist, false if it could not be dropped for some reason
 	 */
 	public function DropDatabase($databaseName){
 		if(!$databaseName) throw new Exception('$databaseName not set');
+		
+		if(!$this->DatabaseExists($databaseName)) return true; //database doesn't exist to drop
 
-		$sql = "DROP DATABASE IF EXISTS `$databaseName`";
+		$sql = "DROP DATABASE `$databaseName`";
 		$this->Query($sql, array(
 			"skip-select-db" => true
 		));
-		return $this->AffectedRows();
+		
+		if($this->DatabaseExists($databaseName)) return false; //database still exists
+		else return true; //database doesn't exist anymore
+	}
+	/**
+	 * Copies all structure and data from $sourceDatabaseName to $destDatabaseName. $destDatabaseName will be created if it is not already
+	 * The database user running this command will need appropriate privileges to both databases and/or the ability to create new databases
+	 * <code>
+	 * $options = array(
+	 * 	'create-tables' => true,
+	 * 	'create-database' => true,
+	 * 	'copy-data' => true,
+	 * 	'drop-existing-tables' => false,
+	 * 	'drop-existing-database' => false, 
+	 * )
+	 * </code> 
+	 * @param string $sourceDatabaseName The name of the source database
+	 * @param string $destDatabaseName The name of the destination database. This database will be created if it is not already
+	 * @param array $options An array of key-value pairs (see description above)
+	 * @return bool true on success. May throw an exception on error.
+	 */
+	public function CopyDatabase($sourceDatabaseName, $destDatabaseName, $options=null){
+		$defaultOptions = array( //default options
+			'create-tables' => true,
+			'create-database' => true,
+			'copy-data' => true,
+			'drop-existing-tables' => false,
+			'drop-existing-database' => false, 
+		);
+		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
+			$options = array_merge($defaultOptions, $options);
+		}
+		else $options = $defaultOptions;
+		
+		
+		//make sure the source database exists
+		if(!$this->DatabaseExists($sourceDatabaseName)){
+			throw new Exception("Source database does not exist to copy: ".$sourceDatabaseName);
+		}
+		
+		//drop the destination database if it already exists and $options['drop-existing-database']==true
+		if($options['drop-existing-database']){
+			$success = $this->DropDatabase($destDatabaseName);
+			if(!$success) throw new Exception("Could not drop destination database: ".$destDatabaseName);
+		}
+		
+		//create the destination database if it doesnt already exist
+		if($options['create-database']){
+			$success = $this->CreateDatabase($destDatabaseName);
+			if(!$success) throw new Exception("Could not create destination database: ".$destDatabaseName);
+		}
+		
+		//set our dbmanager to the $sourceDatabaseName so we can select the tables/data
+		$curDatabaseName = $this->GetDatabaseName(); //we'll restore this after the copy operation
+		$this->SetDatabaseName($sourceDatabaseName, array('force-select-db'=>true));
+
+		//get all table records in the source database
+		$this->Query("show tables");
+		$results = $this->FetchArrayList();
+		
+		//loop through all source table records
+		foreach($results as $tableInfo){
+			$tableName = $tableInfo[0];
+			
+			//copy the structure of the table
+			if($options['drop-existing-tables']){
+				$success = $this->DropTable($destDatabaseName, $tableName);
+				if(!$success) throw new Exception("Could not drop destination table: `$destDatabaseName`.`$tableName`");
+			}
+			
+			if($options['create-tables']){
+				$this->Query("CREATE TABLE IF NOT EXISTS `$destDatabaseName`.`$tableName` LIKE `$sourceDatabaseName`.`$tableName`");
+			}
+			
+			//copy the data with primary keys and indexes and etc
+			if($options['copy-data']){
+				$this->Query("INSERT `$destDatabaseName`.`$tableName` SELECT * FROM `$sourceDatabaseName`.`$tableName`");
+			}
+		}
+		
+		return true;
 	}
 	/**
 	 * Returns true if the user exists and can connect from the given $host, false otherwise

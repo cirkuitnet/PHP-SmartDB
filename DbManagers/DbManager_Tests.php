@@ -15,7 +15,6 @@ class DbManager_Tests extends DbManager_MySQL{
 
 	public function TestAll(){
 		$passed = 0; $failed = 0;
-		
 		$result = $this->TestWhereClause1();	if($result['passed']) $passed++; else $failed++;
 		$result = $this->TestWhereClause2();	if($result['passed']) $passed++; else $failed++;
 		$result = $this->TestWhereClause3();	if($result['passed']) $passed++; else $failed++;
@@ -37,7 +36,23 @@ class DbManager_Tests extends DbManager_MySQL{
 		$result = $this->TestWhereClause19();	if($result['passed']) $passed++; else $failed++;
 		$result = $this->TestWhereClause20();	if($result['passed']) $passed++; else $failed++;
 		$result = $this->TestWhereClause21();	if($result['passed']) $passed++; else $failed++;
+		
+		// test database copy. connected user should have permissions to drop/create tables and databases
+		//this also tests creating and dropping databases and tables
+		$success = $this->CopyDatabase('smartdb_test', 'smartdb_test_copy', array(
+			'create-tables' => true,
+			'create-database' => true,
+			'copy-data' => true,
+			'drop-existing-tables' => true,
+			'drop-existing-database' => true, 
+		));
+		if($success){
+			$passed++; 
+			echo 'Copy database passed (create/drop tables and databases)';
+		}
+		else {$failed++; echo "Error: could not copy database 'smartdb_test' to 'smartdb_test_copy'<br>";}
 
+		
 		echo "<br><br> -- RESULTS -- ";
 		echo "<br>Tests passed: $passed";
 		echo "<br>Tests failed: $failed";

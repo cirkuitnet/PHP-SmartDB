@@ -322,7 +322,10 @@ class SyncDb_MySQL{
 		}
 		$backupTableName = "backup_".$tableName."_".date('Ymd_His');
 	    $this->Message("-------- <i>Backing up table '$tableName' to '$backupTableName'...</i>");
-		$this->Query("CREATE TABLE `$backupTableName` SELECT * FROM $tableName");
+		
+		$this->Query("CREATE TABLE `$backupTableName` LIKE `$tableName`"); //copy structure with keys and indexes
+		$this->Query("INSERT `$backupTableName` SELECT * FROM `$tableName`"); //copy data
+		
 		return 1;
 	}
 
