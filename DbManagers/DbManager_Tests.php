@@ -87,7 +87,7 @@ class DbManager_Tests extends DbManager_MySQL{
 	}
 	
 	private function TestWhereClause2(){
-		$expectedResult = "WHERE col1 = 5 OR col2 = 10 OR col3 = 15";
+		$expectedResult = "WHERE col1 = 5 AND col2 = 10 AND col3 = 15";
 		$array_where = array( // (nested arrays default to "AND")
 		    "col1"=>5,   //col1=5
 		                 //AND
@@ -99,9 +99,9 @@ class DbManager_Tests extends DbManager_MySQL{
 	}
 	
 	private function TestWhereClause3(){
-		$expectedResult = "WHERE (col1 = 5 AND col2 = 10 AND col3 = 15)";
-		$array_where = array(
-			array( // (outer array defaults to "OR")
+		$expectedResult = "WHERE (col1 = 5 OR col2 = 10 OR col3 = 15)";
+		$array_where = array( // (outer array defaults to "AND")
+			"OR" => array( //override with "OR"
 				"col1"=>5,   //col1=5
 							 //OR
 				"col2"=>10,  //col2=10
@@ -113,31 +113,31 @@ class DbManager_Tests extends DbManager_MySQL{
 	}
 	
 	private function TestWhereClause4(){
-		$expectedResult = "WHERE foo2 = 'bar2' OR (foo3 = 'bar3' AND foo4 = 'bar4') OR foo5 = 'bar5'";
-		$array_where = array( // (outer array defaults to "OR")
+		$expectedResult = "WHERE foo2 = 'bar2' AND (foo3 = 'bar3' AND foo4 = 'bar4') AND foo5 = 'bar5'";
+		$array_where = array( // (outer array defaults to "AND")
 		  "foo2" => "bar2",     //foo2='bar2'
-		                        //OR
+		                        //AND
 		  array( // (nested arrays default to "AND")
 		    "foo3" => "bar3",   //foo3='bar3'
 		                        //AND
 		    "foo4" => "bar4"    //foo4='bar4'
 		  ),
-		                        //OR
+		                        //AND
 		  "foo5" => "bar5"      //foo5='bar5'
 		);
 		return $this->TestWhereClause($array_where, $expectedResult, __FUNCTION__);
 	}
 	
 	private function TestWhereClause5(){
-		$expectedResult = "WHERE (foo1 = 'bar1' AND foo2 = 'bar2') OR (foo3 = 'bar3' AND foo4 = 'bar4')";
-		$array_where = array( // (outer array defaults to "OR")
-		  array( // (nested arrays default to "AND")
+		$expectedResult = "WHERE (foo1 = 'bar1' AND foo2 = 'bar2') AND (foo3 = 'bar3' AND foo4 = 'bar4')";
+		$array_where = array( // (outer array defaults to "AND")
+		  array( 
 		    "foo1" => "bar1",   //foo1='bar1'
 		                        //AND
 		    "foo2" => "bar2"    //foo2='bar2'
 		  ),                    
-		                        //OR 
-		  array( // (nested arrays default to "AND")
+		                        //AND 
+		  array(
 		    "foo3" => "bar3",   //foo3='bar3'
 		                        //AND
 		    "foo4" => "bar4"    //foo4='bar4'
@@ -147,14 +147,14 @@ class DbManager_Tests extends DbManager_MySQL{
 	}
 	
 	private function TestWhereClause6(){
-		$expectedResult = 'WHERE (col1 = 4 AND col3 = 5) OR (col1 = 6 OR col2 = 7)';
-		$array_where = array( // (outer array defaults to "OR")
+		$expectedResult = 'WHERE (col1 = 4 AND col3 = 5) AND (col1 = 6 OR col2 = 7)';
+		$array_where = array( // (outer array defaults to "AND")
 		  "AND"=>array(
 		    "col1"=>4,         //col1=4
 		                       //AND
 		    "col3"=>5          //col3=5
 		  ),
-		                       //OR (from outer array)
+		                       //AND (from outer array)
 		  "OR"=>array(         
 		    "col1"=>6,         //col1=6
 		                       //OR
@@ -165,19 +165,18 @@ class DbManager_Tests extends DbManager_MySQL{
 	}
 	
 	private function TestWhereClause7(){
-		$expectedResult = 'WHERE (col1 > 40) OR (col2 < 100)';
-		$array_where = array( // (outer array defaults to "OR")
+		$expectedResult = 'WHERE (col1 > 40) AND (col2 < 100)';
+		$array_where = array( // (outer array defaults to "AND")
 		  "col1" => array( ">" => 40 ),     //col1 > 40
-		                                    //OR
+		                                    //AND
 		  "col2" => array( "<" => 100 )     //col1 > 100
 		);
 		return $this->TestWhereClause($array_where, $expectedResult, __FUNCTION__);
 	}
 	
 	private function TestWhereClause8(){
-		$expectedResult = 'WHERE ((col1 > 4) AND col3 = 5 AND (col1 = 6 OR col2 = 7))';
+		$expectedResult = 'WHERE (col1 > 4) AND col3 = 5 AND (col1 = 6 OR col2 = 7)';
 		$array_where = array( 
-		  "AND"=>array(
 		    "col1"=>array( ">" => 4 ),  //col1 > 4
 		                                //AND
 		    "col3"=>5,                  //col3 = 5
@@ -189,8 +188,6 @@ class DbManager_Tests extends DbManager_MySQL{
 		    )
 		
 		    // (anything else added here is AND'ed)
-		  )
-		  // (anything added here is OR'd)
 		);
 		return $this->TestWhereClause($array_where, $expectedResult, __FUNCTION__);
 	}
@@ -224,14 +221,14 @@ class DbManager_Tests extends DbManager_MySQL{
 	}
 	
 	private function TestWhereClause12(){
-		$expectedResult = 'WHERE (col1 < 10 AND (col1 = 3 OR col1 = 5 OR col1 = 7)) OR col2 = 11';
-		$array_where = array( // (outer array defaults to "OR")
-		  "col1" => array( // (nested arrays default to "AND")
+		$expectedResult = 'WHERE (col1 < 10 AND (col1 = 3 OR col1 = 5 OR col1 = 7)) AND col2 = 11';
+		$array_where = array( // (outer array defaults to "AND")
+		  "col1" => array(
 		    "<" => 10,                   //col1<10
 		                                 //AND
 		    "OR" => array("3","5","7")   //col1=3 OR col1=5 OR col1=7
 		  ),
-		                                 //OR
+		                                 //AND
 		  "col2" => 11                   //col2=11
 		);
 		return $this->TestWhereClause($array_where, $expectedResult, __FUNCTION__);
@@ -239,8 +236,8 @@ class DbManager_Tests extends DbManager_MySQL{
 	
 	private function TestWhereClause13(){
 		$expectedResult = 'WHERE (col1 > 40 AND col1 <= 50)';
-		$array_where = array( 
-		  "col1" => array( // (nested arrays default to "AND")
+		$array_where = array( // (outer array defaults to "AND")
+		  "col1" => array(
 		    ">" => 40,                 //col1 > 40
 		                               //AND
 		    "<=" => 50                 //col1 <= 50
@@ -251,8 +248,8 @@ class DbManager_Tests extends DbManager_MySQL{
 	
 	private function TestWhereClause14(){
 		$expectedResult = 'WHERE ((col1 <= 40 OR col1 > 50))';
-		$array_where = array( 
-		  "col1" => array( // (nested arrays default to "AND")            
+		$array_where = array( // (outer array defaults to "AND")
+		  "col1" => array(       
 		    "OR" => array( // (override the outer "AND")
 		      "<=" => 40,                //col1 <= 40
 		                                 //OR
@@ -265,9 +262,9 @@ class DbManager_Tests extends DbManager_MySQL{
 	
 	private function TestWhereClause15(){
 		$expectedResult = 'WHERE ((col1 <= 40 OR col1 > 50) AND col1 != 44)';
-		$array_where = array(
-		  "col1" => array( // (inner arrays default to "AND")
-		    "OR" => array( // (override the outer "AND")
+		$array_where = array(// (outer array defaults to "AND")
+		  "col1" => array( 
+		    "OR" => array( // (override the outer "AND" with "OR")
 		      "<=" => 40,                //col1 <= 40
 		                                 //OR
 		      ">" => 50                  //col1 > 50
@@ -281,8 +278,8 @@ class DbManager_Tests extends DbManager_MySQL{
 	
 	private function TestWhereClause16(){
 		$expectedResult = 'WHERE (((col1 > 4 OR col1 = 1) AND (col1 != 9 AND col1 = 2)))';
-		$array_where = array(
-		  "col1" => array( // (inner arrays default to "AND")
+		$array_where = array( // (outer array defaults to "AND")
+		  "col1" => array(
 		    "AND" => array (
 				"OR" => array(
 			      ">" => 4,               //col1 > 4
@@ -301,20 +298,20 @@ class DbManager_Tests extends DbManager_MySQL{
 	}
 	
 	private function TestWhereClause17(){
-		$expectedResult = 'WHERE ((col1 < 0 OR (col1 > 3 AND (col1 != 10 AND col1 != 12)))) OR col2 = 5';
-		$array_where = array(
-		  "col1" => array( // (inner arrays default to "AND")
+		$expectedResult = 'WHERE ((col1 < 0 OR (col1 > 3 AND (col1 != 10 AND col1 != 12)))) AND col2 = 5';
+		$array_where = array( // (outer array defaults to "AND")
+		  "col1" => array(
 		    "OR" => array(
 		      "<" => 0,                   //col1 < 0
 		                                  //OR
-		      "AND" => array( // (inner arrays default to "AND")
+		      "AND" => array( // override outer "OR" with "AND" for the following
 		        ">" => 3,                 //col1 > 3
 		                                  //AND
 		        "!=" => array(10,12)      //col1 != 10 AND col1 != 12
 		      )
 		    )
 		  ),
-		                                  //OR
+		                                  //AND
 		  "col2" => 5                     //col2 = 5
 		);
 		return $this->TestWhereClause($array_where, $expectedResult, __FUNCTION__);

@@ -415,8 +415,9 @@ class SmartTable implements ArrayAccess, Countable{
 			throw new Exception("Bad lookup values for function '".$functionName."': ".$e->getMessage());		
 		}
 
+		//This extra array wrapping can be ignored once we are sure the DbManager will always AND by default for multi-elements within the first dimension of lookup arrays
 		if($this->_arrayMaxDepth <= 1){ //not a multi-dimension array... wrap another array around this one so we AND by default instead of OR (as the DbManager does for backwards compatibility)
-			$lookupAssoc = array($lookupAssoc); //extra array needed for the DbManager
+			$lookupAssoc = array($lookupAssoc); //extra array needed for the backwards compatibility within DbManager
 		}
 		
 		return $lookupAssoc;

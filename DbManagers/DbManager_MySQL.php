@@ -33,13 +33,21 @@ class DbManager_MySQL implements DbManager {
 	
 	private $PHP_INT_MAX; //the PHP_INT_MAX constant doesnt work in some encrypters
 	private $PHP_INT_MAX_HALF;
+	
+	/**
+	 * First Dimension Where Operator - You'll probably want to ignore this option. It's for reverse compatibility reasons only.
+	 * Used for joining multiple elements within the first dimension of a WHERE clause array. Can be 'AND' or 'OR'.
+	 * @var string Can be "AND" or "OR"
+	 * @ignore
+	 */
+	public static $FirstDimWhereOp = "AND"; //should be "AND" or "OR" only
 
 	/**
-	 * Constructor: pass connection values, set the db settings. note: $extra_params is an ARRAY
+	 * Constructor: pass connection values, set the db settings. note: $options is an ARRAY
 	 * <code>
-	 * $extra_params = array(
+	 * $options = array(
 	 * 	'new_link'=>false,	//this is the 4th parameters for mysql_connect. see mysql_connect documentation
-	 * 	'client_flags'=>"",	//this is the 5th parameters for mysql_connect. see mysql_connect documentation
+	 * 	'client_flags'=>'',	//this is the 5th parameters for mysql_connect. see mysql_connect documentation
 	 * 	'charset'=>'',		//if set, OpenConnection does a mysql_set_charset() with the given option (ie 'utf8')
 	 * );
 	 * </code>
@@ -47,14 +55,14 @@ class DbManager_MySQL implements DbManager {
 	 * @param string $user The username to connect with. Ex: "smartdb"
 	 * @param string $password The password to connect with. Ex: "smartdb123"
 	 * @param string $databaseName The database name to connect to.
-	 * @param array $extra_params Assoc-array of key => value options. See description above.
+	 * @param array $options Assoc-array of key => value options. See description above.
 	 */
-	public function __construct($server, $user, $password, $databaseName=null, $extra_params=null) {
+	public function __construct($server, $user, $password, $databaseName=null, $options=null) {
 		if(!$server || !$user || !$password) throw new Exception("Not all connection variables are set.");
 		$this->_server = $server;
 		$this->_user = $user;
 		$this->_databaseName = $databaseName;
-		$this->_connectParams = $extra_params;
+		$this->_connectParams = $options;
 		
 		$this->SetPassword($password);
 		
@@ -607,8 +615,9 @@ class DbManager_MySQL implements DbManager {
 		//if (get_magic_quotes_gpc()) { //DEPRECIATED IN PHP 5.3.x ALWAYS RETURNED TRUE FOR US ANYWAY
 		   $string = stripslashes($string);
 		//}
-		// Quote if not a number or a numeric string
-		if (!is_numeric($string)) {
+		// Quote if $string is not numeric, OR if it is a numeric and is too big/small for MySQL to treat it as a number
+		if (!is_numeric($string)
+				|| ($string < (0-$this->PHP_INT_MAX_HALF) || $string > $this->PHP_INT_MAX_HALF)) {
 			if(!$this->_isConnected) $this->OpenConnection();
 			$string = mysql_real_escape_string($string,$this->_connection);
 		}
@@ -707,9 +716,10 @@ class DbManager_MySQL implements DbManager {
 		foreach($array_where as $key=>$val){
 			$thisWhere = $this->GenerateWhereRecursive($table, $key, $val, $dotNotation, $addColumnQuotes, '', '=', 'AND', $options);
 			
-			//need to add an " OR " in between clauses
+			//need to add an " AND " (or " OR ") in between clauses. see constructor options
 			if($thisWhere){
-				if($where_clause) $where_clause .= " OR ".$thisWhere;
+				$firstDimWhereOp = ( strtolower(self::$FirstDimWhereOp) == "or" ? "OR" : "AND" ); //force "AND" or "OR"
+				if($where_clause) $where_clause .= " $firstDimWhereOp $thisWhere";
 				else $where_clause = $thisWhere;
 			} 
 		}
@@ -755,7 +765,7 @@ class DbManager_MySQL implements DbManager {
 			foreach($val as $nextKey=>$nextVal){
 				$thisWhere = $this->GenerateWhereRecursive($table, $nextKey, $nextVal, $dotNotation, $addColumnQuotes, $column, $condition, $operator, $options, false);
 				
-				//need to add an " OR " in between clauses
+				//need to add an " AND " or " OR " in between clauses
 				if($thisWhere){
 					if($ret) $ret .= " $operator $thisWhere";
 					else $ret = $thisWhere;
