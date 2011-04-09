@@ -98,6 +98,12 @@ $dbManager = $t['dbManager'] = new DbManager_MySQL('localhost','smartdb','smartd
 
 //--build the Database instance
 $database = $t['database'] = new SmartDatabase($dbManager, dirname(__FILE__).'/test.xml');
+
+//below test reading a database structure and creating xml
+//$database->ReadDatabaseStructure();
+//echo $database->WriteXmlSchema();
+//die;
+
 $database->DEV_MODE_WARNINGS = false; //turn off warnings for now
 //print_nice($database);
 //$database->WriteXmlSchema('/home/adam/public_html/test.xml');

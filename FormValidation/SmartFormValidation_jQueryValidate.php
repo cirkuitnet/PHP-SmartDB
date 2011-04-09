@@ -115,8 +115,9 @@ class SmartFormValidation_jQuery{
 		if($Column->MinSize){
 			$js['minlength'] = (int)$Column->MinSize; //Makes the element require a given minimum length.
 		}
-		if($Column->MaxSize){
-			$js['maxlength'] = (int)$Column->MaxSize; //Makes the element require a given maxmimum length.
+		$maxLength = $Column->GetMaxLength();
+		if($maxLength){
+			$js['maxlength'] = $maxLength; //Makes the element require a given maxmimum length.
 		}
 		if($Column->RegexCheck){
 			$js['regex'] = $Column->RegexCheck; //Makes the element require matching the regex
@@ -150,8 +151,9 @@ class SmartFormValidation_jQuery{
 		if($Column->MinSize){
 			$js['minlength'] = "Minimum of {$Column->MinSize} characters are required for '{$Column->DisplayName}'.";
 		}
-		if($Column->MaxSize){
-			$js['maxlength'] = "Number of characters allowed for '{$Column->DisplayName}' exceeds the {$Column->MaxSize} character limit.";
+		$maxLength = $Column->GetMaxLength();
+		if($maxLength){
+			$js['maxlength'] = "Number of characters allowed for '{$Column->DisplayName}' exceeds the $maxLength character limit.";
 		}
 		if($Column->RegexCheck){
 			$js['regex'] = $Column->RegexFailMessage;

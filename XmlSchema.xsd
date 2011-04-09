@@ -13,7 +13,7 @@
                       <xs:complexType>
                         <xs:attribute name="Name" type="xs:string" use="required" />
                         <xs:attribute name="Aliases" use="optional">
-                        	<xs:simpleType>
+                          <xs:simpleType>
                             <xs:restriction base="xs:string">
                               <xs:pattern value="(\s*[a-zA-Z0-9_-]+\s*,?)+"/>
                             </xs:restriction>
@@ -44,7 +44,13 @@
                           </xs:simpleType>
                         </xs:attribute>
                         <xs:attribute name="MinSize" type="xs:integer" use="optional" />
-                        <xs:attribute name="MaxSize" type="xs:integer" use="optional" />
+                        <xs:attribute name="MaxSize" use="optional">
+                          <xs:simpleType>
+                            <xs:restriction base="xs:string">
+                              <xs:pattern value="\s*[0-9]+\s*(,\s*[0-9]+\s*)?"/>
+                            </xs:restriction>
+                          </xs:simpleType>
+                        </xs:attribute>
                         <xs:attribute name="AllowSet" type="xs:boolean" default="true" />
                         <xs:attribute name="TrimAndStripTagsOnSet" type="xs:boolean" default="false" use="optional" />
                         <xs:attribute name="AllowGet" type="xs:boolean" default="true" />
@@ -72,6 +78,7 @@
                           </xs:simpleType>
                         </xs:attribute>
                         <xs:attribute name="IsUnique" type="xs:boolean" default="false" />
+						<xs:attribute name="FulltextIndex" type="xs:boolean" default="false" />
                         <xs:attribute name="SortOrder" type="xs:integer" use="optional" />
                         <xs:attribute name="PrimaryKey" type="xs:boolean" use="optional" />
                         <xs:attribute name="AutoIncrement" type="xs:boolean" use="optional" />

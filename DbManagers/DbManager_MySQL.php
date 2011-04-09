@@ -900,7 +900,7 @@ class DbManager_MySQL implements DbManager {
 	public function DatabaseExists($databaseName){
 		if(!$databaseName) throw new Exception('$databaseName not set');
 
-		$sql = "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '$databaseName'";
+		$sql = "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '".$this->EscapeString($databaseName)."'";
 		$this->Query($sql, array(
 			"skip-select-db" => true
 		));
@@ -916,7 +916,7 @@ class DbManager_MySQL implements DbManager {
 	public function TableExists($databaseName, $tableName) {
 		if (!$databaseName) throw new Exception('$databaseName not set');
 
-		$sql = "SELECT count(*) FROM information_schema.tables WHERE table_schema = '".$databaseName."' AND table_name = '".$tableName."'";
+		$sql = "SELECT count(*) FROM information_schema.tables WHERE table_schema = '".$this->EscapeString($databaseName)."' AND table_name = '".$this->EscapeString($tableName)."'";
 		$this->Query($sql);
 		$results = $this->FetchArray();
 		return ($results[0]>0);
@@ -929,11 +929,11 @@ class DbManager_MySQL implements DbManager {
 	 */
 	public function DropTable($databaseName, $tableName){
 		if(!$databaseName) throw new Exception('$databaseName not set');
-		if(!$tableName) throw new Exception('$$tableName not set');
+		if(!$tableName) throw new Exception('$tableName not set');
 		
 		if(!$this->TableExists($databaseName, $tableName)) return true; //table doesn't exist to drop
 
-		$sql = "DROP TABLE `$databaseName`.`$tableName`";
+		$sql = "DROP TABLE `".$this->EscapeString($databaseName)."`.`".$this->EscapeString($tableName)."`";
 		$this->Query($sql, array(
 			"skip-select-db" => true
 		));
@@ -951,7 +951,7 @@ class DbManager_MySQL implements DbManager {
 		
 		if($this->DatabaseExists($databaseName)) return true; //database already exists
 
-		$sql = "CREATE DATABASE `$databaseName`";
+		$sql = "CREATE DATABASE `".$this->EscapeString($databaseName)."`";
 		$this->Query($sql, array(
 			"skip-select-db" => true
 		));
@@ -969,7 +969,7 @@ class DbManager_MySQL implements DbManager {
 		
 		if(!$this->DatabaseExists($databaseName)) return true; //database doesn't exist to drop
 
-		$sql = "DROP DATABASE `$databaseName`";
+		$sql = "DROP DATABASE `".$this->EscapeString($databaseName)."`";
 		$this->Query($sql, array(
 			"skip-select-db" => true
 		));
@@ -1044,12 +1044,12 @@ class DbManager_MySQL implements DbManager {
 			}
 			
 			if($options['create-tables']){
-				$this->Query("CREATE TABLE IF NOT EXISTS `$destDatabaseName`.`$tableName` LIKE `$sourceDatabaseName`.`$tableName`");
+				$this->Query("CREATE TABLE IF NOT EXISTS `".$this->EscapeString($destDatabaseName)."`.`".$this->EscapeString($tableName)."` LIKE `".$this->EscapeString($sourceDatabaseName)."`.`".$this->EscapeString($tableName)."`");
 			}
 			
 			//copy the data with primary keys and indexes and etc
 			if($options['copy-data']){
-				$this->Query("INSERT `$destDatabaseName`.`$tableName` SELECT * FROM `$sourceDatabaseName`.`$tableName`");
+				$this->Query("INSERT `".$this->EscapeString($destDatabaseName)."`.`".$this->EscapeString($tableName)."` SELECT * FROM `".$this->EscapeString($sourceDatabaseName)."`.`".$this->EscapeString($tableName)."`");
 			}
 		}
 		
@@ -1065,7 +1065,7 @@ class DbManager_MySQL implements DbManager {
 		if(!$username) throw new Exception('$username not set');
 		if(!$host) throw new Exception('$host not set');
 
-		$sql = "SELECT `User` FROM `mysql`.`user` WHERE `User`='$username' AND `Host`='$host'";
+		$sql = "SELECT `User` FROM `mysql`.`user` WHERE `User`='".$this->EscapeString($username)."' AND `Host`='".$this->EscapeString($host)."'";
 		$this->Query($sql, array(
 			"skip-select-db" => true
 		));
@@ -1084,7 +1084,7 @@ class DbManager_MySQL implements DbManager {
 		if(!$password) throw new Exception('$password not set');
 		if(!$host) throw new Exception('$host not set');
 
-		$sql = "CREATE USER '$username'@'$host' IDENTIFIED BY '$password'";
+		$sql = "CREATE USER '".$this->EscapeString($username)."'@'".$this->EscapeString($host)."' IDENTIFIED BY '".$this->EscapeString($password)."'";
 		$this->Query($sql, array(
 			"skip-select-db" => true
 		));
@@ -1100,7 +1100,7 @@ class DbManager_MySQL implements DbManager {
 		if(!$username) throw new Exception('$username not set');
 		if(!$host) throw new Exception('$host not set');
 
-		$sql = "DROP USER '$username'@'$host'";
+		$sql = "DROP USER '".$this->EscapeString($username)."'@'".$this->EscapeString($host)."'";
 		$this->Query($sql, array(
 			"skip-select-db" => true
 		));
@@ -1118,7 +1118,7 @@ class DbManager_MySQL implements DbManager {
 		if(!$username) throw new Exception('$username not set');
 		if(!$host) throw new Exception('$host not set');
 
-		$sql = "GRANT ALL PRIVILEGES ON `$databaseName`.* TO '$username'@'$host'";
+		$sql = "GRANT ALL PRIVILEGES ON `".$this->EscapeString($databaseName)."`.* TO '".$this->EscapeString($username)."'@'".$this->EscapeString($host)."'";
 		$this->Query($sql, array(
 			"skip-select-db" => true
 		));
@@ -1134,7 +1134,7 @@ class DbManager_MySQL implements DbManager {
 		if(!$username) throw new Exception('$username not set');
 		if(!$host) throw new Exception('$host not set');
 
-		$sql = "GRANT FILE ON *.* TO '$username'@'$host'";
+		$sql = "GRANT FILE ON *.* TO '".$this->EscapeString($username)."'@'".$this->EscapeString($host)."'";
 		$this->Query($sql, array(
 			"skip-select-db" => true
 		));
@@ -1152,7 +1152,7 @@ class DbManager_MySQL implements DbManager {
 		if(!$username) throw new Exception('$username not set');
 		if(!$host) throw new Exception('$host not set');
 
-		$sql = "REVOKE ALL PRIVILEGES ON `$databaseName`.* FROM '$username'@'$host'";
+		$sql = "REVOKE ALL PRIVILEGES ON `".$this->EscapeString($databaseName)."`.* FROM '".$this->EscapeString($username)."'@'".$this->EscapeString($host)."'";
 		$this->Query($sql, array(
 			"skip-select-db" => true
 		));

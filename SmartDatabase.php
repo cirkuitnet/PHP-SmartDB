@@ -169,42 +169,117 @@ class SmartDatabase implements ArrayAccess, Countable{
 		$fkId = 1;
 
 		foreach($this->_tables as $tableName=>$Table){
-			$xml .= '	<Class name="'.$Table->ExtendedByClassName.'">'."\n";
-			$xml .= '		<Database TableName="'.$Table->TableName.'" InheritsTableName="'.$Table->GetInheritedTableName().'" IsAbstract="'.bs($Table->IsAbstract).' CommitChangesAutomatically="'.bs($Table->AutoCommit).'">'."\n";
+			$xml .= '	<Class';
+			if($Table->ExtendedByClassName){
+				$xml .= ' Name="'.$Table->ExtendedByClassName.'"';
+			}
+			$xml .= ">\n";
+			$xml .= '		<Database';
+			$xml .= ' TableName="'.$Table->TableName.'"';
+			if($Table->GetInheritedTableName()){
+				$xml .= ' InheritsTableName="'.$Table->GetInheritedTableName().'"';
+			}
+			if($Table->IsAbstract){
+				$xml .= ' IsAbstract="'.bs($Table->IsAbstract).'"';
+			}
+			if($Table->AutoCommit){
+				$xml .= ' CommitChangesAutomatically="'.bs($Table->AutoCommit).'"';
+			}
+			$xml .= ">\n";
 			$columns = $Table->GetAllColumns();
 			foreach($columns as $columnName=>$Column){
 				$xml .= '			<Field';
 				$xml .= ' Name="'.$Column->ColumnName.'"';
-				//$xml .= ' Aliases="'.$Column->ColumnNameAliases.'"';
-				$xml .= ' DisplayName="'.$Column->DisplayName.'"';
+
+				$aliasesArr = $Column->GetAliases(array('names-only'=>true));
+				if( $aliasesArr && ($aliases = implode(",", $aliasesArr)) ){ //only print if we need to
+					$xml .= ' Aliases="'.$aliases.'"';
+				}
+				
+				if($Column->DisplayName && $Column->DisplayName != $Column->ColumnName){ //only set display name if it isnt the same as the column name
+					$xml .= ' DisplayName="'.htmlspecialchars($Column->DisplayName).'"';
+				}
 
 				if (stripos($Column->DataType,"enum")===0){ //enum data type
 					if(count($Column->PossibleValues) <= 0) throw new Exception("'{$Column->DataType}' column type has no PossibleValues set. Column: '{$Column->ColumnName}', Table: '{$Table->TableName}'");
-					$xml .= ' DataType="'.$Column->DataType."('".implode("','", $Column->PossibleValues)."')";
+					$xml .= ' DataType="'.$Column->DataType."('".htmlspecialchars(implode("','", $Column->PossibleValues))."')\"";
 				}
 				else { //non-enum data type
 					$xml .= ' DataType="'.$Column->DataType.'"';
-					$xml .= ' PossibleValues="'.implode(",", $Column->PossibleValues).'"'; //only save PossibleValues to its own attribute if not an enum data type... otherwise, it's part of the data type
+					if( $Column->PossibleValues && ($possibleVals = implode(",", $Column->PossibleValues)) ){ //only print if we need to
+						$xml .= ' PossibleValues="'.htmlspecialchars($possibleVals).'"'; //only save PossibleValues to its own attribute if not an enum data type... otherwise, it's part of the data type
+					}
 				}
 
-				$xml .= ' Collation="'.$Column->Collation.'"';
-				$xml .= ' MinSize="'.$Column->MinSize.'"';
-				$xml .= ' MaxSize="'.$Column->MaxSize.'"';
-				$xml .= ' AllowGet="'.bs($Column->AllowGet).'"';
-				$xml .= ' AllowSet="'.bs($Column->AllowSet).'"';
-				$xml .= ' TrimAndStripTagsOnSet="'.bs($Column->TrimAndStripTagsOnSet).'"';
-				$xml .= ' AllowLookup="'.bs($Column->AllowLookup).'"';
-				$xml .= ' AllowGetAll="'.bs($Column->AllowGetAll).'"';
-				$xml .= ' DefaultValue="'.$Column->DefaultValue.'"';
-				$xml .= ' InputRequired="'.bs($Column->IsRequired).'"';
-				$xml .= ' InputEmptyError="'.$Column->IsRequiredMessage.'"';
-				$xml .= ' InputRegexCheck="'.$Column->RegexCheck.'"';
-				$xml .= ' InputRegexFailError="'.$Column->RegexFailMessage.'"';
-				$xml .= ' FormType="'.$Column->DefaultFormType.'"';
-				$xml .= ' IsUnique="'.bs($Column->IsUnique).'"';
-				$xml .= ' SortOrder="'.$Column->SortOrder.'"';
-				$xml .= ' PrimaryKey="'.bs($Column->IsPrimaryKey).'"';
-				$xml .= ' AutoIncrement="'.bs($Column->IsAutoIncrement).'"';
+				if($Column->Collation){
+					$xml .= ' Collation="'.$Column->Collation.'"';
+				}
+				if($Column->MinSize){
+					$xml .= ' MinSize="'.$Column->MinSize.'"';
+				}
+				if($Column->MaxSize){
+					if((strpos($Column->DataType,"int")!==false) && $Column->MaxSize==1){ 
+						//dont set a MaxSize for int with maxsize=1. this field doesn't matter anyway. it's for left-zero padding
+					}
+					else if( (strpos($Column->DataType,"binary")!==false) && $Column->MaxSize==1){
+						//dont set MaxSize for binary with maxsize=1. this is default for binary columns
+					}
+					else if($Column->DataType === "decimal" && $Column->MaxSize=="14,4"){
+						//dont set MaxSize for decimal with maxsize="14,4". this is default for binary columns
+					}
+					else{ //filters pass. print MaxSize
+						$xml .= ' MaxSize="'.$Column->MaxSize.'"';
+					}
+				}
+				if($Column->AllowGet == false){ //true is default, so only print if false
+					$xml .= ' AllowGet="'.bs($Column->AllowGet).'"';
+				}
+				if($Column->AllowSet == false){ //true is default, so only print if false
+					$xml .= ' AllowSet="'.bs($Column->AllowSet).'"';
+				}
+				if($Column->TrimAndStripTagsOnSet){
+					$xml .= ' TrimAndStripTagsOnSet="'.bs($Column->TrimAndStripTagsOnSet).'"';
+				}
+				if($Column->AllowLookup == false){ //true is default, so only print if false
+					$xml .= ' AllowLookup="'.bs($Column->AllowLookup).'"';
+				}
+				if($Column->AllowGetAll == false){ //true is default, so only print if false
+					$xml .= ' AllowGetAll="'.bs($Column->AllowGetAll).'"';
+				}
+				if($Column->DefaultValue || $Column->DefaultValue===0 || $Column->DefaultValue==="0"){
+					$xml .= ' DefaultValue="'.htmlspecialchars($Column->DefaultValue).'"';
+				}
+				if($Column->IsRequired && !($Column->IsPrimaryKey && $Column->IsAutoIncrement)){ //primary key's 
+					$xml .= ' InputRequired="'.bs($Column->IsRequired).'"';
+				}
+				if($Column->IsRequiredMessage){
+					$xml .= ' InputEmptyError="'.htmlspecialchars($Column->IsRequiredMessage).'"';
+				}
+				if($Column->RegexCheck){
+					$xml .= ' InputRegexCheck="'.htmlspecialchars($Column->RegexCheck).'"';
+				}
+				if($Column->RegexFailMessage){
+					$xml .= ' InputRegexFailError="'.htmlspecialchars($Column->RegexFailMessage).'"';
+				}
+				if($Column->DefaultFormType && $Column->DefaultFormType != "text"){ //"text" is default, so only print if something else
+					$xml .= ' FormType="'.$Column->DefaultFormType.'"';
+				}
+				if($Column->IsUnique || $Column->IsPrimaryKey){
+					$xml .= ' IsUnique="'.bs($Column->IsUnique || $Column->IsPrimaryKey).'"';
+				}
+				if($Column->FulltextIndex){
+					$xml .= ' FulltextIndex="'.bs($Column->FulltextIndex).'"';
+				}
+				if($Column->SortOrder){
+					//SortOrder not yet implemented
+					//$xml .= ' SortOrder="'.$Column->SortOrder.'"';
+				}
+				if($Column->IsPrimaryKey){
+					$xml .= ' PrimaryKey="'.bs($Column->IsPrimaryKey).'"';
+				}
+				if($Column->IsAutoIncrement){
+					$xml .= ' AutoIncrement="'.bs($Column->IsAutoIncrement).'"';
+				}
 
 				//handle related columns (ie foreign keys)
 				if(count($relations=$Column->GetRelations()) > 0){
@@ -229,10 +304,10 @@ class SmartDatabase implements ArrayAccess, Countable{
 		}
 
 		foreach($foreignKeysByFkId as $fkId=>$tables){
-			$xml .= '	<ForeignKey Name="depreciated" ForeignKeyID="'.$fkId.'">'."\n";
+			$xml .= '	<ForeignKey ForeignKeyID="'.$fkId.'">'."\n";
 			foreach($tables as $tableName=>$columns){
 				foreach($columns as $columnName=>$nothingYet){
-					$xml .= '		<Relation ClassName="depreciated" TableName="'.$tableName.'" FieldName="'.$columnName.'" />'."\n";
+					$xml .= '		<Relation TableName="'.$tableName.'" FieldName="'.$columnName.'" />'."\n";
 				}
 			}
 			$xml .= '	</ForeignKey>'."\n";
@@ -317,6 +392,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 					$column->AllowGetAll = (strtolower($xmlColumn['a']['AllowGetAll']) === 'false' ? false : true); //default value is true
 					$column->DefaultValue = $xmlColumn['a']['DefaultValue'];
 					$column->IsUnique = (strtolower($xmlColumn['a']['IsUnique']) === 'true' ? true : false);
+					$column->FulltextIndex = (strtolower($xmlColumn['a']['FulltextIndex']) === 'true' ? true : false);
 					$column->IsPrimaryKey = (strtolower($xmlColumn['a']['PrimaryKey']) === 'true' ? true : false);
 					$column->IsAutoIncrement = (strtolower($xmlColumn['a']['AutoIncrement']) === 'true' ? true : false);
 					$column->DefaultFormType = ($xmlColumn['a']['FormType'] ? $xmlColumn['a']['FormType'] : "text"); //"text" is default value
@@ -474,18 +550,43 @@ class SmartDatabase implements ArrayAccess, Countable{
 /////////////////////////////// SyncDb ///////////////////////////////////
 	/**
 	 * Synchronizes the structure of this Database instance to the SQL database connection in the DbManager
+	 * <code>
+	 * 	$options = array(
+	 * 		'debug-mode' => false, //if true, prints all Sync SQL instead of executing it
+	 * 		'backup-tables' => true, //if true, creates a backup table before altering any existing tables
+	 * 		'create' => true, //if true, tables and columns will be created if they do not exist
+	 * 		'update' => true, //if true, existing SQL columns will be updated to match properties defined in the SmartDatabase
+	 * 		'delete' => true, //if true, columns that do not exist on a SmartDb managed table will be removed (note: unmanaged TABLES are never deleted!)
+	 * 	);
+	 * </code>
 	 * @param bool $printResults [optional] If true, the results will be printed to the screen. (Results are returned regardless.)
+	 * @param array $options [optional] See description above
 	 * @return string The results of the sync
 	 */
-	public function SyncStructureToDatabase($printResults=false){
+	public function SyncStructureToDatabase($printResults=false, $options=null){
+		$defaultOptions = array( //default options
+			'debug-mode' => false,
+			'backup-tables' => true,
+			'create' => true,
+			'update' => true,
+			'delete' => true, 
+		);
+		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
+			$options = array_merge($defaultOptions, $options);
+		}
+		else $options = $defaultOptions;
+		
+		
 		if(!$this->DbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
+		
 		$syncStructure = $this->BuildSyncStructure();
+		//print_nice($syncStructure);
 
 		//TODO: support other databases
 		require_once (dirname(__FILE__)."/SyncDb/SyncDb_MySQL.php");
 
 		//parameters: DoSync($dbManager, $newDbStructure, $backupTables=true, $doInsert=true, $doUpdate=true, $doDelete=true, $debugMode=false)
-		$results = SyncDb_MySQL::Instance()->DoSync($this->DbManager, $syncStructure, true, true, true, true, false);
+		$results = SyncDb_MySQL::Instance()->DoSync($this->DbManager, $syncStructure, $options['backup-tables'], $options['create'], $options['update'], $options['delete'], $options['debug-mode']);
 		
 		if($printResults) echo $results;
 		return $results;
@@ -527,8 +628,15 @@ class SmartDatabase implements ArrayAccess, Countable{
 					$size = (empty($Column->MaxSize) ? "1" : $Column->MaxSize);
 					$structure[$tableName][$columnName]["Type"] .= "($size)";
 				}
-				else if (strpos($dataTypeLower,"decimal")!==false) //..decimal.. type
-					$structure[$tableName][$columnName]["Type"] .= "(14,4)";
+				else if (strpos($dataTypeLower,"decimal")!==false){ //..decimal.. type
+					if(empty($Column->MaxSize)){
+						$precision = "14,4"; //default precision
+					}
+					else{
+						$precision = $Column->MaxSize;
+					}
+					$structure[$tableName][$columnName]["Type"] .= "(".$precision.")";
+				}
 
 				//Null
 				if($Column->IsRequired || $Column->IsPrimaryKey)
@@ -536,12 +644,23 @@ class SmartDatabase implements ArrayAccess, Countable{
 				else $structure[$tableName][$columnName]["Null"] = "YES";
 
 				//Key
-				if($Column->IsPrimaryKey)
+				if($Column->IsPrimaryKey){
 					$structure[$tableName][$columnName]["Key"] = "PRI";
-				else if($Column->IsUnique)
+					$structure[$tableName][$columnName]["IndexType"] = "UNIQUE";
+				}
+				else if($Column->IsUnique){
 					$structure[$tableName][$columnName]["Key"] = "UNI";
-				else $structure[$tableName][$columnName]["Key"] = "";
-
+					$structure[$tableName][$columnName]["IndexType"] = "UNIQUE";
+				}
+				else if($Column->FulltextIndex){ //Fulltext index
+					$structure[$tableName][$columnName]["Key"] = "MUL";
+					$structure[$tableName][$columnName]["IndexType"] = "FULLTEXT";
+				}
+				else{
+					$structure[$tableName][$columnName]["Key"] = "";
+					$structure[$tableName][$columnName]["IndexType"] = "";
+				}
+				
 				//Default
 				$structure[$tableName][$columnName]["Default"] = $Column->DefaultValue;
 
@@ -561,6 +680,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 
 			//all columns
 			$primaryKeyColumnNames = array();
+			$fulltextColumnNames = array();
 			$first = true;
 			foreach($columns as $columnName=>$columnProps){
 				if(!$first) $sqlCreateTable .= ", ";
@@ -599,13 +719,18 @@ class SmartDatabase implements ArrayAccess, Countable{
 				}
 
 				//unique
-				if($structure[$tableName][$columnName]["Key"] === "UNI"){
+				if($structure[$tableName][$columnName]["Key"] === "UNI" || $structure[$tableName][$columnName]["IndexType"] === "UNIQUE"){
 					$sqlCreateTable .= " UNIQUE";
 				}
 
 				//primary key
 				if($structure[$tableName][$columnName]["Key"] === "PRI"){
 					$primaryKeyColumnNames[] = $columnName;
+				}
+				
+				//fulltext index
+				if($structure[$tableName][$columnName]["IndexType"] === "FULLTEXT"){
+					$fulltextColumnNames[] = $columnName;
 				}
 				$first = false;
 			}
@@ -616,11 +741,187 @@ class SmartDatabase implements ArrayAccess, Countable{
 				$sqlCreateTable .= implode(", ", $primaryKeyColumnNames);
 				$sqlCreateTable .= ")";
 			}
+			
+			//fulltext columns
+			foreach($fulltextColumnNames as $ftColumnName){
+				$sqlCreateTable .= ",FULLTEXT KEY `".$ftColumnName."` (".$ftColumnName.")";
+			}
+			
 			$sqlCreateTable .= ");";
 			$structure[$tableName]["__sqlCreateTable"] = $sqlCreateTable;
 		}
 
 		return $structure;
+	}
+/////////////////////////////// ReadDatabase //////////////////////////////////
+	/**
+	 * Reads the current connected database's structure ($this->DbManager)
+	 * <code>
+	 * 	$options = array(
+	 * 		'preserve-current' => false, //if true, the current smart database structure will be preserved. existing tables/column will be overwritten by the db definitions
+	 * 		'ignore-table-prefix' => 'backup_', //will not import tables that start with the given prefix
+	 * 	)
+	 * </code> 
+	 * @param array $options
+	 */
+	public function ReadDatabaseStructure($options=null){
+		$defaultOptions = array( //default options
+			'preserve-current' => false,
+			'ignore-table-prefix' => 'backup_',
+		);
+		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
+			$options = array_merge($defaultOptions, $options);
+		}
+		else $options = $defaultOptions;
+		
+		if(!$this->DbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
+		
+		//reset current database structure store in smartdb
+		if(!$options['preserve-current']){
+			$this->RemoveAllTables();
+		}
+
+		//TODO: support other databases
+		require_once (dirname(__FILE__)."/ReadDb/ReadDb_MySQL.php"); //currently only works with PMA_MYSQL_INT_VERSION >= 50002
+		
+		$sqlStructure = ReadDb_MySQL::Instance()->GetArray($this->DbManager, $this->DbManager->GetDatabaseName());
+		//print_nice($sqlStructure);
+		
+		foreach($sqlStructure as $tableName=>$tableProps){
+			if($options['ignore-table-prefix'] && strpos($tableName, $options['ignore-table-prefix']) === 0){
+				continue; //ignoring this table due to prefix match
+			}
+			
+			if($this->TableExists($tableName)){ //existing table (likely preserve-current option set to true)
+				$table = $this->GetTable($tableName);
+			}
+			else{ //new table (likely preserve-current option set to false)
+				$table = new SmartTable($tableName);
+			}
+			
+			$table->AutoRefresh = false; //optimization. we'll manually call $table->Refresh() after all columns have been added
+			
+			$colNum = 1; //track the column number
+			foreach($tableProps as $columnName=>$columnProps){
+				if($this->TableExists($tableName)){ //existing column (likely preserve-current option set to true)
+					$table = $table->GetColumn($columnName);
+				}
+				else{ //new column (likely preserve-current option set to false)
+					$column = new SmartColumn($columnName);
+				}
+				
+				/*
+				//$columnProps are the following:
+				$type = $columnProps['Type']; //int(1) unsigned
+				$collation = $columnProps['Collation'];
+				$null = $columnProps['Null'];
+				$key = $columnProps['Key'];
+				$default = $columnProps['Default'];
+				$extra = $columnProps['Extra'];
+				$collation = $columnProps['Collation'];
+				$indexType = $columnProps['IndexType'];
+				*/ 
+				
+				//use datatype to determine each of the following vars: 
+				$dataType = "";
+				$extraInfo = "";
+				$unsigned = false;
+				$size = "";
+				$possibleValues = array();
+					
+				if( ($pos = strpos($columnProps['Type'], "(")) !== false) {  //find parenthesis in column type
+					//$pos contains parenthesis position
+					//ex type: "int(1) unsigned"
+					$dataType = substr($columnProps['Type'], 0, $pos); //"int"
+					$extraInfo = substr($columnProps['Type'], $pos); //"(1) unsigned"
+					$size = str_replace(" unsigned","",$extraInfo, &$unsigned);//"(1)" - $unsigned will be 0 or 1
+					$size = trim($size, "() "); //1
+					
+					if($dataType == "enum"){
+						//parse out the enum values
+						preg_match_all("/'(.*?)'/", $size, $matches); 
+						$possibleValues = $matches[1];
+						$size = "";	//size just holds the possible values. dont keep it around
+					}
+				}
+				else{
+					$dataType = $columnProps['Type'];
+				}
+				
+				if(stripos($dataType, "date") !== false || $dataType==='timestamp'){
+					$isDate = true;
+				}
+				/*
+				//for debugging
+				echo 'TYPE: '.$dataType.'<br>';
+				echo 'EXTRA: '.$extraInfo.'<br>';
+				echo 'UNSIGNED: '.$unsigned.'<br>';
+				echo 'SIZE: '.$size.'<br>';
+				echo 'DATE: '.$isDate.'<br>';
+				print_r($possibleValues);
+				*/
+				
+				$column->DataType = $dataType;
+				$column->IsDateColumn = $isDate;
+				$column->PossibleValues = $possibleValues;
+				$column->MaxSize = $size;
+				
+				$column->Collation = $columnProps['Collation'];
+				$column->DefaultValue = $columnProps['Default'];
+				$column->IsUnique = ( ($columnProps['Key']==="UNI" || $columnProps['IndexType']==="UNIQUE") ? true : false);
+				$column->IsPrimaryKey = ( ($columnProps['Key']==="PRI") ? true : false);
+				$column->IsAutoIncrement = ( (strpos($columnProps['Extra'], "auto_increment") !== false) ? true : false);
+				$column->FulltextIndex = ( ($columnProps['IndexType'] === "FULLTEXT") ? true : false);
+				$column->IsRequired = ( ($columnProps['Null']==="NO" || $column->IsPrimaryKey) ? true : false);
+				$column->SortOrder = $colNum++;
+				
+				if(!$column->DisplayName){
+					//use the column name to come up with something display friendly
+					$displayName = "";
+					$lastLetterUpper = false;
+					$lastWasLetter = false;
+					$lastWasValid = false;
+					$strlen = strlen($columnName);
+					for($i=0; $i<$strlen; $i++){
+						$letter = $columnName[$i];
+
+						$thisIsLetter = (preg_match("/[A-Z]/i", $letter) > 0);
+						$thisIsNumber = is_numeric($letter);
+						
+						$thisLetterUpper = false;
+						if($thisIsLetter && strtoupper($letter) === $letter){
+							$thisLetterUpper = true;
+						}
+						
+						if(($lastWasNumber || $lastWasLetter) && !$lastLetterUpper && $thisLetterUpper || $lastWasNumber != $thisIsNumber ){
+							$displayName .= " ";
+						}
+						$displayName .= $letter;
+						
+						$lastLetterUpper = $thisLetterUpper;
+						$lastWasLetter = $thisIsLetter;
+						$lastWasNumber = $thisIsNumber;
+					}
+					$displayName = str_replace(array("_", "-")," ",$displayName); //replace hyphens and underscore with space
+					$displayName = trim(ucwords($displayName)); //upper case the first words and trim
+					
+					//only set the display name if it's different from the column name, otherwise there's no need
+					if($displayName != $columnName){
+						$column->DisplayName = $displayName;
+					}
+				}
+				
+				$table->AddColumn($column);
+			}
+			
+			$table->Refresh(); //optimization by doing this manually instead of using $table->AutoRefresh
+			$table->AutoRefresh = true; //re-enable auto refresh
+
+			$this->AddTable($table);
+		}
+		
+		//$smartStructure = $this->BuildSyncStructure(); //current structure of the smartdb
+		//print_nice($smartStructure);
 	}
 /////////////////////////////// ArrayAccess ///////////////////////////////////
 	/**

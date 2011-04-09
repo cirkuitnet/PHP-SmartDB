@@ -511,8 +511,8 @@ class SmartCell{
 			'name'=>$this->GetDefaultFormObjectName(),
 			'class'=>'inputText',
 			'value'=>$value,
-			'size'=>$this->MaxSize,
-			'maxlength'=>$this->MaxSize,
+			'size'=>$this->GetMaxLength(),
+			'maxlength'=>$this->GetMaxLength(),
 			'disabled'=>(!$this->AllowSet ? 'disabled' : null),
 		);
 		if(is_array($customAttribs)){ //overwrite $defaultAttribs with any $customAttribs specified
@@ -572,8 +572,8 @@ class SmartCell{
 			'name'=>$this->GetDefaultFormObjectName(),
 			'class'=>'inputText inputPassword',
 			'value'=>$pwd,
-			'size'=>$this->MaxSize,
-			'maxlength'=>$this->MaxSize,
+			'size'=>$this->GetMaxLength(),
+			'maxlength'=>$this->GetMaxLength(),
 			'disabled'=>(!$this->AllowSet ? 'disabled' : null),
 		);
 		if(is_array($customAttribs)){ //overwrite $defaultAttribs with any $customAttribs specified
@@ -975,8 +975,8 @@ class SmartCell{
 			'name'=>$this->GetDefaultFormObjectName(),
 			'class'=>'inputText inputColorpicker',
 			'value'=>$value,
-			'size'=>$this->MaxSize,
-			'maxlength'=>$this->MaxSize,
+			'size'=>$this->GetMaxLength(),
+			'maxlength'=>$this->GetMaxLength(),
 			'disabled'=>(!$this->AllowSet ? 'disabled' : null),
 		);
 		if(is_array($customAttribs)){ //overwrite $defaultAttribs with any $customAttribs specified
@@ -1031,8 +1031,8 @@ class SmartCell{
 			'name'=>$this->GetDefaultFormObjectName(),
 			'class'=>'inputText inputDatepicker',
 			'value'=>$value,
-			'size'=>$this->MaxSize,
-			'maxlength'=>$this->MaxSize,
+			'size'=>$this->GetMaxLength(),
+			'maxlength'=>$this->GetMaxLength(),
 			'disabled'=>(!$this->AllowSet ? 'disabled' : null),
 		);
 		if(is_array($customAttribs)){ //overwrite $defaultAttribs with any $customAttribs specified
@@ -1087,8 +1087,8 @@ class SmartCell{
 			'name'=>$this->GetDefaultFormObjectName(),
 			'class'=>'inputText inputSlider',
 			'value'=>$value,
-			'size'=>$this->MaxSize,
-			'maxlength'=>$this->MaxSize,
+			'size'=>$this->GetMaxLength(),
+			'maxlength'=>$this->GetMaxLength(),
 			'disabled'=>(!$this->AllowSet ? 'disabled' : null),
 		);
 		if(is_array($customAttribs)){ //overwrite $defaultAttribs with any $customAttribs specified
@@ -1201,9 +1201,10 @@ class SmartCell{
 			}
 		}
 
-		if($this->MaxSize) {
-			if (strlen($value) > $this->MaxSize){
-				$errors .= "Number of characters allowed for '{$this->DisplayName}' exceeds the {$this->MaxSize} character limit.";
+		$maxLength = $this->GetMaxLength();
+		if($maxLength) {
+			if (strlen($value) > $maxLength){
+				$errors .= "Number of characters allowed for '{$this->DisplayName}' exceeds the $maxLength character limit.";
 				$errors .= $options['error-message-suffix'];
 			}
 		}

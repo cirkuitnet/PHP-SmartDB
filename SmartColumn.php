@@ -51,10 +51,29 @@ class SmartColumn{
 	 * @var int The minimum number of characters allowed for this column. Can be null.
 	 */
 	public $MinSize;
+	
 	/**
-	 * @var int The maximum number of characters allowed for this column. Can be null.
+	 * @var mixed The size of the column. For DataType=="decimal" columns, this is "PRECISION,SCALE" (ie "14,4"). For other columns, this represents the maximum number of characters allowed for this column. Can be null.
+	 * @see SmartColumn::GetMaxLength()
 	 */
 	public $MaxSize;
+	/**
+	 * Uses the column's $MaxSize property to determine what that maximum number of characters that are allowed in this column, regardless of data type (i.e. decimals are different than regular MaxSize)
+	 * @return int Returns the maximum number of characters this column can hold. If no MaxSize is set, returns null.
+	 * @see SmartColumn::$MaxSize
+	 */
+	public function GetMaxLength(){
+		$maxSize = $this->MaxSize;
+		if(!$maxSize) return null;
+		
+		if($this->DataType === "decimal"){
+			//MaxSize is something like (14,4) for decimals. first number is precision, second number is scale
+			$sizeParts = explode(",", $maxSize);
+			return ((int)$sizeParts[0] + 1); //add 1 for a decimal point
+		}
+		else return (int)$maxSize;
+	}
+	
 	/**
 	 * @var bool Default it true. Controls access to retrieving values from this column (defaults to true in XmlSchema.xsd if using an xml schema as your db structure)
 	 */
@@ -93,6 +112,10 @@ class SmartColumn{
 	 * @var bool True if this column is an auto-increment column
 	 */
 	public $IsAutoIncrement;
+	/**
+	 * @var bool True if this column is specified as a fulltext index for searching
+	 */
+	public $FulltextIndex;
 	/**
 	 * @var string Default it "text". See XmlSchema.xsd for possible values (Last I checked, it was: "text", "password", "checkbox", "radio", "select", "textarea", "hidden", "colorpicker", "datepicker", "slider" ... the last 3, are for use with jQuery UI)
 	 * @see SmartCell::GetFormObject()
@@ -227,10 +250,18 @@ class SmartColumn{
 
 	/**
 	 * Returns an array of all aliases. array($key=alias => $val=true);
+	 * <code>
+	 * 	$options = array(
+	 * 		'names-only' => false, //if true, the returned array will just be an array of alias names
+	 * 	)
+	 * </code>
 	 * @return array All aliases of this Column
 	 */
-	public function GetAliases(){
-		return $this->_aliases;
+	public function GetAliases($options=null){
+		if($options['names-only']){
+			return array_keys($this->_aliases);
+		}
+		else return $this->_aliases;
 	}
 
 	/**
@@ -459,12 +490,12 @@ class SmartColumn{
 
 			if($options['return-assoc']){ //return an assoc array
 				foreach($results as $row){
-					$returnVals[$row[$keyColumnName]] = new SmartRow($this->TableName, $this->Table->Database,$row[$keyColumnName]);
+					$returnVals[$row[$keyColumnName]] = new SmartRow($this->Table->TableName, $this->Table->Database,$row[$keyColumnName]);
 				}
 			}
 			else{
 				foreach($results as $row){
-					$returnVals[] = new SmartRow($this->TableName, $this->Table->Database,$row[$keyColumnName]);
+					$returnVals[] = new SmartRow($this->Table->TableName, $this->Table->Database,$row[$keyColumnName]);
 				}
 			}
 		}
