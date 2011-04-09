@@ -152,6 +152,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 	 * Gets the current database schema in XML format and optionally writes the XML to a file (specified in $xmlSchemaFilePath). The XML string is returned regardless.
 	 * @param string $xmlSchemaFilePath [optional] If provided, the new XML will overwrite the file at the specified path
 	 * @return string The current database schema in XML format
+	 * @see ReadDb_MySQL::GetArray()
 	 */
 	public function WriteXmlSchema($xmlSchemaFilePath=null){
 		/**

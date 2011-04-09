@@ -11,7 +11,7 @@
  * @package SmartDatabase
  */
 /**
- * This class will update a database to match a given db structure schema (described below)
+ * This class will read a database structure into the SmartDatabase. This structure can then be written to XML using the SmartDatabase::WriteXmlSchema() function
  * 
  * -- db structure layout guide --
  * <code>
@@ -24,7 +24,8 @@
  * 			"Key"=>"<PRI|UNI|MUL|empty>", //note: PRI=Primary Key, UNI=Unique index, MUL=multiple... seems to mean the same as UNI though
  * 			"Default"=>"<default value|empty>",
  * 			"Extra"=>"<auto_increment|empty>",
- * 			"Collation"=>"<utf8_general_ci|latin1_swedish_ci|empty>" //other collations can easily be added if needed
+ * 			"Collation"=>"<utf8_general_ci|latin1_swedish_ci|empty>", //other collations can easily be added if needed
+ * 			"IndexType"=>"<UNIQUE|FULLTEXT|empty>", //UNIQUE when Key=PRI,UNI, or MUL. FULLTEXT for fulltext index
  * 		),
  * 		...(more columns)...
  * 	),
@@ -45,6 +46,7 @@
  * 				"Default"=>"",
  * 				"Extra"=>"auto_increment",
  *				"Collation"=>"",
+ *				"IndexType"=>"UNIQUE",
  * 			),
  * 			"Name"=>array(
  * 				"Field"=>"Name",
@@ -54,6 +56,7 @@
  * 				"Default"=>"",
  * 				"Extra"=>"",
  *				"Collation"=>"",
+ *				"IndexType=>"",
  * 			),
  * 			"Html"=>array(
  * 				"Field"=>"Html",
@@ -63,11 +66,13 @@
  * 				"Default"=>"",
  * 				"Extra"=>"",
  *				"Collation"=>"utf8_general_ci",
- * 			)
+ *				"IndexType"=>"FULLTEXT", //i.e. fulltext index on this column
+ * 			),
  * 		)
  * );
  * </code>
  * Reads a database structure properties that the SmartDatabase can use to load/write XML schemas
+ * @see SmartDatabase::WriteXmlSchema()
  * @package SmartDatabase
  */
 class ReadDb_MySQL{
@@ -93,7 +98,9 @@ class ReadDb_MySQL{
 	 * ORIGINAL SOURCE - phpMyAdmin-2.11.11.3 - function PMA_DBI_get_columns_full()
 	 * 
 	 * <code>
-	 * //the returned array must contain at least this information
+	 * $return = ReadDb_MySQL::Instance()->GetArray($dbManager, "DATABASE_NAME"); //call function from the singleton
+	 * 
+	 * //the returned array will contain at least this information
 	 * $return = array(
 	 * 	"TABLE NAME" => array(
 	 * 		"COLUMN NAME 1" => array(
@@ -115,6 +122,7 @@ class ReadDb_MySQL{
 	 * @param   string  $database   name of database
 	 * @param   string  $table      name of table to retrieve columns from
 	 * @param   string  $column     name of specific column
+	 * @see SmartDatabase::WriteXmlSchema()
 	 */
 	function GetArray($dbManager, $database = null, $table = null, $column = null){
 	    $columns = array();
