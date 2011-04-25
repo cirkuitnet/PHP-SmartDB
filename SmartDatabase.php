@@ -710,7 +710,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 				else $sqlCreateTable .= " NULL";
 
 				//default value
-				if(!empty($structure[$tableName][$columnName]["Default"]) && strcasecmp($columnProps['Type'], 'text')!=0 ){ // blob/text types cant have default values in mysql
+				if(isset($structure[$tableName][$columnName]["Default"]) && $structure[$tableName][$columnName]["Default"]!=="" && strcasecmp($columnProps['Type'], 'text')!=0 ){ // blob/text types cant have default values in mysql
 					$sqlCreateTable .= " DEFAULT '".$structure[$tableName][$columnName]["Default"]."'";
 				}
 
@@ -719,14 +719,17 @@ class SmartDatabase implements ArrayAccess, Countable{
 					$sqlCreateTable .= " AUTO_INCREMENT";
 				}
 
+				//primary key
+				$isPrimarykey = $structure[$tableName][$columnName]["Key"] === "PRI";
+				if($isPrimarykey){
+					$primaryKeyColumnNames[] = $columnName;
+				}
+				
 				//unique
 				if($structure[$tableName][$columnName]["Key"] === "UNI" || $structure[$tableName][$columnName]["IndexType"] === "UNIQUE"){
-					$sqlCreateTable .= " UNIQUE";
-				}
-
-				//primary key
-				if($structure[$tableName][$columnName]["Key"] === "PRI"){
-					$primaryKeyColumnNames[] = $columnName;
+					if(!$isPrimarykey){ //no need to specify as UNIQUE if it's a primary key. this will make 2 indexes
+						$sqlCreateTable .= " UNIQUE";
+					}
 				}
 				
 				//fulltext index
