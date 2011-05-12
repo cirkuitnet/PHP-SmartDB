@@ -859,7 +859,7 @@ class SmartCell{
 	 * <code>
 	 * $options = array(
 	 * 	'force-checked' => false, //if true, this radio button will be checked regardless of the current Cell value. if false, this radio button will be checked only if the value matches the one currently in the Cell
-	 * 	'checked-if-dbtable-value-is-null' => false, //if true, this radio button will be checked only if the current Cell value for thi column is null
+	 * 	'checked-if-null' => false, //if true, this radio button will be checked only if the current Cell value for thi column is null
 	 * 	'label-text' => "", //a string for the text of the label next to the radio button. if this field is left empty, no label will be included with the button
 	 * 	'label-position' => "left", //can be "left" or "right", relative to the radio button (only if ['include-label']=true)
 	 * 	'custom-formatter-callback' =>null, //can be either: 1. array("functionName", $obj) if function belongs to $obj, 2. array("functionName", "className") if the function is static within class "classname", or 3. just "functionName" if function is in global scope. this function will be called when getting the form object and the value returned by it will be used as the form object's value. the callback's signiture is functionName($value), where $value is the current cell value
@@ -876,12 +876,14 @@ class SmartCell{
 		//OPTIONS
 		$defaultOptions = array( //default options
 			"force-checked"=>false,
-			"checked-if-dbtable-value-is-null"=>false,
+			"checked-if-null"=>false,
+			"checked-if-dbtable-value-is-null"=>false, //deprecated. alias to checked-if-null
 			"label-text"=>$labelText,
 			"label-position"=>"left",
 		);
 		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
 			$options = array_merge($defaultOptions, $options);
+			$options['checked-if-null'] = $options['checked-if-null'] || $options['checked-if-dbtable-value-is-null']; //support legacy options
 		}
 		else $options = $defaultOptions;
 
@@ -889,7 +891,7 @@ class SmartCell{
 		$formValue = htmlspecialchars($formValue);
 
 		$checked=null;
-		if ($options['force-checked'] || ($currentValue==$formValue) || ($currentValue=="" && $options['checked-if-dbtable-value-is-null'])){
+		if ($options['force-checked'] || ($currentValue==$formValue) || ($currentValue=="" && $options['checked-if-null'])){
 			$checked='checked';
 		}
 
