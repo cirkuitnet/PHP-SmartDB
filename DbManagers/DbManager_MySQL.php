@@ -745,15 +745,12 @@ class DbManager_MySQL implements DbManager {
 	 */
 	private function GenerateWhereRecursive($table, $key, $val, $dotNotation=false, $addColumnQuotes=false, $column='', $condition='=', $operator='AND', $options=array(), $first=true){
 		$key = trim($key);
-		$keyIsKeyword = false; //if the key is not a keyword and not numeric, it is assumed to be the column name
 	 
 		if( ($newCondition = $this->IsCondition($key)) ){ //check if key is a condition
 			$condition = $newCondition;
-			$keyIsKeyword = true;
 		}
 		else if( ($newOperator = $this->IsOperator($key)) ){ //check if key is an operator
 			$operator = $newOperator;
-			$keyIsKeyword = true;
 		}
 		else if(!is_numeric($key)){ 		//if the key is not a keyword and not numeric, it is assumed to be the column name
 			$column = $key;
@@ -810,6 +807,11 @@ class DbManager_MySQL implements DbManager {
 			else $ret = "$column $condition $val";
 		}
 		else  {$ret = "$column $condition '".$this->EscapeString($val)."'";} //quotes around strings
+		
+		//HACK-ish: MySQL doesn't recognize NULL as '!=' some value. we have to force null checking.
+		if($condition == "!=" && $val !== null){
+			$ret = "($ret OR $column is null)";
+		}
 		
 		return $ret;
 	}

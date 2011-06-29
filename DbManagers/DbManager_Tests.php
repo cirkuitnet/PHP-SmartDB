@@ -261,7 +261,7 @@ class DbManager_Tests extends DbManager_MySQL{
 	}
 	
 	private function TestWhereClause15(){
-		$expectedResult = 'WHERE ((col1 <= 40 OR col1 > 50) AND col1 != 44)';
+		$expectedResult = 'WHERE ((col1 <= 40 OR col1 > 50) AND (col1 != 44 OR col1 is null))';
 		$array_where = array(// (outer array defaults to "AND")
 		  "col1" => array( 
 		    "OR" => array( // (override the outer "AND" with "OR")
@@ -270,14 +270,14 @@ class DbManager_Tests extends DbManager_MySQL{
 		      ">" => 50                  //col1 > 50
 		    ),
 		                                 //AND
-		    "!=" => "44"                 //col1 != 44
+		    "!=" => "44"                 //col1 != 44 OR col1 is null ("is null" case is special for MySQL)
 		  ),
 		);
 		return $this->TestWhereClause($array_where, $expectedResult, __FUNCTION__);
 	}
 	
 	private function TestWhereClause16(){
-		$expectedResult = 'WHERE (((col1 > 4 OR col1 = 1) AND (col1 != 9 AND col1 = 2)))';
+		$expectedResult = 'WHERE (((col1 > 4 OR col1 = 1) AND ((col1 != 9 OR col1 is null) AND col1 = 2)))';
 		$array_where = array( // (outer array defaults to "AND")
 		  "col1" => array(
 		    "AND" => array (
@@ -287,7 +287,7 @@ class DbManager_Tests extends DbManager_MySQL{
 			      1,                      //col1 = 1
 			    ), 
 			    "AND" => array(
-			      "!=" => 9,              //col1 != 9
+			      "!=" => 9,              //col1 != 9 OR col1 is null ("is null" case is special for MySQL)
 			                              //OR
 			      "=" => 2                //col1 = 2
 			    )
@@ -298,7 +298,7 @@ class DbManager_Tests extends DbManager_MySQL{
 	}
 	
 	private function TestWhereClause17(){
-		$expectedResult = 'WHERE ((col1 < 0 OR (col1 > 3 AND (col1 != 10 AND col1 != 12)))) AND col2 = 5';
+		$expectedResult = 'WHERE ((col1 < 0 OR (col1 > 3 AND ((col1 != 10 OR col1 is null) AND (col1 != 12 OR col1 is null))))) AND col2 = 5';
 		$array_where = array( // (outer array defaults to "AND")
 		  "col1" => array(
 		    "OR" => array(
@@ -307,7 +307,7 @@ class DbManager_Tests extends DbManager_MySQL{
 		      "AND" => array( // override outer "OR" with "AND" for the following
 		        ">" => 3,                 //col1 > 3
 		                                  //AND
-		        "!=" => array(10,12)      //col1 != 10 AND col1 != 12
+		        "!=" => array(10,12)      //(col1 != 10 OR col1 is null) AND (col1 != 12 OR col1 is null)   ("is null" cases are special for MySQL)
 		      )
 		    )
 		  ),
@@ -318,7 +318,7 @@ class DbManager_Tests extends DbManager_MySQL{
 	}
 	
 	private function TestWhereClause18() {
-		$expectedResult = "WHERE ((col1 = 5 OR (col2 = -1 AND col3 = 'yo')) AND (col4 LIKE 'yo again') AND (col5 != 5))";
+		$expectedResult = "WHERE ((col1 = 5 OR (col2 = -1 AND col3 = 'yo')) AND (col4 LIKE 'yo again') AND ((col5 != 5 OR col5 is null)))";
 		$array_where = array(
 			"AND" => array(
 				"OR" => array(
