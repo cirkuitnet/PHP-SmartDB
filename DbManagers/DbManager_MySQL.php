@@ -1009,7 +1009,6 @@ class DbManager_MySQL implements DbManager {
 		}
 		else $options = $defaultOptions;
 		
-		
 		//make sure the source database exists
 		if(!$this->DatabaseExists($sourceDatabaseName)){
 			throw new Exception("Source database does not exist to copy: ".$sourceDatabaseName);
@@ -1030,30 +1029,39 @@ class DbManager_MySQL implements DbManager {
 		//set our dbmanager to the $sourceDatabaseName so we can select the tables/data
 		$curDatabaseName = $this->GetDatabaseName(); //we'll restore this after the copy operation
 		$this->SetDatabaseName($sourceDatabaseName, array('force-select-db'=>true));
-
-		//get all table records in the source database
-		$this->Query("show tables");
-		$results = $this->FetchArrayList();
 		
-		//loop through all source table records
-		foreach($results as $tableInfo){
-			$tableName = $tableInfo[0];
+		try{ //need to restore the database connection if something fails
+			//get all table records in the source database
+			$this->Query("show tables");
+			$results = $this->FetchArrayList();
 			
-			//copy the structure of the table
-			if($options['drop-existing-tables']){
-				$success = $this->DropTable($destDatabaseName, $tableName);
-				if(!$success) throw new Exception("Could not drop destination table: `$destDatabaseName`.`$tableName`");
-			}
-			
-			if($options['create-tables']){
-				$this->Query("CREATE TABLE IF NOT EXISTS `".$this->EscapeString($destDatabaseName)."`.`".$this->EscapeString($tableName)."` LIKE `".$this->EscapeString($sourceDatabaseName)."`.`".$this->EscapeString($tableName)."`");
-			}
-			
-			//copy the data with primary keys and indexes and etc
-			if($options['copy-data']){
-				$this->Query("INSERT `".$this->EscapeString($destDatabaseName)."`.`".$this->EscapeString($tableName)."` SELECT * FROM `".$this->EscapeString($sourceDatabaseName)."`.`".$this->EscapeString($tableName)."`");
+			//loop through all source table records
+			foreach($results as $tableInfo){
+				$tableName = $tableInfo[0];
+				
+				//copy the structure of the table
+				if($options['drop-existing-tables']){
+					$success = $this->DropTable($destDatabaseName, $tableName);
+					if(!$success) throw new Exception("Could not drop destination table: `$destDatabaseName`.`$tableName`");
+				}
+				
+				if($options['create-tables']){
+					$this->Query("CREATE TABLE IF NOT EXISTS `".$this->EscapeString($destDatabaseName)."`.`".$this->EscapeString($tableName)."` LIKE `".$this->EscapeString($sourceDatabaseName)."`.`".$this->EscapeString($tableName)."`");
+				}
+				
+				//copy the data with primary keys and indexes and etc
+				if($options['copy-data']){
+					$this->Query("INSERT `".$this->EscapeString($destDatabaseName)."`.`".$this->EscapeString($tableName)."` SELECT * FROM `".$this->EscapeString($sourceDatabaseName)."`.`".$this->EscapeString($tableName)."`");
+				}
 			}
 		}
+		catch(Exception $e){ //restore the database connection if something goes wrong
+			$this->SetDatabaseName($curDatabaseName, array('force-select-db'=>true));
+			throw $e;
+		}
+		
+		//restore the database connection
+		$this->SetDatabaseName($curDatabaseName, array('force-select-db'=>true));
 		
 		return true;
 	}
