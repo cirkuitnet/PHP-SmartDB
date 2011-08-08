@@ -798,7 +798,12 @@ class DbManager_MySQL implements DbManager {
 		else if($addColumnQuotes) $column = "`$column`";
 		//else $column = $column;
 
-		if ($val === null) {$ret = $column." is null";} //'is null' for null
+		if ($val === null) {
+			if($condition == "!=" || $condition == "IS NOT"){
+				$ret = $column." is not null"; //'is not null' for null
+			}
+			else $ret = $column." is null"; //'is null' for null
+		}
 		else if(is_numeric($val) && !$options['quote-numerics']){
 			//no quotes around a numeric unless the value is HUGE and falls outside normal values for SIGNED integers... mysql does weird conversion things if the column is a varchar and these large numbers are used... it wont lookup these big numbers correctly unless quotes are used
 			if($val < (0-$this->PHP_INT_MAX_HALF) || $val > $this->PHP_INT_MAX_HALF){

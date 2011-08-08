@@ -36,6 +36,7 @@ class DbManager_Tests extends DbManager_MySQL{
 		$result = $this->TestWhereClause19();	if($result['passed']) $passed++; else $failed++;
 		$result = $this->TestWhereClause20();	if($result['passed']) $passed++; else $failed++;
 		$result = $this->TestWhereClause21();	if($result['passed']) $passed++; else $failed++;
+		$result = $this->TestWhereClause22();	if($result['passed']) $passed++; else $failed++;
 		
 		// test database copy. connected user should have permissions to drop/create tables and databases
 		//this also tests creating and dropping databases and tables
@@ -379,6 +380,19 @@ class DbManager_Tests extends DbManager_MySQL{
 		return $this->TestWhereClause($array_where, $expectedResult, __FUNCTION__, array(
 			'quote-numerics'=>true
 		));
+	}
+	
+	private function TestWhereClause22() {
+		$expectedResult = "WHERE (((col1 != 0 OR col1 is null)) AND (col2 is null) AND (col3 is not null) AND (col4 is not null))";
+		$array_where = array(
+			"AND" => array(
+				"col1" => array("!=" => "0"),
+				"col2" => array("=" => NULL),
+				"col3" => array("IS NOT"=>null),
+				"col4" => array("!="=>null),
+			)
+		);
+		return $this->TestWhereClause($array_where, $expectedResult, __FUNCTION__);
 	}
 }
 
