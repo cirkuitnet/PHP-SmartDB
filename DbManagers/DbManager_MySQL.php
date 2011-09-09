@@ -196,12 +196,12 @@ class DbManager_MySQL implements DbManager {
 	 *  'add-where-clause-dot-notation' => false, //if true, automatically adds dot.notation before column names in the where clause
 	 *  'add-order-clause-dot-notation' => false, //if true, automatically adds dot.notation before column names in the order clause
 	 *  
-	 *  'quote-numerics' => false, //if true, numerics will always be quoted in the where clause (ie "WHERE `price`='123'" instead of "WHERE `price`=123")
+	 *  'quote-numerics' => false, //if true, numerics will always be quoted in the where clause (ie "WHERE `price`='123'" instead of "WHERE `price`=123"). NOTE- this is for reverse compatibility. only used if $table is a string and not a SmartTable object
 	 *  'force-select-db' => false, //if true, will always call mysql_select_db() with the database passed to this class
 	 * );
 	 * </code>
 	 * @param array $array_select_fields The columns to select. Ex: array("CustomerId", "Name", "EmailAddress")
-	 * @param string $table The table name. Ex: "Customer"
+	 * @param mixed $table The table name. Ex: "Customer". This can also be a SmartTable object- if so, data will be strongly typed and more accurate.
 	 * @param array $array_where The WHERE clause of the query. Ex: array( array("CustomerId"=>5, "CustomerName"=>"Jack"), array("CustomerName"=>"Cindy") ) - ...WHERE (CustomerId=5 AND CustomerName='Jack') OR (CustomerName='Cindy')
 	 * @param array $array_order The "ORDER BY" clause. Ex: array("CustomerId"=>"asc", "CustomerName"=>"desc") ... ORDER BY CustomerId ASC, CustomerName DESC
 	 * @param string $limit With one argument (ie $limit="10"), the value specifies the number of rows to return from the beginning of the result set. With two arguments (ie $limit="100,10"), the first argument specifies the offset of the first row to return, and the second specifies the maximum number of rows to return. The offset of the initial row is 0 (not 1).
@@ -258,7 +258,7 @@ class DbManager_MySQL implements DbManager {
 	 * 	'force-select-db' => false, //if true, will call mysql_select_db() with the database passed to this class
 	 * );
 	 * </code>
-	 * @param string $table The table name. ex: "Customer"
+	 * @param mixed $table The table name. Ex: "Customer". This can also be a SmartTable object- if so, data will be strongly typed and more accurate.
 	 * @param array $field_val_array Assoc array of columnName=value of values to insert. Ex: array('Name'=>'Jack', 'EmailAddress'=>'jack@frost.com') ... INSERT INTO Customer (Name, EmailAddress) VALUES ('Jack', 'jack@frost.com')
 	 * @param array $options An array of key=>value pairs. See description above.
 	 * @return int Returns the number of inserted rows (1 or 0)
@@ -275,6 +275,8 @@ class DbManager_MySQL implements DbManager {
 		foreach ($field_val_array as $field => $value) {
 			// Compile SQL fields
 			if ($sql_fields) $sql_fields .= ", ";
+			
+			$cleanColumnName = $field; //save column name without quotes or dot notation
 
 			if($options['add-dot-notation']) $sql_fields .= $this->GetDotNotation($table, $field, $options['add-column-quotes']);
 			else if($options['add-column-quotes']) $sql_fields .= "`$field`";
@@ -283,10 +285,14 @@ class DbManager_MySQL implements DbManager {
 			// Compile SQL values
 			if ($sql_values!==null) {$sql_values .= ", ";}
 
-			if ($value == "now()") {$sql_values .= $value;}
-			else if ($value === null) {$sql_values .= "null";}
-			else if(is_numeric($value)) {$sql_values .= $value;} //no quotes around a numeric
-			else {$sql_values .= "'".$this->EscapeString($value)."'";}
+			if ($value == "now()") { //now()
+				$sql_values .= $value;
+			}
+			else {
+				$castQuoteVal = $this->CastQuoteValue($table, $cleanColumnName, $value);
+				if($castQuoteVal === null) $sql_values .= "null";
+				else $sql_values .= $castQuoteVal;
+			}
 		}
 		$sql_insert = "INSERT INTO ".$this->GetDotNotation($table)." (".$sql_fields.") VALUES (".$sql_values.")";
 
@@ -302,10 +308,10 @@ class DbManager_MySQL implements DbManager {
 	 * 	'add-column-quotes' => false, //if true, overwrites any other 'column-quotes' options (below) and will add column quotes to everything
 	 * 	'add-dot-notation' => false, //if true, overwrites any other 'dot-notation' options (below) and will add dot notation to everything
 	 * 	'force-select-db' => false, //if true, will call mysql_select_db() with the database passed to this class
-	 * 	'quote-numerics' => false, //if true, numerics will always be quoted in the where clause (ie ...WHERE `price`='123'... instead of ... WHERE `price`=123...)
+	 * 	'quote-numerics' => false, //if true, numerics will always be quoted in the where clause (ie ...WHERE `price`='123'... instead of ... WHERE `price`=123...). NOTE- this is for reverse compatibility. only used if $table is a string and not a SmartTable object
 	 * );
 	 * </code>
-	 * @param string $table The table name. Ex: "Customers"
+	 * @param mixed $table The table name. Ex: "Customer". This can also be a SmartTable object- if so, data will be strongly typed and more accurate.
 	 * @param array $field_val_array Assoc array of columnName=value of data to update. ex: array('col1'=>5, 'col2'=>'foo') ... UPDATE $table SET col1=5, col2='foo' ...
 	 * @param array $array_where The where clause. ex: array( array("id"=>5, "col1"=>"foo"), array("col2"=>"bar") ) - ...WHERE (id=5 AND col1='foo') OR (col2='bar')
 	 * @param string $limit The amount of rows to limit the update to (if any) from the beginning of the result set
@@ -322,6 +328,8 @@ class DbManager_MySQL implements DbManager {
 		$arg = "";
 		foreach ($field_val_array as $field => $value) {
 			if ($arg) {$arg .= ", ";}
+			
+			$cleanColumnName = $field; //save column name without quotes or dot notation
 
 			if($options['add-dot-notation']) $arg .= $this->GetDotNotation($table, $field, $options['add-column-quotes']);
 			else if($options['add-column-quotes']) $arg .= "`$field`";
@@ -329,10 +337,14 @@ class DbManager_MySQL implements DbManager {
 
 			$arg .= '=';
 
-			if ($value == "now()") {$arg .= $value;}
-			else if ($value === null) {$arg .= "null";}
-			else if(is_numeric($value)) {$arg .= $value;} //no quotes around a numeric
-			else {$arg .= "'".$this->EscapeString($value)."'";}
+			if ($value == "now()") { //now()
+				$arg .= $value;
+			}
+			else {
+				$castQuoteVal = $this->CastQuoteValue($table, $cleanColumnName, $value);
+				if($castQuoteVal === null) $arg .= "null";
+				else $arg .= $castQuoteVal;
+			}
 		}
 
 		$where_clause = $this->GenerateWhereClause($table, $array_where, $options['add-dot-notation'], $options['add-column-quotes'], array(
@@ -358,10 +370,10 @@ class DbManager_MySQL implements DbManager {
 	 * 	'add-column-quotes' => false, //if true, overwrites any other 'column-quotes' options (below) and will add column quotes to everything
 	 * 	'add-dot-notation' => false, //if true, overwrites any other 'dot-notation' options (below) and will add dot notation to everything
 	 * 	'force-select-db' => false, //if true, will call mysql_select_db() with the database passed to this class
-	 * 	'quote-numerics' => false, //if true, numerics will always be quoted in the where clause (ie ...WHERE `price`='123'... instead of ... WHERE `price`=123...)
+	 * 	'quote-numerics' => false, //if true, numerics will always be quoted in the where clause (ie ...WHERE `price`='123'... instead of ... WHERE `price`=123...). NOTE- this is for reverse compatibility. only used if $table is a string and not a SmartTable object
 	 * );
 	 * </code>
-	 * @param string The table name. Ex: "Customer"
+	 * @param mixed $table The table name. Ex: "Customer". This can also be a SmartTable object- if so, data will be strongly typed and more accurate.
 	 * @param array $array_where The WHERE clause. Ex: array( array("id"=>5, "col1"=>"foo"), array("col2"=>"bar") ) - ...WHERE (id=5 AND col1='foo') OR (col2='bar')
 	 * @param string $limit The amount of rows to limit the delete to (if any) from the beginning of the result set
 	 * @param array $options An array of key=>value pairs. See description above.
@@ -609,24 +621,17 @@ class DbManager_MySQL implements DbManager {
 	 * @return string Runs stripslashes() and mysql_real_escape_string() on the given $string and returns it.
 	 */
 	public function EscapeString($string) {
-		if ($string===null) return null;
-
-		// Stripslashes
-		//if (get_magic_quotes_gpc()) { //DEPRECIATED IN PHP 5.3.x ALWAYS RETURNED TRUE FOR US ANYWAY
-		   $string = stripslashes($string);
-		//}
-		// Quote if $string is not numeric, OR if it is a numeric and is too big/small for MySQL to treat it as a number
-		if (!is_numeric($string)
-				|| ($string < (0-$this->PHP_INT_MAX_HALF) || $string > $this->PHP_INT_MAX_HALF)) {
-			if(!$this->_isConnected) $this->OpenConnection();
-			$string = mysql_real_escape_string($string,$this->_connection);
-		}
+		$string = stripslashes($string);
+		
+		if(!$this->_isConnected) $this->OpenConnection();
+		$string = mysql_real_escape_string($string,$this->_connection);
+		
 		return $string;
 	}
 
 	/**
 	 * Converts a sort array of structure array("id"=>"asc", "col1"=>"desc") into a string like  "ORDER BY id ASC, col1 DESC"
-	 * @param string $table
+	 * @param mixed $table The table name. Ex: "Customer". This can also be a SmartTable object- if so, data will be strongly typed and more accurate.
 	 * @param array $array_order
 	 * @param bool $dotNotation
 	 * @param bool $addColumnQuotes
@@ -648,7 +653,6 @@ class DbManager_MySQL implements DbManager {
 			$direction = strtoupper($direction);
 			if($direction != "ASC" && $direction != "DESC") throw new Exception("Sort direction must be 'ASC' or 'DESC', not '$direction' for column: $colName");
 			if($firstFound) $sortOrder .= ", ";
-			$direction = strtoupper($direction);
 			$sortOrder .= "$colName $direction";
 			$firstFound = true;
 		}
@@ -657,7 +661,7 @@ class DbManager_MySQL implements DbManager {
 
 	/**
 	 * Converts items in $array into a comma separated value string and returns that string
-	 * @param string $table
+	 * @param mixed $table The table name. Ex: "Customer". This can also be a SmartTable object- if so, data will be strongly typed and more accurate.
 	 * @param array $array
 	 * @param bool $dotNotation
 	 * @param bool $addColumnQuotes
@@ -680,12 +684,18 @@ class DbManager_MySQL implements DbManager {
 
 	/**
 	 * Returns a string of appropriate dot-notation/column quites for the given $table and $column
-	 * @param string $table
+	 * @param mixed $table The table name. Ex: "Customer". This can also be a SmartTable object- if so, data will be strongly typed and more accurate.
 	 * @param string $column
 	 * @param bool $addColumnQuotes
 	 * @return string Returns a string of appropriate dot-notation/column quites for the given $table and $column
 	 */
 	private function GetDotNotation($table, $column=null, $addColumnQuotes=false){
+		//get table name. if $table is not a string, it has to be a SmartTable object
+		if($table && !is_string($table)){
+			$table = $table->TableName;
+		}
+		if(!$table) throw new \Exception('No $table given.');
+		
 		if($column){
 			if($addColumnQuotes && $column!="*") return "`{$this->_databaseName}`.`$table`.`$column`";
 			else return "`{$this->_databaseName}`.`$table`.$column";
@@ -699,10 +709,10 @@ class DbManager_MySQL implements DbManager {
 	 * Prepares the WHERE clause (from $array_where) for a SQL statement
 	 * <code>
 	 *  $options = array(
-	 *  	'quote-numerics' => false, //if true, numerics will always be quoted in the where clause (ie ...WHERE `price`='123'... instead of ... WHERE `price`=123...) 
+	 *  	'quote-numerics' => false, //if true, numerics will always be quoted in the where clause (ie ...WHERE `price`='123'... instead of ... WHERE `price`=123...). NOTE- this is for reverse compatibility. only used if $table is a string and not a SmartTable object 
 	 *  );
 	 * </code>
-	 * @param string $table
+	 * @param mixed $table The table name. Ex: "Customer". This can also be a SmartTable object- if so, data will be strongly typed and more accurate.
 	 * @param array $array_where
 	 * @param bool $dotNotation
 	 * @param bool $addColumnQuotes
@@ -730,7 +740,7 @@ class DbManager_MySQL implements DbManager {
 
 	/**
 	 * Helper for GenerateWhereClause()
-	 * @param string $table
+	 * @param mixed $table The table name. Ex: "Customer". This can also be a SmartTable object- if so, data will be strongly typed and more accurate.
 	 * @param string $key
 	 * @param mixed $val
 	 * @param bool $dotNotation
@@ -778,7 +788,7 @@ class DbManager_MySQL implements DbManager {
 
 	/**
 	 * Helper for GenerateWhereRecursive()
-	 * @param string $table
+	 * @param mixed $table The table name. Ex: "Customer". This can also be a SmartTable object- if so, data will be strongly typed and more accurate.
 	 * @param string $column
 	 * @param string $condition
 	 * @param string $val
@@ -793,28 +803,24 @@ class DbManager_MySQL implements DbManager {
 		$column = trim($column,"` "); //clean up field name
 		
 		if(!$column) throw new Exception("No column has been defined");
+		
+		$cleanColumnName = $column; //save column name without quotes or dot notation
 
 		if($dotNotation) $column = $this->GetDotNotation($table,$column,$addColumnQuotes);
 		else if($addColumnQuotes) $column = "`$column`";
 		//else $column = $column;
 
-		if ($val === null) {
+		$castQuoteVal = $this->CastQuoteValue($table, $cleanColumnName, $val);
+		if($castQuoteVal === null){ //null is special
 			if($condition == "!=" || $condition == "IS NOT"){
 				$ret = $column." is not null"; //'is not null' for null
 			}
 			else $ret = $column." is null"; //'is null' for null
 		}
-		else if(is_numeric($val) && !$options['quote-numerics']){
-			//no quotes around a numeric unless the value is HUGE and falls outside normal values for SIGNED integers... mysql does weird conversion things if the column is a varchar and these large numbers are used... it wont lookup these big numbers correctly unless quotes are used
-			if($val < (0-$this->PHP_INT_MAX_HALF) || $val > $this->PHP_INT_MAX_HALF){
-				$ret = "$column $condition '".$this->EscapeString($val)."'";
-			}
-			else $ret = "$column $condition $val";
-		}
-		else  {$ret = "$column $condition '".$this->EscapeString($val)."'";} //quotes around strings
+		else $ret = "$column $condition ".$castQuoteVal;
 		
 		//HACK-ish: MySQL doesn't recognize NULL as '!=' some value. we have to force null checking.
-		if($condition == "!=" && $val !== null){
+		if($condition == "!=" && $castQuoteVal !== null){
 			$ret = "($ret OR $column is null)";
 		}
 		
@@ -895,6 +901,98 @@ class DbManager_MySQL implements DbManager {
 				return "!=";
 		}
 		return false; //no match
+	}
+	
+	/**
+	 * Returns true if the given $value should be quoted when used in SQL queries (ie numerics versus strings)
+	 * <code>
+	 * $options = array(
+	 * 	'quote-numerics' => false //for reverse compatibility. only used if $table is a string and not a SmartTable object
+	 * );
+	 * </code>
+	 * @param mixed $table The table name. Ex: "Customer". This can also be a SmartTable object- if so, data will be strongly typed and more accurate.
+	 * @param mixed $value The value to check for quote usage
+	 * @param string $column The column name this value is used for. Used for looking up the data type in the SmartDb
+	 * @param array $options [optional] Array of function options. See description.
+	 * @return boolean True if the given $value should be quoteded in SQL queries  (ie numerics versus strings)
+	 */
+	private function CastQuoteValue($table, $column, $value, $options=null){
+		/*
+		$defaultOptions = array( //default options
+		);
+		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
+			$options = array_merge($defaultOptions, $options);
+		}
+		else $options = $defaultOptions;
+		*/
+		
+		//null is null
+		if($value === null){
+			return null;
+		}
+		
+		//if $table is not a string, it has to be a SmartTable object. we can use this to get the column type
+		if($table && !is_string($table)){
+			try{
+				
+				//handle booleans.
+				$isBool = is_bool($value); 
+				if($isBool){ //boolean false is '\0'. make booleans default to 1 and 0
+					if($value) $value = 1;
+					else $value = 0;
+				}
+				
+				//get the column's data type to determine if the value should be quoted
+				$smartColumn = $table[$column];
+				$columnDataType = $smartColumn->DataType; //$table is a SmartTable object
+				switch($columnDataType){
+					//dont quote numbers
+					case 'tinyint':
+					case 'smallint':
+					case 'mediumint':
+					case 'int':
+					case 'bigint':
+						if($value === "") $value = null;
+						else $value = (int)$value;
+						break;
+						
+					case 'float':
+					case 'double':
+					case 'decimal':
+						if($value === "") $value = null;
+						else $value = (float)$value;
+						break;
+						
+					case 'binary': //needs quotes. this data type stores binary strings that have no character set or collation (it is NOT strictly ones and zeros)
+						if(!$value || $value == "\0") $value = '0'; //force binary to be 0 if nothing is set
+						$value = "'".$this->EscapeString($value)."'";
+						break;
+
+					//quote non-numbers
+					default:
+						if($isBool && !$value) $value = ""; //false should evalute to empty string
+						$value = "'".$this->EscapeString($value)."'";
+						break;
+				}
+				return $value;
+			}
+			catch(\Exception $e){
+				//notify us of the invalid column and table, but don't error out
+				//trigger_error($e->getMessage(), E_USER_WARNING );
+				error_log($e->getMessage());
+			}
+		}
+		
+		//if we get here, we dont have database structure info and need to try to best guess how quotes should be used (also for reverse compatibility)
+		//note that the following will incorrectly not quote something like "053" or even "546t" for varchar fields, and 53 or 546 get used instead.
+		//this is why a SmartDb is recommended for db structure info
+		if(!$options['quote-numerics'] && is_numeric($value) && ($value >= (0-$this->PHP_INT_MAX_HALF) && $value <= $this->PHP_INT_MAX_HALF)){
+			return $value;
+		}
+		else{
+			$value = "'".$this->EscapeString($value)."'";
+			return $value;
+		}
 	}
 
 

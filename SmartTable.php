@@ -389,7 +389,7 @@ class SmartTable implements ArrayAccess, Countable{
 	public function count() {
 		$dbManager = $this->Database->DbManager;
 		if(!$dbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
-        return $dbManager->Select(array('1'), $this->TableName, '', '', '', array('add-column-quotes'=>false, 'add-dot-notation'=>false, 'force-select-db'=>true));
+        return $dbManager->Select(array('1'), $this, '', '', '', array('add-column-quotes'=>false, 'add-dot-notation'=>false, 'force-select-db'=>true));
     }
 
 /////////////////////////////// Table Data Functions ///////////////////////////////////
@@ -483,7 +483,7 @@ class SmartTable implements ArrayAccess, Countable{
 		$sortByFinal = $this->BuildSortArray($options['sort-by']);
 		$dbManager = $this->Database->DbManager;
 		if(!$dbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
-		$numRowsSelected = $dbManager->Select(array($keyColumnName), $this->TableName, $lookupAssoc, $sortByFinal, $limit, array('add-column-quotes'=>true, 'add-dot-notation'=>true));
+		$numRowsSelected = $dbManager->Select(array($keyColumnName), $this, $lookupAssoc, $sortByFinal, $limit, array('add-column-quotes'=>true, 'add-dot-notation'=>true));
 		$options['return-count'] = $numRowsSelected;
 
 		//check the 'return-count-only' option
@@ -555,7 +555,7 @@ class SmartTable implements ArrayAccess, Countable{
 
 		$dbManager = $this->Database->DbManager;
 		if(!$dbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
-		$numRowsSelected = $dbManager->Select(array($keyColumnName), $this->TableName, $lookupVals, '', '', array('add-column-quotes'=>true, 'add-dot-notation'=>true));
+		$numRowsSelected = $dbManager->Select(array($keyColumnName), $this, $lookupVals, '', '', array('add-column-quotes'=>true, 'add-dot-notation'=>true));
 
 		if($numRowsSelected > 1) throw new Exception("Returned more than 1 row when looking up a single row.");
 
@@ -689,7 +689,7 @@ class SmartTable implements ArrayAccess, Countable{
 			$keyColumnNames = array_keys($this->GetKeyColumns());
 			$keyColumnName = $keyColumnNames[0];
 
-			$numRowsSelected = $dbManager->Select(array($keyColumnName, $returnColumn), $this->TableName, $lookupAssoc, $sortByFinal, $limit, array('add-column-quotes'=>true, 'add-dot-notation'=>true));
+			$numRowsSelected = $dbManager->Select(array($keyColumnName, $returnColumn), $this, $lookupAssoc, $sortByFinal, $limit, array('add-column-quotes'=>true, 'add-dot-notation'=>true));
 			$options['return-count'] = $numRowsSelected;
 
 			//check the 'return-count-only' option
@@ -707,7 +707,7 @@ class SmartTable implements ArrayAccess, Countable{
 			}
 		}
 		else{ // no primary key
-			$numRowsSelected = $dbManager->Select(array($returnColumn), $this->TableName, $lookupAssoc, $sortByFinal, $limit, array('add-column-quotes'=>true, 'add-dot-notation'=>true));
+			$numRowsSelected = $dbManager->Select(array($returnColumn), $this, $lookupAssoc, $sortByFinal, $limit, array('add-column-quotes'=>true, 'add-dot-notation'=>true));
 			$options['return-count'] = $numRowsSelected;
 
 			//check the 'return-count-only' option
@@ -773,7 +773,7 @@ class SmartTable implements ArrayAccess, Countable{
 
 		$dbManager = $this->Database->DbManager;
 		if(!$dbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
-		return $dbManager->Delete($this->TableName, $lookupAssoc, 1, array('add-column-quotes'=>true, 'add-dot-notation'=>true));
+		return $dbManager->Delete($this, $lookupAssoc, 1, array('add-column-quotes'=>true, 'add-dot-notation'=>true));
 	}
 
 	/**
@@ -790,7 +790,7 @@ class SmartTable implements ArrayAccess, Countable{
 
 		$dbManager = $this->Database->DbManager;
 		if(!$dbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
-		return $dbManager->Delete($this->TableName, $lookupAssoc, '', array('add-column-quotes'=>true, 'add-dot-notation'=>true));
+		return $dbManager->Delete($this, $lookupAssoc, '', array('add-column-quotes'=>true, 'add-dot-notation'=>true));
 	}
 
 	/**
@@ -804,7 +804,7 @@ class SmartTable implements ArrayAccess, Countable{
 	public function DeleteAllRows(){
 		$dbManager = $this->Database->DbManager;
 		if(!$dbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
-		return $dbManager->Delete($this->TableName, '', '', array('add-column-quotes'=>true, 'add-dot-notation'=>true));
+		return $dbManager->Delete($this, '', '', array('add-column-quotes'=>true, 'add-dot-notation'=>true));
 	}
 
 	/**
@@ -838,7 +838,7 @@ class SmartTable implements ArrayAccess, Countable{
 		$sortByFinal = $this->BuildSortArray($options['sort-by']);
 		$dbManager = $this->Database->DbManager;
 		if(!$dbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
-		$numRowsSelected = $dbManager->Select(array($keyColumnName), $this->TableName, '', $sortByFinal, $limit, array('add-column-quotes'=>true, 'add-dot-notation'=>true));
+		$numRowsSelected = $dbManager->Select(array($keyColumnName), $this, '', $sortByFinal, $limit, array('add-column-quotes'=>true, 'add-dot-notation'=>true));
 		$options['return-count'] = $numRowsSelected;
 
 		//check the 'return-count-only' option

@@ -163,7 +163,12 @@ class SmartCell{
 			}
 
 			if($this->IsDateColumn && $value!==null){
-				$value = date("Y-m-d H:i:s", strtotime($value));
+				if($this->DataType == "date"){ //date has a slightly different format than other DateColumns
+					$value = date("Y-m-d", strtotime($value));
+				}
+				else{
+					$value = date("Y-m-d H:i:s", strtotime($value));
+				}
 			}
 
 			if(!isset($this->_value) || $this->ValueDiffers($value)){
@@ -229,11 +234,47 @@ class SmartCell{
 		else { //production mode
 			if(is_object($value)) $value = $value->__toString();
 		}
-
+		
+		if($value === null){
+			return; //null is null. let it go
+		}
+		
 		//handle booleans.
-		if(is_bool($value)){ //boolean false is '\0'. make booleans default to 1 and 0
+		$isBool = is_bool($value); 
+		if($isBool){ //boolean false is '\0'. make booleans default to 1 and 0
 			if($value) $value = 1;
 			else $value = 0;
+		}
+		
+		//strongly type the data
+		$columnDataType = $this->Column->DataType;
+		switch($columnDataType){
+			//dont quote numbers
+			case 'tinyint':
+			case 'smallint':
+			case 'mediumint':
+			case 'int':
+			case 'bigint':
+				if($value === "") $value = null;
+				else $value = (int)$value;
+				break;
+				
+			case 'float':
+			case 'double':
+			case 'decimal':
+				if($value === "") $value = null;
+				else $value = (float)$value;
+				break;
+				
+			case 'binary': //needs quotes. this data type stores binary strings that have no character set or collation (it is NOT strictly ones and zeros)
+				if(!$value || $value == "\0") $value = '0'; //force binary to be 0 if nothing is set
+				else $value = (string)$value;
+				break;
+				
+			default:
+				if($isBool && !$value) $value = ""; //false should evalute to empty string
+				else $value = (string)$value;
+				break;
 		}
 	}
 
@@ -1196,7 +1237,11 @@ class SmartCell{
 		}
 
 		if ($this->IsRequired){
-			if($value==null || strlen($value)<=0){
+			//int 0 is different from "0" (http://php.net/manual/en/types.comparisons.php). int 0 will consider the column as set for all datatypes except binary 
+			//so.. if the column is binary and the value is int 0, this is an error. if the column is anything else besides binary, this is NOT an error
+			$dontAllowZero = ($this->Column->DataType == "binary");
+			$valueIsZero = ($value === 0 || $value === "0");
+			if( ($value==null && !$valueIsZero) || ($valueIsZero && $dontAllowZero) || strlen($value)<=0 ){
 				$errorMsg = ( trim($this->IsRequiredMessage)!="" ? $this->IsRequiredMessage : "'{$this->DisplayName}' field is required." );
 				$errors .= $errorMsg . $options['error-message-suffix'];
 				$inputRequiredErrorFound = true;
@@ -1242,7 +1287,7 @@ class SmartCell{
 				if($value !== null){ //ignore 'null' values when checking uniqueness
 					$dbManager = $this->Row->Database->DbManager;
 					if(!$dbManager) throw new Exception("DbManager is not set. DbManager must be set to verify column value uniqueness within function '".__FUNCTION__."'. ");
-					$numRowsFound = $dbManager->Select(array("*"), $this->Table->TableName, array( array($this->ColumnName => $value) ), '', 1);
+					$numRowsFound = $dbManager->Select(array("*"), $this->Table, array( array($this->ColumnName => $value) ), '', 1);
 					if ($numRowsFound > 0 ){
 						if(!$this->Row->Exists()){ //$this row doesnt exist, so the found value is in use in another row
 							$errors .= "Selected '{$this->DisplayName}' (".$this->GetValue(true,true).") is already in use. Please select another value.";

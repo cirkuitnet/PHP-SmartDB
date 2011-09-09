@@ -337,7 +337,7 @@ class SmartColumn{
 			//table has a single primary key column
 			$keyColumnNames = array_keys($this->Table->GetKeyColumns());
 			$keyColumnName = $keyColumnNames[0];
-			$numRowsSelected = $dbManager->Select(array($keyColumnName,$this->ColumnName), $this->Table->TableName, null, $inputSortByFinal, $limit, array('add-column-quotes'=>true, 'add-dot-notation'=>true));
+			$numRowsSelected = $dbManager->Select(array($keyColumnName,$this->ColumnName), $this->Table, null, $inputSortByFinal, $limit, array('add-column-quotes'=>true, 'add-dot-notation'=>true));
 			$options['return-count'] = $numRowsSelected;
 
 			//check the 'return-count-only' option
@@ -350,7 +350,7 @@ class SmartColumn{
 			return $returnVals;
 		}
 		else { //table has no primary key columns, or we're getting unique values only
-			$numRowsSelected = $dbManager->Select(array($this->ColumnName), $this->Table->TableName, null, $inputSortByFinal, $limit, array('add-column-quotes'=>true, 'add-dot-notation'=>true, 'distinct'=>$options['get-unique']));
+			$numRowsSelected = $dbManager->Select(array($this->ColumnName), $this->Table, null, $inputSortByFinal, $limit, array('add-column-quotes'=>true, 'add-dot-notation'=>true, 'distinct'=>$options['get-unique']));
 			$options['return-count'] = $numRowsSelected;
 
 			//check the 'return-count-only' option
@@ -420,7 +420,7 @@ class SmartColumn{
 		if(!$dbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
 		
 		//todo- move aggregate functions to DbManager somehow
-		$numRowsSelected = $dbManager->Select(array($colSql.' as val'), $this->Table->TableName, $lookupAssoc, null, null, array('add-column-quotes'=>false, 'add-dot-notation'=>false, 'force-select-db'=>true));
+		$numRowsSelected = $dbManager->Select(array($colSql.' as val'), $this->Table, $lookupAssoc, null, null, array('add-column-quotes'=>false, 'add-dot-notation'=>false, 'force-select-db'=>true));
 		if($numRowsSelected == 0){
 			return null;
 		}
@@ -462,7 +462,7 @@ class SmartColumn{
 		$inputSortByFinal = $this->Table->BuildSortArray($options['sort-by']);
 		$dbManager = $this->Table->Database->DbManager;
 		if(!$dbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
-		$numRowsSelected = $dbManager->Select(array($keyColumnName), $this->Table->TableName, array( array($this->ColumnName => $value )), $inputSortByFinal, $limit, array('add-column-quotes'=>true, 'add-dot-notation'=>true));
+		$numRowsSelected = $dbManager->Select(array($keyColumnName), $this->Table, array( array($this->ColumnName => $value )), $inputSortByFinal, $limit, array('add-column-quotes'=>true, 'add-dot-notation'=>true));
 		$options['return-count'] = $numRowsSelected;
 
 		//check the 'return-count-only' option
@@ -532,7 +532,7 @@ class SmartColumn{
 		
 		$dbManager = $this->Table->Database->DbManager;
 		if(!$dbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
-		$numRowsSelected = $dbManager->Select(array($keyColumnName), $this->Table->TableName, array( array($this->ColumnName => $value )), '', '', array('add-column-quotes'=>true, 'add-dot-notation'=>true));
+		$numRowsSelected = $dbManager->Select(array($keyColumnName), $this->Table, array( array($this->ColumnName => $value )), '', '', array('add-column-quotes'=>true, 'add-dot-notation'=>true));
 
 		if($numRowsSelected > 1) throw new Exception("Returned more than 1 row when looking up on a unique column");
 
@@ -589,7 +589,7 @@ class SmartColumn{
 	public function DeleteRows($value){
 		$dbManager = $this->Table->Database->DbManager;
 		if(!$dbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
-		return $dbManager->Delete($this->Table->TableName, array(array($this->ColumnName=>$value)), '', array('add-column-quotes'=>true, 'add-dot-notation'=>true));
+		return $dbManager->Delete($this->Table, array(array($this->ColumnName=>$value)), '', array('add-column-quotes'=>true, 'add-dot-notation'=>true));
 	}
 	/**
 	 * Alias for DeleteRows. See SmartColumn::DeleteRows()
@@ -610,7 +610,7 @@ class SmartColumn{
 		if($this->IsUnique || $this->IsPrimaryKey) throw new Exception("Cannot clear all values for a column specified as Unique or Primary Key (table: {$this->Table->TableName}, column: {$this->ColumnName})");
 		$dbManager = $this->Table->Database->DbManager;
 		if(!$dbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
-		return $dbManager->Update($this->Table->TableName, array($this->ColumnName=>$value), '', '', array('add-column-quotes'=>true, 'add-dot-notation'=>true));
+		return $dbManager->Update($this->Table, array($this->ColumnName=>$value), '', '', array('add-column-quotes'=>true, 'add-dot-notation'=>true));
 	}
 
 //////////////////////////// FORM STUFF //////////////////////////////////

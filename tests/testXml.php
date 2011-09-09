@@ -113,7 +113,7 @@ $t['database']['Setting']->TableName = "Settings"; //change name of database tab
 
 $GLOBALS['SQL_DEBUG_MODE'] = false; //set to true to see all SQL commands run through the db manager
 
-if(!$t['dbManager']->TableExists("smartdb_test", "Questionare")){
+if(!$t['dbManager']->TableExists("smartdb_test", "AllDataTypes")){
 	SyncDbTables($t);
 }
 
@@ -171,8 +171,9 @@ if(!$t['dbManager']->TableExists("smartdb_test", "Questionare")){
 		Test12($t);
 		Test13($t);
 		Test14($t); //enumerations
-		Test15($t); //data types and 0/null
+		Test15($t); //0/null
 		Test16($t); //min, max, sum
+		Test17($t); //data types
 		TestForm($t,true);
 
 		Msg(true,'Tests passed on '.date('r'),null);
@@ -210,10 +211,10 @@ function AssertNotExists($i){
 function AssertCellVal($c, $value){
 	if(!$c) throw new Exception("Column not set");
 	$rowVal = $c->GetValue();
-	if($rowVal !== $value) throw new Exception("Row value '$rowVal' doensn't match '$value'");
+	if($rowVal !== $value) throw new Exception("Row value '$rowVal' (".gettype($rowVal).") doensn't match '$value' (".gettype($value).")");
 
 	$rowVal = $c(); //GetValue() shortcut, new with PHP 5.3.0
-	if($rowVal !== $value) throw new Exception("Row value '$rowVal' doensn't match '$value' when using GetValue shortcut");
+	if($rowVal !== $value) throw new Exception("Row value '$rowVal' (".gettype($rowVal).") doensn't match '$value' (".gettype($rowVal).") when using GetValue shortcut");
 }
 function Commit($i,$debug){
 	if($debug) echo "<br>Before commit: <br>\n".$i;
@@ -270,7 +271,7 @@ function Test2($t, $debug=false){
 	AssertNotExists($i);
 
 	Commit($i,$debug);
-	AssertCellVal($i['Id'], '69');
+	AssertCellVal($i['Id'], 69);
 	AssertCellVal($i['Name'], "test name");
 
 	//new instance
@@ -456,11 +457,11 @@ function Test5($t, $debug=false){
 	$i['Level']->DisableCallbacks = true;
 	$i['Level'] = 13;
 	if($GLOBALS['test5']['BeforeValueChanged']) Ex('Callback ran');
-	AssertCellVal($i['Level'], 13);
+	AssertCellVal($i['Level'], (double)13);
 
 	$i['Level']->DisableCallbacks = false;
 	$i->DisableCallbacks(true);
-	$i['Level'] = 12.34;
+	$i['Level'] = '12.34';
 	if($GLOBALS['test5']['BeforeValueChanged']) Ex('Callback ran');
 	AssertCellVal($i['Level'], 12.34);
 
@@ -561,7 +562,7 @@ function Test6($t, $debug=false){
 	$keys = $j->LookupKeys(true);
 	if(count($keys) !== 1) Ex('Wrong count returned');
 
-	AssertCellVal($j['Id'], "$id"); //must be a string here
+	AssertCellVal($j['Id'], $id);
 	AssertExists($j);
 
 	Delete($i, $debug);
@@ -699,8 +700,8 @@ function Test9($t, $debug=false){
 	if($debug) echo "Get all rows, count: $count<br>\n";
 	if($count !== 2) Ex("Wrong number of rows returned");
 
-	AssertCellVal($allRows[0]['Id'], "70");
-	AssertCellVal($allRows[1]['Id'], "69");
+	AssertCellVal($allRows[0]['Id'], 70);
+	AssertCellVal($allRows[1]['Id'], 69);
 
 	if($debug){
 		foreach($allRows as $keyValue=>$Row){
@@ -714,7 +715,7 @@ function Test9($t, $debug=false){
 	if($debug) echo "Get all rows, limit 1, count: $count<br>\n";
 	if($count !== 1) Ex("Wrong number of rows returned");
 
-	AssertCellVal($allRows[0]['Id'], "69");
+	AssertCellVal($allRows[0]['Id'], 69);
 
 	if($debug){
 		foreach($allRows as $keyValue=>$Row){
@@ -727,15 +728,15 @@ function Test9($t, $debug=false){
 	if($debug) echo "Get all rows, limit 1, count: $count<br>\n";
 	if($count !== 1) Ex("Wrong number of rows returned");
 
-	AssertCellVal($allRows[0]['Id'], "70");
+	AssertCellVal($allRows[0]['Id'], 70);
 
 	$allRows = $db['Setting']->GetAllRows(array('sort-by'=>array("Id"=>"asc"), 'return-assoc'=>true));
 	$count=count($allRows);
 	if($debug) echo "Get all rows, count: $count<br>\n";
 	if($count !== 2) Ex("Wrong number of rows returned");
 
-	AssertCellVal($allRows[70]['Id'], "70");
-	AssertCellVal($allRows[69]['Id'], "69");
+	AssertCellVal($allRows[70]['Id'], 70);
+	AssertCellVal($allRows[69]['Id'], 69);
 
 	if($debug){
 		foreach($allRows as $keyValue=>$Row){
@@ -829,7 +830,7 @@ function Test10($t, $debug=false){
 
 	$row = $db['FastSetting']->LookupRow(35); //lookup by primary key column
 	Msg($debug, "Looked up row by id, match", $row);
-	AssertCellVal($row['Id'], '35');
+	AssertCellVal($row['Id'], 35);
 	AssertExists($row);
 	AssertIsNotDirty($row);
 	
@@ -856,9 +857,9 @@ function Test10($t, $debug=false){
 	AssertCellVal($row['ShortName'], "short name");
 	AssertCellVal($row['Name'], null);
 	
-	$row = $db['FastSetting'](35); //lookup by primary key column
+	$row = $db['FastSetting']('35'); //lookup by primary key column
 	Msg($debug, "Looked up row by id, match", $row);
-	AssertCellVal($row['Id'], '35');
+	AssertCellVal($row['Id'], 35);
 	AssertExists($row);
 	AssertIsNotDirty($row);
 	
@@ -1074,7 +1075,7 @@ function Test14($t, $debug=false){
 }
 
 /**
- * data types
+ * 0/null
  * @ignore
  */
 function Test15($t, $debug=false){
@@ -1145,6 +1146,404 @@ function Test16($t, $debug=false){
 		'Id'=>array(">"=>35)
 	));
 	if($val != 0) Ex("Invalid count-distinct: '$val' != 0");
+}
+
+//types
+function Test17($t, $debug=false){
+	$db = $t['database'];
+	
+	//---- CHECK EXACT DATA TYPES AFTER COMMIT ----
+		$row = $db['AllDataTypes']->GetNewRow();
+		$row['char'] = 'char';
+		$row['varchar'] = 'varchar';
+		$row['text'] = 'text';
+		$row['mediumtext'] = 'mediumtext';
+		$row['longtext'] = 'longtext';
+		$row['blob'] = 'blob';
+		$row['mediumblob'] = 'mediumblob';
+		$row['longblob'] = 'longblob';
+		$row['tinyint'] = 2;
+		$row['smallint'] = 8;
+		$row['mediumint'] = 99;
+		$row['int'] = 399;
+		$row['bigint'] = 6999;
+		$row['float'] = 4.2024;
+		$row['double'] = 56.78;
+		$row['decimal'] = 100.001;
+		$row['date'] = '2020-12-25';
+		$row['datetime'] = '1999-12-31 23:59:59';
+		$row['timestamp'] = '2000-01-01 00:00:00';
+		$row['time'] = '16:20:01';
+		$row['binary'] = '1';
+		$row['binary8'] = 'abcd1234'; //gets padded with null characters (\0) to the length of the column
+		$row['enum'] = 'Option 2';
+	
+		AssertIsDirty($row);
+		Commit($row,$debug);
+		
+		$rowId = $row['Id']();
+		
+		$row = $db['AllDataTypes']($rowId);
+		AssertCellVal($row['char'], 'char');
+		AssertCellVal($row['varchar'], 'varchar');
+		AssertCellVal($row['text'], 'text');
+		AssertCellVal($row['mediumtext'], 'mediumtext');
+		AssertCellVal($row['longtext'], 'longtext');
+		AssertCellVal($row['blob'], 'blob');
+		AssertCellVal($row['mediumblob'], 'mediumblob');
+		AssertCellVal($row['longblob'], 'longblob');
+		AssertCellVal($row['tinyint'], 2);
+		AssertCellVal($row['smallint'], 8);
+		AssertCellVal($row['mediumint'], 99);
+		AssertCellVal($row['int'], 399);
+		AssertCellVal($row['bigint'], 6999);
+		AssertCellVal($row['float'], 4.2024);
+		AssertCellVal($row['double'], 56.78);
+		AssertCellVal($row['decimal'], 100.001);
+		AssertCellVal($row['date'], '2020-12-25');
+		AssertCellVal($row['datetime'], '1999-12-31 23:59:59');
+		AssertCellVal($row['timestamp'], '2000-01-01 00:00:00');
+		AssertCellVal($row['time'], '16:20:01');
+		AssertCellVal($row['binary'], '1');
+		AssertCellVal($row['binary8'], 'abcd1234');
+		AssertCellVal($row['enum'], 'Option 2');
+	
+		Delete($row,$debug);
+	
+	//---- CHECK MIXED DATA TYPES AFTER COMMIT ----
+		$row = $db['AllDataTypes']->GetNewRow();
+		$row['char'] = 1;
+		$row['varchar'] = 2;
+		$row['text'] = 03.00;
+		$row['mediumtext'] =  4;
+		$row['longtext'] = 5;
+		$row['blob'] = 6;
+		$row['mediumblob'] = 007;
+		$row['longblob'] = 8.0;
+		$row['tinyint'] = '02';
+		$row['smallint'] = '08';
+		$row['mediumint'] = '099.0000';
+		$row['int'] = '00399.0';
+		$row['bigint'] = '00006999';
+		$row['float'] = '04.20240';
+		$row['double'] = '056.780';
+		$row['decimal'] = '0100.0010';
+		$row['binary'] = true;
+	
+		AssertIsDirty($row);
+		Commit($row,$debug);
+		
+		$rowId = $row['Id']();
+		
+		$row = $db['AllDataTypes']($rowId);
+		AssertCellVal($row['char'], '1');
+		AssertCellVal($row['varchar'], '2');
+		AssertCellVal($row['text'], '3');
+		AssertCellVal($row['mediumtext'], '4');
+		AssertCellVal($row['longtext'], '5');
+		AssertCellVal($row['blob'], '6');
+		AssertCellVal($row['mediumblob'], '7');
+		AssertCellVal($row['longblob'], '8');
+		AssertCellVal($row['tinyint'], 2);
+		AssertCellVal($row['smallint'], 8);
+		AssertCellVal($row['mediumint'], 99);
+		AssertCellVal($row['int'], 399);
+		AssertCellVal($row['bigint'], 6999);
+		AssertCellVal($row['float'], 4.2024);
+		AssertCellVal($row['double'], 56.78);
+		AssertCellVal($row['decimal'], 100.001);
+		AssertCellVal($row['binary'], '1');
+	
+		Delete($row,$debug);
+		
+	//---- CHECK EXACT DATA TYPES BEFORE COMMIT ----
+		$row = $db['AllDataTypes']->GetNewRow();
+		$row['char'] = 'char';
+		$row['varchar'] = 'varchar';
+		$row['text'] = 'text';
+		$row['mediumtext'] = 'mediumtext';
+		$row['longtext'] = 'longtext';
+		$row['blob'] = 'blob';
+		$row['mediumblob'] = 'mediumblob';
+		$row['longblob'] = 'longblob';
+		$row['tinyint'] = 2;
+		$row['smallint'] = 8;
+		$row['mediumint'] = 99;
+		$row['int'] = 399;
+		$row['bigint'] = 6999;
+		$row['float'] = 4.2024;
+		$row['double'] = 56.78;
+		$row['decimal'] = 100.001;
+		$row['date'] = "2020-12-25";
+		$row['datetime'] = '1999-12-31 23:59:59';
+		$row['timestamp'] = '2000-01-01 00:00:00';
+		$row['time'] = '16:20:01';
+		$row['binary'] = '1';
+		$row['binary8'] = 'abcd1234'; //gets padded with null characters (\0) to the length of the column
+		$row['enum'] = 'Option 2';
+	
+		AssertIsDirty($row);
+
+		AssertCellVal($row['char'], 'char');
+		AssertCellVal($row['varchar'], 'varchar');
+		AssertCellVal($row['text'], 'text');
+		AssertCellVal($row['mediumtext'], 'mediumtext');
+		AssertCellVal($row['longtext'], 'longtext');
+		AssertCellVal($row['blob'], 'blob');
+		AssertCellVal($row['mediumblob'], 'mediumblob');
+		AssertCellVal($row['longblob'], 'longblob');
+		AssertCellVal($row['tinyint'], 2);
+		AssertCellVal($row['smallint'], 8);
+		AssertCellVal($row['mediumint'], 99);
+		AssertCellVal($row['int'], 399);
+		AssertCellVal($row['bigint'], 6999);
+		AssertCellVal($row['float'], 4.2024);
+		AssertCellVal($row['double'], 56.78);
+		AssertCellVal($row['decimal'], 100.001);
+		AssertCellVal($row['date'], '2020-12-25');
+		AssertCellVal($row['datetime'], '1999-12-31 23:59:59');
+		AssertCellVal($row['timestamp'], '2000-01-01 00:00:00');
+		AssertCellVal($row['time'], '16:20:01');
+		AssertCellVal($row['binary'], '1');
+		AssertCellVal($row['binary8'], 'abcd1234');
+		AssertCellVal($row['enum'], 'Option 2');
+	
+	//---- CHECK MIXED DATA TYPES BEFORE COMMIT ----
+		$row = $db['AllDataTypes']->GetNewRow();
+		$row['char'] = 1;
+		$row['varchar'] = 2;
+		$row['text'] = 03.00;
+		$row['mediumtext'] =  4;
+		$row['longtext'] = 5;
+		$row['blob'] = 6;
+		$row['mediumblob'] = 007;
+		$row['longblob'] = 8.0;
+		$row['tinyint'] = '02';
+		$row['smallint'] = '08';
+		$row['mediumint'] = '099.0000';
+		$row['int'] = '00399.0';
+		$row['bigint'] = '00006999';
+		$row['float'] = '04.20240';
+		$row['double'] = '056.780';
+		$row['decimal'] = '0100.0010';
+		$row['binary'] = true;
+		
+		AssertIsDirty($row);
+		
+		AssertCellVal($row['char'], '1');
+		AssertCellVal($row['varchar'], '2');
+		AssertCellVal($row['text'], '3');
+		AssertCellVal($row['mediumtext'], '4');
+		AssertCellVal($row['longtext'], '5');
+		AssertCellVal($row['blob'], '6');
+		AssertCellVal($row['mediumblob'], '7');
+		AssertCellVal($row['longblob'], '8');
+		AssertCellVal($row['tinyint'], 2);
+		AssertCellVal($row['smallint'], 8);
+		AssertCellVal($row['mediumint'], 99);
+		AssertCellVal($row['int'], 399);
+		AssertCellVal($row['bigint'], 6999);
+		AssertCellVal($row['float'], 4.2024);
+		AssertCellVal($row['double'], 56.78);
+		AssertCellVal($row['decimal'], 100.001);
+		AssertCellVal($row['binary'], '1');
+		
+	//---- null,0,"",false,etc input required checks
+		//--test 1
+		//insert1
+		$row = $db['AllDataTypes']->GetNewRow();
+		$row['char'] = 0; //"0" - ok
+		$row['varchar'] = 0;
+		$row['int'] = 0; //ok
+		$row['bigint'] = 0;
+		$row['binary'] = 0;
+		$row['binaryreq'] = 0; //error
+		if(count($row->GetColumnsInError())!=1) Ex('wrong number of cells in error');
+		if(!$row['binaryreq']->HasErrors()) Ex('binary field should be required!');
+
+		//--test 2
+		$row = $db['AllDataTypes']->GetNewRow();
+		$row['char'] = "0"; //ok
+		$row['varchar'] = "0";
+		$row['int'] = "0"; //0 - ok
+		$row['bigint'] = "0";
+		$row['binary'] = "0";
+		$row['binaryreq'] = "0"; //error
+		if(count($row->GetColumnsInError())!=1) Ex('wrong number of cells in error');
+		if(!$row['binaryreq']->HasErrors()) Ex('binary field should be required!');
+		
+		//--test 3
+		$row = $db['AllDataTypes']->GetNewRow();
+		$row['char'] = false; //"" - error
+		$row['varchar'] = false;
+		$row['int'] = false; //0 - ok
+		$row['bigint'] = false;
+		$row['binary'] = false;
+		$row['binaryreq'] = false; //error
+		if(count($row->GetColumnsInError())!=2) Ex('wrong number of cells in error');
+		if($row['int']->HasErrors()) Ex('int field should not have errors!');
+		
+		//test 4
+		$row = $db['AllDataTypes']->GetNewRow();
+		$row['char'] = null; //error
+		$row['varchar'] = null;
+		$row['int'] = null; //error
+		$row['bigint'] = null;
+		$row['binary'] = null;
+		$row['binaryreq'] = null; //error
+		if(count($row->GetColumnsInError())!=3) Ex('wrong number of cells in error');
+		
+		//test 5
+		$row = $db['AllDataTypes']->GetNewRow();
+		$row['char'] = ""; //error
+		$row['varchar'] = "";
+		$row['int'] = ""; //null - error
+		$row['bigint'] = "";
+		$row['binary'] = "";
+		$row['binaryreq'] = ""; //error
+		if(count($row->GetColumnsInError())!=3) Ex('wrong number of cells in error');
+		
+		//test 6
+		$row = $db['AllDataTypes']->GetNewRow();
+		$row['char'] = true; //"1" - ok
+		$row['varchar'] = true;
+		$row['int'] = true; //1 - ok
+		$row['bigint'] = true;
+		$row['binary'] = true;
+		$row['binaryreq'] = true; //1 - ok
+		if(count($row->GetColumnsInError())!=0) Ex('wrong number of cells in error');
+		
+		//test 7
+		$row = $db['AllDataTypes']->GetNewRow();
+		$row['char'] = 1; //"1" - ok
+		$row['varchar'] = 1;
+		$row['int'] = "1"; //1 - ok
+		$row['bigint'] = "1";
+		$row['binary'] = "1";
+		$row['binaryreq'] = "1"; //1 - ok
+		if(count($row->GetColumnsInError())!=0) Ex('wrong number of cells in error');
+	
+	//--- TEST LOOKUP ASSOC WITH TYPES
+		$row = $db['AllDataTypes']->GetNewRow();
+		
+		$row['char'] = 1;
+		$row['varchar'] = 2;
+		$row['text'] = 03.00;
+		$row['mediumtext'] =  4;
+		$row['longtext'] = 5;
+		$row['blob'] = 6;
+		$row['mediumblob'] = 007;
+		$row['longblob'] = 8.0;
+		$row['tinyint'] = '02';
+		$row['smallint'] = '08';
+		$row['mediumint'] = '099.0000';
+		$row['int'] = 0933.3;
+		$row['bigint'] = null;
+		$row['float'] = '04.20240';
+		$row['double'] = '056.780';
+		$row['decimal'] = '0100.0010';
+		$row['binary'] = true;
+		$row['date'] = '2020-12-25';
+		$row['datetime'] = '1999-12-31 23:59:59';
+		$row['timestamp'] = '2000-01-01 00:00:00';
+		$row['time'] = '16:20:01';
+		$row['binary8'] = null;
+		$row['enum'] = 'Option 2';
+	
+		AssertIsDirty($row);
+		Commit($row,$debug);
+		
+		$row = $db['AllDataTypes']->LookupRow(array(
+			'char' => 1,
+			'varchar' => 2,
+			'text' => 3.00,
+			'mediumtext' => array("!=" => null),
+			'mediumblob' => 007.0,
+			'longblob' => 8,
+			'tinyint' => '02',
+			'smallint' => '08',
+			'mediumint' => '099.000',
+			'int' => 933,
+			'bigint' => array("!=" => '00006999'),
+			'float' => array("!=" => 0),
+			'double' => 56.780,
+			'decimal' => '0100.0010',
+			'binary' => true,
+			'date' => '2020-12-25',
+			'datetime' => '1999-12-31 23:59:59',
+			'timestamp' => '2000-01-01 00:00:00',
+			'time' => '16:20:01',
+			'binary8' => null,
+			'enum' => 'Option 2'
+		));
+		
+		AssertExists($row);
+		Delete($row,$debug);
+		
+		//lookup with null,0,false,etc
+		//insert
+		$row = $db['AllDataTypes']->GetNewRow();
+		$row['char'] = 0;
+		$row['varchar'] = false;
+		$row['text'] = "0";
+		$row['mediumtext'] = null;
+		$row['mediumblob'] = true;
+		$row['longblob'] = 1;
+		$row['tinyint'] = 0;
+		$row['smallint'] = "1";
+		$row['mediumint'] = "5abc";
+		$row['int'] = true;
+		$row['bigint'] = false;
+		$row['float'] = "0";
+		$row['double'] = null;
+		$row['decimal'] = true;
+		$row['binary'] = 1;
+		$row['binaryreq'] = true; 
+		Commit($row,$debug);
+ 
+		//lookup1 - same data as insert
+		$row = $db['AllDataTypes']->LookupRow(array(
+			'char' => 0,
+			'varchar' => false,
+			'text' => "0",
+			'mediumtext' => null,
+			'mediumblob' => true,
+			'longblob' => 1,
+			'tinyint' => 0,
+			'smallint' => "1",
+			'mediumint' => "5abc",
+			'int' => true,
+			'bigint' => false,
+			'float' => "0",
+			'double' => null,
+			'decimal' => true,
+			'binary' => 1,
+			'binaryreq' => true
+		));
+		AssertExists($row);
+		
+		//lookup2 - mixing data types
+		$row = $db['AllDataTypes']->LookupRow(array(
+			'char' => "0",
+			'varchar' => "",
+			'text' => 0,
+			'mediumtext' => array("!=" => 0),
+			'mediumblob' => 1,
+			'longblob' => true,
+			'tinyint' => false,
+			'smallint' => 1,
+			'mediumint' => 5,
+			'int' => "1ab",
+			'bigint' => 0,
+			'float' => false,
+			'double' => null,
+			'decimal' => "1",
+			'binary' => true,
+			'binaryreq' => "1"
+		));
+		AssertExists($row);
+		
+		Delete($row,$debug);
 }
 
 /**

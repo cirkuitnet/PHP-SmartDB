@@ -741,14 +741,14 @@ class SmartDatabase implements ArrayAccess, Countable{
 
 			//key columns
 			if(count($primaryKeyColumnNames)>0){
-				$sqlCreateTable .= ",PRIMARY KEY (";
-				$sqlCreateTable .= implode(", ", $primaryKeyColumnNames);
-				$sqlCreateTable .= ")";
+				$sqlCreateTable .= ",PRIMARY KEY (`";
+				$sqlCreateTable .= implode("`, `", $primaryKeyColumnNames);
+				$sqlCreateTable .= "`)";
 			}
 			
 			//fulltext columns
 			foreach($fulltextColumnNames as $ftColumnName){
-				$sqlCreateTable .= ",FULLTEXT KEY `".$ftColumnName."` (".$ftColumnName.")";
+				$sqlCreateTable .= ",FULLTEXT KEY `".$ftColumnName."` (`".$ftColumnName."`)";
 			}
 			
 			$sqlCreateTable .= ");";

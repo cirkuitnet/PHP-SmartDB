@@ -372,7 +372,7 @@ class SmartRow implements ArrayAccess{
 				}
 
 				if(!$this->DbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
-				$numRowsSelected = $this->DbManager->Select(array("1"), $this->Table->TableName, $whereArray, null, 1, array('add-where-clause-column-quotes'=>true, 'add-where-clause-dot-notation'=>true) );
+				$numRowsSelected = $this->DbManager->Select(array("1"), $this->Table, $whereArray, null, 1, array('add-where-clause-column-quotes'=>true, 'add-where-clause-dot-notation'=>true) );
 			}
 			$existingRowFound = ($numRowsSelected > 0);
 			if ($existingRowFound && $updateNewKeyRowIfAlreadyExists==false) { // a row with this key already exists
@@ -587,7 +587,7 @@ class SmartRow implements ArrayAccess{
 		$limit = trim($options['limit']);
 		$sortByFinal = $this->Table->BuildSortArray($options['sort-by']);
 		if(!$this->DbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
-		$numRowsSelected = $this->DbManager->Select($selectArray, $this->Table->TableName, $whereArray, $sortByFinal, $limit, array('add-column-quotes'=>true, 'add-dot-notation'=>true) );
+		$numRowsSelected = $this->DbManager->Select($selectArray, $this->Table, $whereArray, $sortByFinal, $limit, array('add-column-quotes'=>true, 'add-dot-notation'=>true) );
 		$options['return-count'] = $numRowsSelected;
 
 		if ($updateRowIfOneRowFound && $numRowsSelected==1) { //1 row found
@@ -685,7 +685,7 @@ class SmartRow implements ArrayAccess{
 				}
 			}
 			if(!$this->DbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
-			$numRowsSelected = $this->DbManager->Select(array("*"), $this->Table->TableName, $whereArray, null, 1, array('add-column-quotes'=>true, 'add-dot-notation'=>true));
+			$numRowsSelected = $this->DbManager->Select(array("*"), $this->Table, $whereArray, null, 1, array('add-column-quotes'=>true, 'add-dot-notation'=>true));
 
 			if ($numRowsSelected == 1) { //successfully got matching row from database table
 				$row = $this->DbManager->FetchAssoc();
@@ -756,7 +756,7 @@ class SmartRow implements ArrayAccess{
 				}
 
 				if(count($whereArray[0]) <= 0) throw new Exception("WHERE clause is empty in an UPDATE statement");
-				$numRowsUpdated = $this->DbManager->Update($this->Table->TableName, $updateVals, $whereArray, 1, array('add-column-quotes'=>true, 'add-dot-notation'=>true));
+				$numRowsUpdated = $this->DbManager->Update($this->Table, $updateVals, $whereArray, 1, array('add-column-quotes'=>true, 'add-dot-notation'=>true));
 
 				$this->_isDirty = false; //all changes have been written to database. not dirty anymore
 
@@ -800,7 +800,7 @@ class SmartRow implements ArrayAccess{
 		}
 
 		if(!$this->DbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
-		$numRowsInserted = $this->DbManager->Insert($this->Table->TableName, $insertValsArray, array('add-column-quotes'=>true, 'add-dot-notation'=>true));
+		$numRowsInserted = $this->DbManager->Insert($this->Table, $insertValsArray, array('add-column-quotes'=>true, 'add-dot-notation'=>true));
 		if ($this->Table->PrimaryKeyIsNonCompositeAutoIncrement()) {
 			$newColId = $this->DbManager->InsertId();
 			if($numRowsInserted<=0 || $newColId==null || $newColId<0){ //error inserting new column into database
@@ -850,7 +850,7 @@ class SmartRow implements ArrayAccess{
 
 			$limit = ($this->Table->PrimaryKeyExists()?"1":"");
 			if(!$this->DbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
-			$numRowsDeleted = $this->DbManager->Delete($this->Table->TableName, $whereArray, $limit, array('add-column-quotes'=>true, 'add-dot-notation'=>true));
+			$numRowsDeleted = $this->DbManager->Delete($this->Table, $whereArray, $limit, array('add-column-quotes'=>true, 'add-dot-notation'=>true));
 			if($numRowsDeleted==0){
 				throw new Exception('$numRowsDeleted==0, expected 1.');
 			}

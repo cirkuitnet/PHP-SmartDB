@@ -42,6 +42,35 @@
 	  <Field Name="ShortName" Aliases="NotLongName" DataType="varchar" MaxSize="10" MinSize="5" AllowSet="true" TrimAndStripTagsOnSet="false" AllowGet="true" AllowLookup="true" AllowGetAll="true" InputRequired="false" FormType="text" IsUnique="false" AutoIncrement="false" />
     </Database>
   </Class>
+  <Class Name="TestNamespace\AllDataTypes">
+  	<Database TableName="AllDataTypes">
+  		<Field Name="Id" DataType="int" IsUnique="true" PrimaryKey="true" AutoIncrement="true" />
+		<Field Name="char" DataType="char" MaxSize="20" InputRequired="true" />
+		<Field Name="varchar" DataType="varchar" MaxSize="40" FulltextIndex="true" />
+		<Field Name="text" DataType="text" Collation="utf8_general_ci" />
+		<Field Name="mediumtext" DataType="mediumtext" Collation="latin1_swedish_ci" />
+		<Field Name="longtext" DataType="longtext"  />
+		<Field Name="blob" DataType="blob" />
+		<Field Name="mediumblob" DataType="mediumblob" />
+		<Field Name="longblob" DataType="longblob" />
+		<Field Name="tinyint" DataType="tinyint" />
+		<Field Name="smallint" DataType="smallint" />
+		<Field Name="mediumint" DataType="mediumint" />
+		<Field Name="int" DataType="int" InputRequired="true" />
+		<Field Name="bigint" DataType="bigint" />
+		<Field Name="float" DataType="float" />
+		<Field Name="double" DataType="double" />
+		<Field Name="decimal" DataType="decimal" />
+		<Field Name="date" DataType="date" />
+		<Field Name="datetime" DataType="datetime" />
+		<Field Name="timestamp" DataType="timestamp" />
+		<Field Name="time" DataType="time" />
+		<Field Name="binary" DataType="binary" />
+		<Field Name="binaryreq" DataType="binary" InputRequired="true" DefaultValue="1" />
+		<Field Name="binary8" DataType="binary" MaxSize="8" />
+		<Field Name="enum" DataType="enum('Option 1','Option 2','Option 3')" />
+  	</Database>
+  </Class>
 
 
   <Class Name="JunkExtended">
