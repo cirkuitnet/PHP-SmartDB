@@ -810,7 +810,7 @@ class DbManager_MySQL implements DbManager {
 		else if($addColumnQuotes) $column = "`$column`";
 		//else $column = $column;
 
-		$castQuoteVal = $this->CastQuoteValue($table, $cleanColumnName, $val);
+		$castQuoteVal = $this->CastQuoteValue($table, $cleanColumnName, $val, $options);
 		if($castQuoteVal === null){ //null is special
 			if($condition == "!=" || $condition == "IS NOT"){
 				$ret = $column." is not null"; //'is not null' for null
@@ -934,6 +934,11 @@ class DbManager_MySQL implements DbManager {
 		//if $table is not a string, it has to be a SmartTable object. we can use this to get the column type
 		if($table && !is_string($table)){
 			try{
+				
+				//HACKish - handle SmartCells in case someone accidentally forgets to call ->GetValue() on the smart cell
+				if( is_object($value) && get_class($value)=="SmartCell" ){
+					$value = $value->GetValue();
+				}
 				
 				//handle booleans.
 				$isBool = is_bool($value); 
