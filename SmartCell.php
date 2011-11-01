@@ -616,6 +616,7 @@ class SmartCell{
 			'size'=>$this->GetMaxLength(),
 			'maxlength'=>$this->GetMaxLength(),
 			'disabled'=>(!$this->AllowSet ? 'disabled' : null),
+			'autocomplete'=>'off'
 		);
 		if(is_array($customAttribs)){ //overwrite $defaultAttribs with any $customAttribs specified
 			$customAttribs = array_change_key_case($customAttribs, CASE_LOWER);
