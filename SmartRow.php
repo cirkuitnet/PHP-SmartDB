@@ -74,6 +74,40 @@ require_once(dirname(__FILE__).'/SmartCell.php');
  * @package SmartDatabase
  */
 class SmartRow implements ArrayAccess{
+	
+
+	/////////////////////////////// SERIALIZATION - At top so we don't forget to update these when we add new vars //////////////////////////
+		/**
+		 * Specify all variables that should be serialized
+		 * @ignore
+		 */
+		public function __sleep(){
+			return array(
+				'Database',
+				'Table',
+				'_cells',
+				'_disableCallbacks',
+				'_isDirty',
+				'_existsInDb',
+				'_initialized',
+				'_onBeforeCommit',
+				'_onAfterCommit',
+				'_onBeforeInsert',
+				'_onAfterInsert',
+				'_onBeforeUpdate',
+				'_onAfterUpdate',
+				'_onBeforeDelete',
+				'_onAfterDelete',
+				'_onSetAnyCellValue',
+				'_onBeforeAnyCellValueChanged',
+				'_onAfterAnyCellValueChanged',
+				'_onSetCellValueCallbackInitialized',
+				'_onBeforeAnyCellValueChangedCallbackInitialized',
+				'_onAfterAnyCellValueChangedCallbackInitialized'
+			);
+		}
+	//////////////////////////////////////////////////////////////////////////////////////
+	
 	/**
 	 * @var SmartDatabase Note: if setting the $Database, be sure to set the $DbManager is set appropriately
 	 */
@@ -1366,11 +1400,4 @@ class SmartRow implements ArrayAccess{
 		throw new Exception("Undefined var: $key");
 	}
 
-/////////////////////////////// PREVENT SERIALIZATION B/C IT IS RECURSIVELY HUGE //////////////////////////
-	/**
-	 * @ignore
-	 */
-	public function __sleep(){
-		return array();
-	}
 } //end class

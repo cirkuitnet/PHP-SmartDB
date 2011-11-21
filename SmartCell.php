@@ -17,6 +17,26 @@
  * @package SmartDatabase
  */
 class SmartCell{
+	
+	/////////////////////////////// SERIALIZATION - At top so we don't forget to update these when we add new vars //////////////////////////
+		/**
+		 * Specify all variables that should be serialized
+		 * @ignore
+		 */
+		public function __sleep(){
+			return array(
+				'_onAfterValueChanged',
+				'_onBeforeValueChanged',
+				'_onSetValue',
+				'_value',
+				'Column',
+				'DisableCallbacks',
+				'FakePasswordFormObjectValue',
+				'Row'
+			);
+		}
+	////////////////////////////////////////////////////////////////////////////////////////////////////////
+	
 	/**
 	 * @var SmartRow The row that contains this cell
 	 */
@@ -1316,11 +1336,4 @@ class SmartCell{
 		return $errors;
 	}
 
-/////////////////////////////// PREVENT SERIALIZATION B/C IT IS RECURSIVELY HUGE //////////////////////////
-	/**
-	 * @ignore
-	 */
-	public function __sleep(){
-		return array();
-	}
 } //end class

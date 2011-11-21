@@ -17,6 +17,37 @@ require_once(dirname(__FILE__).'/SmartColumn.php');
  * @package SmartDatabase
  */
 class SmartTable implements ArrayAccess, Countable{
+	
+	
+	/////////////////////////////// SERIALIZATION - At top so we don't forget to update these when we add new vars //////////////////////////
+		/**
+		 * Specify all variables that should be serialized
+		 * @ignore
+		 */
+		public function __sleep(){
+			return array(
+				'Database',
+				'TableName',
+				'IsAbstract',
+				'AutoCommit',
+				'ExtendedByClassName',
+				'_inheritsTableName',
+				'_columns',
+				'_columnAliases',
+				'_keyColumns',
+				'_nonKeyColumns',
+				'_autoIncrementKeyColumns',
+				'_nonAutoIncrementKeyColumns',
+				'_primaryKeyExists',
+				'_primaryKeyIsComposite',
+				'_primaryKeyIsNonComposite',
+				'_primaryKeyIsNonCompositeAutoIncrement',
+				'_primaryKeyIsNonCompositeNonAutoIncrement',
+				'AutoRefresh'
+			);
+		}
+	//////////////////////////////////////////////////////////////////////////////////////
+	
 	/**
 	 * @var SmartDatabase The Database that contains this Table
 	 */

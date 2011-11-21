@@ -174,6 +174,7 @@ if(!$t['dbManager']->TableExists("smartdb_test", "AllDataTypes")){
 		Test15($t); //0/null
 		Test16($t); //min, max, sum
 		Test17($t); //data types
+		Test18($t); //serialization
 		TestForm($t,true);
 
 		Msg(true,'Tests passed on '.date('r'),null);
@@ -1544,6 +1545,28 @@ function Test17($t, $debug=false){
 		AssertExists($row);
 		
 		Delete($row,$debug);
+}
+
+//serialization
+function Test18($t, $debug=false){
+	$db = $t['database'];
+
+	$sDb = serialize($db);
+	$uDb = unserialize($sDb);
+
+	$origTables = $db->GetAllTables();
+	$uTables = $uDb->GetAllTables();
+	
+	if(count($origTables) != count($uTables)){
+		Ex('Invalid table count between serialized and unserialized smartdbs');
+	}
+	
+	$origColumns = $db['Log']->GetAllColumns();
+	$uColumns = $uDb['Log']->GetAllColumns();
+	
+	if(count($origColumns) != count($uColumns)){
+		Ex('Invalid column count between serialized and unserialized smartdbs');
+	}
 }
 
 /**

@@ -13,15 +13,41 @@
  */
 /**
  */
-if (strnatcmp( ($version=phpversion()), '5.3.0') < 0){ //check php constraints. eventually we'll get rid of this when everyone is 5.3.0+
-	throw new Exception("This version of SmartDatabase only works with PHP versions 5.3.0 and newer. You are using PHP version $version");
-}
+
+//PHP 5.3.0 is required. removing this check for performance. PHP <5.3 is considered EOL now
+//if (strnatcmp( ($version=phpversion()), '5.3.0') < 0){ //check php constraints. eventually we'll get rid of this when everyone is 5.3.0+
+//	throw new Exception("This version of SmartDatabase only works with PHP versions 5.3.0 and newer. You are using PHP version $version");
+//}
+
 require_once(dirname(__FILE__).'/SmartTable.php');
 require_once(dirname(__FILE__).'/SmartRow.php');
 /**
  * @package SmartDatabase
  */
 class SmartDatabase implements ArrayAccess, Countable{
+	const Version = "1.32"; //should update this for ANY change to structure at least. used for determining if a serialized SmartDatabase object is invalid/out of date
+	
+	/////////////////////////////// SERIALIZATION - At top so we don't forget to update these when we add new vars //////////////////////////
+		/**
+		 * Specify all variables that should be serialized
+		 * @ignore
+		 */
+		public function __sleep(){
+			return array(
+				'Version',
+				'DEV_MODE',
+				'DEV_MODE_WARNINGS',
+				'_tables',
+				'XmlSchemaDateModified'
+			);
+		}
+	//////////////////////////////////////////////////////////////////////////////////////
+	
+	/**
+	 * @var string Readonly. The current SmartDatabase version number. Set in constructor. Needed for storing version in serialized objects. Changes for each change made to the SmartDatabase code
+	 */
+	public $Version; //readonly. set in constructor 
+	
 	/**
 	 * @var DbManager The DbManager instance, passed in the class constructor
 	 * @see SmartDatabase::__construct()
@@ -45,13 +71,43 @@ class SmartDatabase implements ArrayAccess, Countable{
 	public $DEV_MODE_WARNINGS = true;
 
 	/**
-	 * @param DbManager $dbManager [optional] The DbManager instance that will be used to perform operations on the actual database. If null, no database operations can be performed (use for 'in-memory' instances)
-	 * @param string $xmlSchemaFilePath [optional] The database schema file to load. If left null, you will need to either build the database yourself useing ->AddTable() or load a schema from XML using ->LoadSchema()
+	 * <code>
+	 * 	$options = array(
+	 * 		'db-manager' => null, //DbManager - The DbManager instance that will be used to perform operations on the actual database. If null, no database operations can be performed (use for 'in-memory' instances)
+	 * 		'xml-schema-file-path' => null, //string - the database schema file to load. If left null, you will need to either build the database yourself useing ->AddTable() or load a schema from XML using ->LoadSchema()
+	 * 		'dev-mode' => true, //boolean - development mode toggle. When true, does extra verifications (ie data types, columns, etc) that are a must for development, but may slow things down a bit when running in production.
+	 * 		'dev-mode-warnings' => true, //boolean. if true and in $DEV_MODE, warnings will be shown for like missing classes and etc.
+	 * 	)
+	 * </code>
+	 * @param array $options [optional] see description above
+	 * @param string $deprecated [optional] [deprecated] Use $options instead. This used to be the 'xml-schema-file-path' option
 	 * @return SmartDatabase
 	 */
-	public function __construct(DbManager $dbManager=null, $xmlSchemaFilePath=null){
-		$this->DbManager = $dbManager;
-		if($xmlSchemaFilePath) $this->LoadXmlSchema($xmlSchemaFilePath);
+	public function __construct($options=null, $deprecated=null){
+		$defaultOptions = array( //default options
+			//'db-manager' => null,
+			'xml-schema-file-path' => $deprecated, //reverse compatibility
+			'dev-mode' => true,
+			'dev-mode-warnings' => true
+		);
+		
+		if(!is_array($options)){ //reverse compatibility. constructor used to be (DbManager $dbManager=null, $xmlSchemaFilePath=null). now it's an array. need to support old versions though
+			$dbManager = $options;
+			$options = array();
+			$options['db-manager'] = $dbManager; //first parameter is DbManager
+		}
+		
+		//merge in default options
+		$options = array_merge($defaultOptions, $options);
+		
+		//set local variables in this object
+		$this->Version = self::Version;
+		$this->DbManager = $options['db-manager'];
+		$this->DEV_MODE = $options['dev-mode'];
+		$this->DEV_MODE_WARNINGS = $options['dev-mode-warnings'];
+		
+		//load schema, if given
+		if( $options['xml-schema-file-path'] ) $this->LoadXmlSchema( $options['xml-schema-file-path'] );
 	}
 
 /////////////////////////////// Table Management ///////////////////////////////////
@@ -120,6 +176,14 @@ class SmartDatabase implements ArrayAccess, Countable{
 	}
 
 /////////////////////////////// LoadXmlSchema ///////////////////////////////////
+
+	/**
+	 * The date the XML file used in LoadXmlSchema() was modified. If multiple XML Schemas are loaded, uses the latest of all.
+	 * Useful for serializing objects, storing them somewhere ($_SESSION, memcached, etc), then retrieving without needing to completely rebuild the database from xml
+	 * @var date
+	 */
+	public $XmlSchemaDateModified = null;
+	
 	/**
 	 * Loads a database schema from an XML file. This schema will replace any tables that are currently being managed by the Database instance.
 	 * <p><b>$options is an assoc-array, as follows:</b></p>
@@ -146,6 +210,12 @@ class SmartDatabase implements ArrayAccess, Countable{
 
 		$xmlAssoc = $this->GetAssocFromXml($xmlSchemaFilePath, $xsdFilePath);
 		$this->BuildDatabase($xmlAssoc);
+		
+		//store schema's last mod time. Useful for serializing objects, storing them somewhere ($_SESSION, memcached, etc), then retrieving without needing to completely rebuild the database from xml
+		$schemaModTime = filemtime($xmlSchemaFilePath);
+		if($this->XmlSchemaDateModified == null || $schemaModTime > $this->XmlSchemaDateModified){
+			$this->XmlSchemaDateModified = $schemaModTime;
+		}
 	}
 
 	/**
@@ -985,13 +1055,99 @@ class SmartDatabase implements ArrayAccess, Countable{
 		throw new Exception("Undefined var: $key");
 	}
 
-/////////////////////////////// PREVENT SERIALIZATION B/C IT IS RECURSIVELY HUGE //////////////////////////
+//////////////////////////////// STATIC - GET SmartDatabase OBJECT FROM MEMCACHED ////////////////////////////////
 	/**
-	 * @ignore
+	 * Uses memcached to cache an entire SmartDb structure. You must pass in at least the 'memcached-key' and 'xml-schema-file-path' options. Also, the returned SmartDb will not have it's DbManager set unless you pass the 'db-manager' option, so you may need to set it manually.
+	 * <code>
+	 * 	//options are same as SmartDatabase constructor, plus a few extra for memcached
+	 * 	$options = array(
+	 * 		'db-manager' => null, //DbManager - The DbManager instance that will be used to perform operations on the actual database. If null, no database operations can be performed (use for 'in-memory' instances)
+	 * 		'xml-schema-file-path' => null, //string - REQUIRED for caching - the database schema file to load. If left null, you will need to either build the database yourself useing ->AddTable() or load a schema from XML using ->LoadSchema()
+	 * 		'dev-mode' => true, //boolean - development mode toggle. When true, does extra verifications (ie data types, columns, etc) that are a must for development, but may slow things down a bit when running in production.
+	 * 		'dev-mode-warnings' => true, //boolean. if true and in $DEV_MODE, warnings will be shown for like missing classes and etc.
+	 * 		'memcached-key' => null, //string. REQUIRED for caching. memcached lookup key
+	 *		'memcached-host' => 'localhost', //string. memcached connection host
+	 *		'memcached-port' => 11211, //int. memcached connection port
+	 *		'memcached-timeout' => 300, //int. failover fast-ish
+	 *		'memcached-serializer' => Memcached::SERIALIZER_IGBINARY, //a much better serializer than the default one in PHP
+	 *		'memcached-compression' => false, //going for speed
+	 * 	)
+	 * </code>
+	 * @param array $options [optional] see description above
+	 * @return SmartDatabase
 	 */
-	public function __sleep(){
-		return array();
+	public static function GetCached(array $options = null){
+		$defaultOptions = array( //default options
+			//'db-manager' => null,
+			//'xml-schema-file-path' => null, //REQUIRED for caching to work properly!
+			'dev-mode' => true,
+			'dev-mode-warnings' => true,
+			'memcached-key' => null, //REQUIRED for caching to work properly
+			'memcached-host' => 'localhost',
+			'memcached-port' => 11211,
+			'memcached-timeout' => 250, //override default. make failover fast-ish
+			'memcached-serializer' => Memcached::SERIALIZER_IGBINARY, //a much better serializer than the default one in PHP
+			'memcached-compression' => true //speeds things up quite a bit
+		);
+		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
+			$options = array_merge($defaultOptions, $options);
+		}
+		else $options = $defaultOptions;
+		
+		//check for all required arguments
+		if(!$options['memcached-key'] || !$options['xml-schema-file-path']){
+			throw new \Exception("'memcached-key' and 'xml-schema-file-path' are both required options for SmartDatabase::GetCached()");
+		}
+		
+		try{
+			//check for cached smartdb
+			$mc = new MemCached();
+			$mc->addServer($options['memcached-host'], $options['memcached-port']);
+			
+			//set options
+			$mc->setOption( Memcached::OPT_SERIALIZER, $options['memcached-serializer'] );
+			$mc->setOption( Memcached::OPT_CONNECT_TIMEOUT, $options['memcached-timeout'] ); 
+			$mc->setOption( Memcached::OPT_COMPRESSION, $options['memcached-compression'] );
+			
+			//try to get the key from cache
+			$cachedDb = $mc->get( $options['memcached-key'] );
+			
+			//log an error if we didn't get a key. we'll see a lot of these if the cache server is down
+			$resultCode = $mc->getResultCode();
+			if($resultCode != Memcached::RES_SUCCESS){
+				error_log("SmartDb - MemCached Error - Could not get SmartDb object '".$options['memcached-key']."'. Error Code: ".$resultCode.", Error Msg: ".$mc->getResultMessage());
+			}
+		}
+		catch(\Exception $e){
+			error_log("SmartDb - MemCached Exception - Could not get SmartDb object '".$options['memcached-key']."'. Exception Msg: ".$e->getMessage());
+			$mc = null;
+		}
+		
+		//check if cachedDb is found and valid
+		if( $cachedDb ){
+			//compare XML dates on cached schema to make sure cache is not expired. also make sure we're using the same version of the SmartDatabase
+			$xmlLastMod = filemtime($options['xml-schema-file-path']);
+			if( ($cachedDb->XmlSchemaDateModified && $cachedDb->XmlSchemaDateModified == $xmlLastMod)
+					&& ($cachedDb->Version == self::Version)
+				){
+					//dates and smartdb version match. valid cached db
+					$cachedDb->DbManager = $options['db-manager']; //update the db manager. this can't be cached
+					return $cachedDb;  //set our global to the cached db
+			}
+		}
+	
+		//if no valid cache db found. create a new smartdb and store it in cache
+		$smartDb = new self($options);
+		
+		//update cache (if no errors trying to fetch from memcached earlier)
+		if($mc){
+			$mc->set($options['memcached-key'], $smartDb);
+			error_log("SmartDb - MemCached - New cache for SmartDb object '".$options['memcached-key']."'");
+		}
+		
+		return $smartDb;
 	}
+	
 } //end class
 
 /**

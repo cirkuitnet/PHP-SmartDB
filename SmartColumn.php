@@ -14,6 +14,46 @@
  * @package SmartDatabase
  */
 class SmartColumn{
+	
+	/////////////////////////////// SERIALIZATION - At top so we don't forget to update these when we add new vars //////////////////////////
+		/**
+		 * Specify all variables that should be serialized
+		 * @ignore
+		 */
+		public function __sleep(){
+			return array(
+				'Table',
+				'ColumnName',
+				'IsAlias',
+				'DisplayName',
+				'DataType',
+				'Collation',
+				'IsDateColumn',
+				'PossibleValues',
+				'MinSize',
+				'MaxSize',
+				'AllowGet',
+				'AllowSet',
+				'TrimAndStripTagsOnSet',
+				'AllowLookup',
+				'AllowGetAll',
+				'DefaultValue',
+				'IsUnique',
+				'IsPrimaryKey',
+				'IsAutoIncrement',
+				'FulltextIndex',
+				'DefaultFormType',
+				'IsRequired',
+				'IsRequiredMessage',
+				'RegexCheck',
+				'RegexFailMessage',
+				'SortOrder',
+				'_relations',
+				'_aliases'
+			);
+		}
+	//////////////////////////////////////////////////////////////////////////////////////
+	
 	/**
 	 * @var SmartTable The Table that contains this Column
 	 */
