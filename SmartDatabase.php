@@ -71,6 +71,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 	public $DEV_MODE_WARNINGS = true;
 
 	/**
+	 * Constructor for a new SmartDatabse object. Note that you can cache these objects within Memcached so we don't have to parse the XML and create the structure for every request (@see SmartDatabase::GetCached()).
 	 * <code>
 	 * 	$options = array(
 	 * 		'db-manager' => null, //DbManager - The DbManager instance that will be used to perform operations on the actual database. If null, no database operations can be performed (use for 'in-memory' instances)
@@ -79,6 +80,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 	 * 		'dev-mode-warnings' => true, //boolean. if true and in $DEV_MODE, warnings will be shown for like missing classes and etc.
 	 * 	)
 	 * </code>
+	 * @see SmartDatabase::GetCached()
 	 * @param array $options [optional] see description above
 	 * @param string $deprecated [optional] [deprecated] Use $options instead. This used to be the 'xml-schema-file-path' option
 	 * @return SmartDatabase
@@ -1057,7 +1059,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 
 //////////////////////////////// STATIC - GET SmartDatabase OBJECT FROM MEMCACHED ////////////////////////////////
 	/**
-	 * Uses memcached to cache an entire SmartDb structure. You must pass in at least the 'memcached-key' and 'xml-schema-file-path' options. Also, the returned SmartDb will not have it's DbManager set unless you pass the 'db-manager' option, so you may need to set it manually.
+	 * An alternative to calling "new SmartDatabase($options)" - uses memcached to get/save an entire SmartDb structure within cache. You must pass in at least the 'memcached-key' and 'xml-schema-file-path' options. Also, the returned SmartDb will not have it's DbManager set unless you pass the 'db-manager' option, so you may need to set it manually.
 	 * <code>
 	 * 	//options are same as SmartDatabase constructor, plus a few extra for memcached
 	 * 	$options = array(
@@ -1066,11 +1068,11 @@ class SmartDatabase implements ArrayAccess, Countable{
 	 * 		'dev-mode' => true, //boolean - development mode toggle. When true, does extra verifications (ie data types, columns, etc) that are a must for development, but may slow things down a bit when running in production.
 	 * 		'dev-mode-warnings' => true, //boolean. if true and in $DEV_MODE, warnings will be shown for like missing classes and etc.
 	 * 		'memcached-key' => null, //string. REQUIRED for caching. memcached lookup key
-	 *		'memcached-host' => 'localhost', //string. memcached connection host
-	 *		'memcached-port' => 11211, //int. memcached connection port
-	 *		'memcached-timeout' => 300, //int. failover fast-ish
-	 *		'memcached-serializer' => Memcached::SERIALIZER_IGBINARY, //a much better serializer than the default one in PHP
-	 *		'memcached-compression' => false, //going for speed
+	 * 		'memcached-host' => 'localhost', //string. memcached connection host
+	 * 		'memcached-port' => 11211, //int. memcached connection port
+	 * 		'memcached-timeout' => 250, //int. failover fast-ish
+	 * 		'memcached-serializer' => Memcached::SERIALIZER_IGBINARY, //a much better serializer than the default one in PHP
+	 * 		'memcached-compression' => true, //actually makes things faster too
 	 * 	)
 	 * </code>
 	 * @param array $options [optional] see description above
@@ -1087,7 +1089,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 			'memcached-port' => 11211,
 			'memcached-timeout' => 250, //override default. make failover fast-ish
 			'memcached-serializer' => Memcached::SERIALIZER_IGBINARY, //a much better serializer than the default one in PHP
-			'memcached-compression' => true //speeds things up quite a bit
+			'memcached-compression' => true //actually makes things faster too
 		);
 		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
 			$options = array_merge($defaultOptions, $options);

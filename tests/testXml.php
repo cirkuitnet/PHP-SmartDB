@@ -613,6 +613,12 @@ function Test8($t, $debug=false){
 	if($count!=2) Ex("invalid count returned");
 	if($debug) echo '$allvalues='.print_r($allvalues, true);
 	if(count($allvalues)!=2) Ex("invalid count of values returned");
+	
+	//LookupColumnValues() with empty array or null as first parameter should work the same as GetAllValues()
+	$allvalues = $db['Setting']->LookupColumnValues(null, 'Name', array('sort-by'=>'Id','get-unique'=>true,'return-count'=>&$count));
+	if($count!=2) Ex("invalid count returned");
+	if($debug) echo '$allvalues='.print_r($allvalues, true);
+	if(count($allvalues)!=2) Ex("invalid count of values returned");
 
 	$returnCount = $db['Setting']['Name']->GetAllValues(array('sort-by'=>array('Id'=>'desc'),'return-count'=>&$count,'return-count-only'=>true));
 	if($count!=2) Ex("invalid count returned");
@@ -697,6 +703,21 @@ function Test9($t, $debug=false){
 
 	//GetAllRows()
 	$allRows = $db['Setting']->GetAllRows(array('sort-by'=>array("Id"=>"desc")));
+	$count=count($allRows);
+	if($debug) echo "Get all rows, count: $count<br>\n";
+	if($count !== 2) Ex("Wrong number of rows returned");
+
+	AssertCellVal($allRows[0]['Id'], 70);
+	AssertCellVal($allRows[1]['Id'], 69);
+
+	if($debug){
+		foreach($allRows as $keyValue=>$Row){
+			echo $keyValue.'='.$Row;
+		}
+	}
+	
+	//LookupRows() with empty array, should be idential to GetAllRows() (as above)
+	$allRows = $db['Setting']->LookupRows(array(), array('sort-by'=>array("Id"=>"desc")));
 	$count=count($allRows);
 	if($debug) echo "Get all rows, count: $count<br>\n";
 	if($count !== 2) Ex("Wrong number of rows returned");

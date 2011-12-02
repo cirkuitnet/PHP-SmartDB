@@ -481,7 +481,7 @@ class SmartTable implements ArrayAccess, Countable{
     }
 
 	/**
-	 * Returns an array of all Row instances that match the given $lookupAssoc column value, or an empty array if there is no match. If the option 'return-count-only'=true, returns an integer of number of rows selected. To execute this function, this table must have a primary key.
+	 * Returns an array of all Row instances that match the given $lookupAssoc column values, or an empty array if there are no matches. If the option 'return-count-only'=true, returns an integer of number of rows selected. To execute this function, this table must have a primary key.
 	 * Options are as follows:
 	 * <code>
 	 * $options = array(
@@ -493,17 +493,20 @@ class SmartTable implements ArrayAccess, Countable{
 	 *  'return-count-only'=>false, //if true, the return-count will be returned instead of the rows. A good optimization if you dont need to read any data from the rows and just need the rowcount of the search
 	 *  }
 	 * </code>
-	 * @param array $lookupAssoc An assoc-array of column=>value to lookup. For example: array("column1"=>"lookupVal", "column2"=>"lookupVal", ...)
+	 * @param array $lookupAssoc [optional] An assoc-array of column=>value to lookup. For example: array("column1"=>"lookupVal", "column2"=>"lookupVal", ...). If this is left null or empty array, all rows will be returned.
 	 * @param array $options [optional] See description
 	 * @return mixed An array of all Row instances matching the criteria of $lookupAssoc, or if the option 'return-count-only'=true, returns an integer of number of rows selected
 	 * @see SmartColumn::LookupRows()
 	 * @see SmartTable::LookupRow()
 	 * @see SmartTable::GetAllRows()
 	 */
-	public function LookupRows(array $lookupAssoc, array $options=null){
+	public function LookupRows($lookupAssoc=null, array $options=null){
 		if(!$this->PrimaryKeyExists()) throw new Exception("Function '".__FUNCTION__."' only works on Tables that contain a primary key");
 
-		$lookupAssoc = $this->VerifyLookupAssoc($lookupAssoc, __FUNCTION__);
+		//$lookupAssoc is not required. if no $lookupAssoc is given, this will be identical to GetAllRows().
+		if($lookupAssoc){
+			$lookupAssoc = $this->VerifyLookupAssoc($lookupAssoc, __FUNCTION__);
+		}
 
 		//table must have a single primary key column
 		if($this->PrimaryKeyIsComposite()) throw new Exception("Function '".__FUNCTION__."' not yet implemented for composite keys.");
@@ -699,15 +702,18 @@ class SmartTable implements ArrayAccess, Countable{
 	 *  'return-count-only'=>false, //if true, the return-count will be returned instead of the rows. A good optimization if you dont need to read any data from the rows and just need the rowcount of the search
 	 *  }
 	 * </code>
-	 * @param array $lookupAssoc An assoc-array of column=>value to lookup. For example: array("column1"=>"lookupVal", "column2"=>"lookupVal", ...)
+	 * @param array $lookupAssoc [optional] An assoc-array of column=>value to lookup. For example: array("column1"=>"lookupVal", "column2"=>"lookupVal", ...). If this is left null or empty array, all column values for all rows will be returned.
 	 * @param string $returnColumn The name of the column to return the values of
 	 * @param array $options [optional] See description
 	 * @return mixed An assoc array of [id of table's key column (if exists. otherwise values are simply pushed onto the array with no key specified)]=>[value of the column specified in $returnColumn]. Or if the option 'return-count-only'=true, returns an integer of number of rows selected.
 	 */
-	public function LookupColumnValues(array $lookupAssoc, $returnColumn, array $options=null){
+	public function LookupColumnValues($lookupAssoc=null, $returnColumn, array $options=null){
 		if(!$this->ColumnExists($returnColumn)) throw new Exception("Bad return column for function '".__FUNCTION__."': Column '{$returnColumn}' does not exist in table {$this->TableName}");
 
-		$lookupAssoc = $this->VerifyLookupAssoc($lookupAssoc, __FUNCTION__);
+		//$lookupAssoc is not required. if no $lookupAssoc is given, this will work similar to SmartColumn->GetAllValues().
+		if($lookupAssoc){
+			$lookupAssoc = $this->VerifyLookupAssoc($lookupAssoc, __FUNCTION__);
+		}
 
 		$limit = trim($options['limit']);
 		$sortByFinal = $this->BuildSortArray($options['sort-by']);
