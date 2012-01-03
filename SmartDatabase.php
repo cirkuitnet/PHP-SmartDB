@@ -25,7 +25,7 @@ require_once(dirname(__FILE__).'/SmartRow.php');
  * @package SmartDatabase
  */
 class SmartDatabase implements ArrayAccess, Countable{
-	const Version = "1.32"; //should update this for ANY change to structure at least. used for determining if a serialized SmartDatabase object is invalid/out of date
+	const Version = "1.33"; //should update this for ANY change to structure at least. used for determining if a serialized SmartDatabase object is invalid/out of date
 	
 	/////////////////////////////// SERIALIZATION - At top so we don't forget to update these when we add new vars //////////////////////////
 		/**
@@ -106,7 +106,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 		$this->Version = self::Version;
 		$this->DbManager = $options['db-manager'];
 		$this->DEV_MODE = $options['dev-mode'];
-		$this->DEV_MODE_WARNINGS = $options['dev-mode-warnings'];
+		$this->DEV_MODE_WARNINGS = ($options['dev-mode'] && $options['dev-mode-warnings']);
 		
 		//load schema, if given
 		if( $options['xml-schema-file-path'] ) $this->LoadXmlSchema( $options['xml-schema-file-path'] );
@@ -454,6 +454,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 					}
 
 					$column->IsDateColumn = (stripos($column->DataType, "date") !== false || $column->DataType==='timestamp');
+					$column->IsSerializedColumn = ($column->DataType==='array' || $column->DataType==='object');
 					$column->DisplayName = (!empty($xmlColumn['a']['DisplayName']) ? $xmlColumn['a']['DisplayName'] : $xmlColumnName);
 					$column->Collation = $xmlColumn['a']['Collation'];
 					$column->MinSize = $xmlColumn['a']['MinSize'];
@@ -710,6 +711,9 @@ class SmartDatabase implements ArrayAccess, Countable{
 					}
 					$structure[$tableName][$columnName]["Type"] .= "(".$precision.")";
 				}
+				else if ($dataTypeLower == "array" || $dataTypeLower == "object"){ //array, object types
+					$structure[$tableName][$columnName]["Type"] = "text"; //use text for array/object types. we can make the size configurable somehow if we need to down the road
+				}
 
 				//Null
 				if($Column->IsRequired || $Column->IsPrimaryKey)
@@ -900,6 +904,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 				
 				//use datatype to determine each of the following vars: 
 				$dataType = "";
+				$isDate = false;
 				$extraInfo = "";
 				$unsigned = false;
 				$size = "";
@@ -927,6 +932,12 @@ class SmartDatabase implements ArrayAccess, Countable{
 				if(stripos($dataType, "date") !== false || $dataType==='timestamp'){
 					$isDate = true;
 				}
+				
+				//these datatypes will never really be set in SQL, so this IF statement is pretty much worthless
+				if($dataType === 'array' || $dataType === 'object'){
+					$isSerialized = true;
+				}
+				
 				/*
 				//for debugging
 				echo 'TYPE: '.$dataType.'<br>';
@@ -939,6 +950,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 				
 				$column->DataType = $dataType;
 				$column->IsDateColumn = $isDate;
+				$column->IsSerializedColumn = $isSerialized;
 				$column->PossibleValues = $possibleValues;
 				$column->MaxSize = $size;
 				
@@ -999,6 +1011,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 		//$smartStructure = $this->BuildSyncStructure(); //current structure of the smartdb
 		//print_nice($smartStructure);
 	}
+	
 /////////////////////////////// ArrayAccess ///////////////////////////////////
 	/**
 	 * Adds a Table to the Database. $key doesnt matter at all. Uses the $Table->TableName as the table name always.

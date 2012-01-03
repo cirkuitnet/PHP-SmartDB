@@ -710,6 +710,10 @@ class SmartTable implements ArrayAccess, Countable{
 	public function LookupColumnValues($lookupAssoc=null, $returnColumn, array $options=null){
 		if(!$this->ColumnExists($returnColumn)) throw new Exception("Bad return column for function '".__FUNCTION__."': Column '{$returnColumn}' does not exist in table {$this->TableName}");
 
+		//may need to unserialize the returned data. get the column and check if it's serialized
+		$Column = $this->GetColumn($returnColumn);
+		$isSerializedColumn = $Column->IsSerializedColumn;
+		
 		//$lookupAssoc is not required. if no $lookupAssoc is given, this will work similar to SmartColumn->GetAllValues().
 		if($lookupAssoc){
 			$lookupAssoc = $this->VerifyLookupAssoc($lookupAssoc, __FUNCTION__);
@@ -734,12 +738,20 @@ class SmartTable implements ArrayAccess, Countable{
 
 			if($options['return-assoc']){ //return an assoc array
 				while ($row = $dbManager->FetchAssoc()) {
-					$returnVals[$row[$keyColumnName]] = $row[$returnColumn];
+					$colValue = $row[$returnColumn];
+					if($isSerializedColumn){ //unserialize serialized values
+						$colValue = $Column->GetUnserializedValue($colValue); 
+					}
+					$returnVals[$row[$keyColumnName]] = $colValue;
 				}
 			}
 			else{ //return a regular array
 				while ($row = $dbManager->FetchAssoc()) {
-					$returnVals[] = $row[$returnColumn];
+					$colValue = $row[$returnColumn];
+					if($isSerializedColumn){ //unserialize serialized values
+						$colValue = $Column->GetUnserializedValue($colValue); 
+					}
+					$returnVals[] = $colValue;
 				}
 			}
 		}
@@ -751,7 +763,11 @@ class SmartTable implements ArrayAccess, Countable{
 			if($options['return-count-only']) return $numRowsSelected;
 
 			while ($row = $dbManager->FetchAssoc()) {
-				$returnVals[] = $row[$returnColumn];
+				$colValue = $row[$returnColumn];
+				if($isSerializedColumn){ //unserialize serialized values
+					$colValue = $Column->GetUnserializedValue($colValue); 
+				}
+				$returnVals[] = $colValue;
 			}
 		}
 		return $returnVals;

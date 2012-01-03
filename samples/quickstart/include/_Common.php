@@ -8,7 +8,7 @@ class _Common extends \SmartRow {
 	 * This is an abstract table, so it doesn't really exist in the database. Thus, we must pass the $tableName through the constructor.
 	 * @param string $tableName
 	 * @param SmartDatabase $Database
-	 * @param mixed $ContentId [optional]
+	 * @param mixed $ids [optional]
 	 * @param array $options [optional]
 	 */
 	public function __construct($tableName, $Database, $ids=null, $options=null) {

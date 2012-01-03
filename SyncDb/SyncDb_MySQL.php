@@ -152,10 +152,6 @@ class SyncDb_MySQL{
 			}
 			else { //table exists
 			    $this->Message("Table '<b>$tableName</b>' exists. Comparing all fields and properties...");
-
-			    //get regular column properties of the table
-				$this->_dbManager->Query("SHOW FULL FIELDS FROM `$tableName`");
-			    $result = $this->_dbManager->FetchAssocList();
 			    
 				//lookup indexes on this table ("SHOW FULL FIELDS" doesnt provide all of this)
 	        	$dbManager->Query('SHOW INDEX FROM `'.$tableName.'`');
@@ -194,6 +190,10 @@ class SyncDb_MySQL{
 	        			$indexesFinal[$fieldName]['IndexType'] = $indexRow['Index_type']; //ie FULLTEXT or UNIQUE
 	        		}
 	        	}
+
+			    //get regular column properties of the table
+				$this->_dbManager->Query("SHOW FULL FIELDS FROM `$tableName`");
+			    $result = $this->_dbManager->FetchAssocList();
 	        	
 				//first- delete fields and 'track' updates, removal of keys, and removal of indexes
 				$fieldsDeleted=0;
@@ -234,7 +234,9 @@ class SyncDb_MySQL{
 					//update fields that already exist to remove auto_increment so we can drop keys and indexes
 					if(is_array($this->_fieldsToUpdate[$tableName])) {
 						foreach($this->_fieldsToUpdate[$tableName] as $newField){
-							$this->UpdateField($tableName, $newField, false);
+							if( ($auto_increment = $newDbField['Extra']) ){ //only update auto_increment fields
+								$this->UpdateField($tableName, $newField, false);
+							}
 						}
 					}
 
@@ -504,7 +506,20 @@ class SyncDb_MySQL{
 		$this->BackupTableIfNeeded($tableName);
 		$this->Message(" -------- <i>Inserting '".$newDbField['Field']."'".($newDbField['Key']=="PRI"?" as Primary Key":"")."</i>");
 		$null = ($newDbField['Null']=="YES"?"NULL":"NOT NULL");
-		$default = ($newDbField['Default']!="" && (strcasecmp($newDbField['Type'], 'text')!=0) ? "DEFAULT '{$newDbField['Default']}'":""); // blob/text types cant have default values in mysql
+		
+		//compile default value for CURRENT_TIMESTAMP
+		$default = "";
+		if($newDbField['Default']!="" && (strcasecmp($newDbField['Type'], 'text')!=0)){ // blob/text types cant have default values in mysql
+			if( strtolower($newDbField['Type']) == 'timestamp' && strtoupper($newDbField['Default']) == 'CURRENT_TIMESTAMP'){
+				//no quotes around default value
+				$default = "DEFAULT {$newDbField['Default']}";
+			}
+			else{
+				//quote default value
+				$default = "DEFAULT '{$newDbField['Default']}'";
+			}
+		}
+		
 		$unique = ($newDbField['Key']=="UNI"?"UNIQUE":"");
 		$primary = ($newDbField['Key']=="PRI"?", ADD PRIMARY KEY ({$newDbField['Field']})":"");
 		$this->Query("ALTER TABLE `$tableName` ADD `{$newDbField['Field']}` {$newDbField['Type']} $null $default {$newDbField['Extra']} $unique $primary");
@@ -533,7 +548,20 @@ class SyncDb_MySQL{
 
 		$collation = $this->GetCollationSql($newDbField);
 		$null = ($newDbField['Null']=="YES"?"NULL":"NOT NULL");
-		$default = ($newDbField['Default']!="" && (strcasecmp($newDbField['Type'], 'text')!=0) ? "DEFAULT '{$newDbField['Default']}'":""); // blob/text types cant have default values in mysql
+		
+		//compile default value
+		$default = "";
+		if($newDbField['Default']!="" && (strcasecmp($newDbField['Type'], 'text')!=0)){ // blob/text types cant have default values in mysql
+			if( strtolower($newDbField['Type']) == 'timestamp' && strtoupper($newDbField['Default']) == 'CURRENT_TIMESTAMP'){
+				//no quotes around default value for CURRENT_TIMESTAMP
+				$default = "DEFAULT {$newDbField['Default']}";
+			}
+			else{
+				//quote default value
+				$default = "DEFAULT '{$newDbField['Default']}'";
+			}
+		}
+		
 		if($includeAutoIncrement){
 			$auto_increment = $newDbField['Extra'];
 		}

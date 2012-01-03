@@ -17,14 +17,14 @@
  * @package SmartDatabase
  */
 class SmartCell{
-	
+
 	/////////////////////////////// SERIALIZATION - At top so we don't forget to update these when we add new vars //////////////////////////
-		/**
-		 * Specify all variables that should be serialized
-		 * @ignore
-		 */
-		public function __sleep(){
-			return array(
+	/**
+	 * Specify all variables that should be serialized
+	 * @ignore
+	 */
+	public function __sleep(){
+		return array(
 				'_onAfterValueChanged',
 				'_onBeforeValueChanged',
 				'_onSetValue',
@@ -33,10 +33,10 @@ class SmartCell{
 				'DisableCallbacks',
 				'FakePasswordFormObjectValue',
 				'Row'
-			);
-		}
+				);
+	}
 	////////////////////////////////////////////////////////////////////////////////////////////////////////
-	
+
 	/**
 	 * @var SmartRow The row that contains this cell
 	 */
@@ -64,13 +64,13 @@ class SmartCell{
 	}
 
 	/**
-	 * Allows access to the value without having to explicitly use GetValue(). Example: echo $smartrow['columnname']
+	 * Deprecated - Allows access to the value without having to explicitly use GetRawValue(). Example: echo $smartrow['columnname']
 	 * NOTE- Cell must be used in a string context so the value is returned as a string, otherwise you will be accessing the Cell directly.
-	 * @return string The value of this cell through GetValue() as a string (PHP requires a string be returned)
+	 * @return string The value of this cell through GetRawValue() as a string (PHP requires a string be returned)
 	 * @see SmartCell::GetValue()
 	 */
 	public function __toString(){
-		return (string)$this->GetValue();
+		return (string)$this->GetRawValue();
 	}
 
 	/**
@@ -85,7 +85,7 @@ class SmartCell{
 	}
 
 
-/////////////////////////////// COLUMN WRAPPERS ///////////////////////////////
+	/////////////////////////////// COLUMN WRAPPERS ///////////////////////////////
 	/**
 	 * Wraps up all public functionality of the containing Column
 	 * @ignore
@@ -107,7 +107,7 @@ class SmartCell{
 	public function __get($key){
 		return $this->Column->$key;
 	}
-///////////////////////////////////////////////////////////////////////////////
+	///////////////////////////////////////////////////////////////////////////////
 
 	/**
 	 * Returns the value of the cell.
@@ -116,7 +116,7 @@ class SmartCell{
 	 * //this shorthand is recommended:
 	 * $columnValue = $row['YOUR_COLUMN_NAME'](); //same thing as $row['YOUR_COLUMN_NAME']->GetValue();
 	 * $columnValue = $row['YOUR_COLUMN_NAME'](true,true); //same thing as $row['YOUR_COLUMN_NAME']->GetValue(true,true);
-	 * 
+	 *
 	 * //NOTE: This is not recommended, but you can skip the function call (i.e. $row['YOUR_COLUMN_NAME']) when the returned value is used as a STRING ONLY! Otherwise, $row['YOUR_COLUMN_NAME'] gives you the actual SmartCell object. For example:
 	 * echo $row['YOUR_COLUMN_NAME']; //is fine and will echo the column value
 	 * if($row['YOUR_COLUMN_NAME'] == "my data"){} //is fine and will compare the column value to "my data"
@@ -126,29 +126,44 @@ class SmartCell{
 	 * if($row['YOUR_COLUMN_NAME']->GetValue() == 3){} //is fine
 	 * </code>
 	 * <p>Once PHP allows overriding operators or __toInt()/__toFloat()/__toBool() etc., we will be able to handle this situation automatically so you don't need to worry about the above anymore, and won't need to even do the shorthand invoke on the Column/Cell. We may be able to look in to the SPL_Types php package for some of this stuff down the road?
-	 * @param bool $returnOption1 [optional] If this column is not a date column, setting this to true will run stripslashes() before returning. If this column is a date column, setting this value to true will run strtotime() before returning.
-	 * @param bool $returnOption2 [optional] If this column is not a date column, setting this to true will run htmlspecialchars() before returning. If this column is a date column, setting this value to true has no effect.
+	 * @param bool $returnOption1 [optional] If this parameter is true, htmlspecialchars() will be executed before returning. If this column is a date column, this will run strtotime() before returning. If this column is an Array or Object column type, this parameter does nothing at all... you get the array/object as is.
 	 * @return mixed The value of the cell
 	 */
-	public function GetValue($returnOption1=false, $returnOption2=false){
+	public function GetValue($returnOption1=false){
 		if(!$this->AllowGet) throw new Exception("AllowGet is set to false for column '{$this->ColumnName}' on table '{$this->Table->TableName}'");
 		if($this->Row->IsInitialized() == false && !$this->IsPrimaryKey) $this->Row->ForceInitialization(); //initialize the row if not a primary key. may set $this->_value
 
 		$value = $this->_value;
+		
+		//may need to transform the value to it's original type for array and object types
+		if($this->Column->IsSerializedColumn){
+			return $this->Column->GetUnserializedValue($value); //NO return options for this type, so return now
+		}
+		
+		//handle special return options (as described in the function comments)
 		if($returnOption1){
 			if($this->IsDateColumn){ //is a date column
 				$value = strtotime($value);
 			}
 			else{ //not a date column
-				$value = stripslashes($value);
-			}
-		}
-		if($returnOption2){
-			if(!$this->IsDateColumn){ //is a date column
 				$value = htmlspecialchars($value);
 			}
 		}
+		
 		return $value;
+	}
+	
+	/**
+	 * You should almost always use GetValue() instead of this. GetRawValue() will return the RAW data of the cell (i.e. serialized/compressed data for array, object columns).
+	 * This is mostly used internally for db queries
+	 * @return mixed The raw value of the cell
+	 * @see SmartCell::GetValue()
+	 */
+	public function GetRawValue(){
+		if(!$this->AllowGet) throw new Exception("AllowGet is set to false for column '{$this->ColumnName}' on table '{$this->Table->TableName}'");
+		if($this->Row->IsInitialized() == false && !$this->IsPrimaryKey) $this->Row->ForceInitialization(); //initialize the row if not a primary key. may set $this->_value
+		
+		return $this->_value;
 	}
 
 	/**
@@ -234,40 +249,43 @@ class SmartCell{
 	 * @return bool
 	 */
 	private function VerifyValueType(&$value){
-		//handle objects. obviously we cant commit the object to the database, so try to __toString it
+		$columnDataType = $this->Column->DataType;
+
+		//handle special type conversions
 		if($this->Row->Database->DEV_MODE){ //development mode
-			if(is_object($value)){
+			//convert objects to strings if the column type is not an object
+			if($columnDataType !== "object" && is_object($value)){
 				if(method_exists($value, "__toString")){
 					$value = $value->__toString();
 					return;
 				}
 				else{
 					$type = gettype($value);
-					throw new Exception("Cannot set a Cell's value to an object of type $type. You can only set Cell values with simple types (ie string, int, etc.). Table: '{$this->Table->TableName}', Column: '{$this->ColumnName}' ");
+					throw new Exception("Cannot set this Cell's value to an object of type $type. Table: '{$this->Table->TableName}', Column: '{$this->ColumnName}' ");
 				}
 			}
-			else if(is_array($value) || is_resource($value)){
+			else if( ($columnDataType !== "array" && is_array($value)) || is_resource($value)){
 				$type = gettype($value);
 				throw new Exception("Cannot set a Cell's value to a '$type' type. You can only set Cell values with simple types (ie string, int, etc.). Table: '{$this->Table->TableName}', Column: '{$this->ColumnName}' ");
 			}
 		}
 		else { //production mode
-			if(is_object($value)) $value = $value->__toString();
+			//convert objects to strings if the column type is not an object
+			if($columnDataType !== "object" && is_object($value)) $value = $value->__toString();
 		}
-		
+
 		if($value === null){
 			return; //null is null. let it go
 		}
-		
+
 		//handle booleans.
-		$isBool = is_bool($value); 
+		$isBool = is_bool($value);
 		if($isBool){ //boolean false is '\0'. make booleans default to 1 and 0
 			if($value) $value = 1;
 			else $value = 0;
 		}
-		
+
 		//strongly type the data
-		$columnDataType = $this->Column->DataType;
 		switch($columnDataType){
 			//dont quote numbers
 			case 'tinyint':
@@ -278,29 +296,56 @@ class SmartCell{
 				if($value === "") $value = null;
 				else $value = (int)$value;
 				break;
-				
+
 			case 'float':
 			case 'double':
 			case 'decimal':
 				if($value === "") $value = null;
 				else $value = (float)$value;
 				break;
-				
+
 			case 'binary': //needs quotes. this data type stores binary strings that have no character set or collation (it is NOT strictly ones and zeros)
 				if(!$value || $value == "\0") $value = '0'; //force binary to be 0 if nothing is set
 				else $value = (string)$value;
 				break;
-				
+					
+			case 'array':
+				$value = SmartColumn::SerializeArray($value);
+				break;
+
+			case 'object':
+				$value = SmartColumn::SerializeObject($value);
+				break;
+
 			default:
 				if($isBool && !$value) $value = ""; //false should evalute to empty string
 				else $value = (string)$value;
 				break;
 		}
 	}
+	
+	//TODO: may need these Compress() and Uncompress() functions at that point?
+	/**
+	 * Compresses a $txt for db store. If compressing and serializing: 1. Serialize, 2. Compress
+	 * @param string $txt The text to compress. Use SmartCell::Uncompress() to get the original $txt
+	 * @return mixed The serialized $obj. Use SmartCell::Uncompress() to uncompress this $txt.
+	 * @see SmartCell::Uncompress()
+	 */
+	//private function Compress($txt){
+	//	return base64_encode(gzcompress($txt));
+	//}
+	/**
+	 * Compresses a $txt for db store. If compressing and serializing: 1. Unserialize, 2. Uncompress
+	 * @param string $txt The text to uncompress. Use SmartCell::Compress() to compress the $txt
+	 * @return mixed The uncompressed $txt. Should have used SmartCell::Compress() to compress this original $txt.
+	 * @see SmartCell::Compress()
+	 */
+	//private function Uncompress($txt){
+	//	return gzuncompress(base64_decode($txt));
+	//}
 
 	/**
-	 * Checks the given $compareValue against the current value to see if the value is different. Returns true if the $compareValue is different from the current value, false if they are the same.
-	 * Uses type casting and stripslashes. If stripslashes has the same text as the current, then the text is not really updated
+	 * Checks the given $compareValue against the current value to see if the value is different. Returns true if the $compareValue is different from the current value, false if they are the same. Uses type casting.
 	 * @return bool true if the $compareValue is different from the current value, false if they are the same.
 	 */
 	private function ValueDiffers($compareValue){
@@ -308,37 +353,36 @@ class SmartCell{
 		if( !$this->Column->IsRequired && $compareValue===null && $this->_value !== null){
 			return true;
 		}
-		
-		$strippedCompareVal = stripslashes($compareValue);
-		$strippedVal = ($this->_value==="\0"?"":stripslashes($this->_value)); //special case with /0
 
 		switch(strtolower($this->DataType)){
 			case("float"):
-				return ((float)$strippedVal !== (float)$strippedCompareVal && (float)$this->_value !== (float)$compareValue);
+				return ((float)$this->_value !== (float)$compareValue);
 			case("binary"):
 				$thisCompareVal = $this->_value;
 				if($thisCompareVal==="\0"){ //special case with \0 not recognized as null/false
-					$strippedVal = $thisCompareVal = 0;
+					$thisCompareVal = 0;
 				}
 				if($compareValue==="\0"){ //special case with \0 not recognized as null/false
-					$strippedCompareVal = $compareValue = 0;
+					$compareValue = 0;
 				}
-				return ((bool)$strippedVal !== (bool)$strippedCompareVal && (bool)$thisCompareVal !== (bool)$compareValue);
+				return ((bool)$thisCompareVal !== (bool)$compareValue);
 			case("int"):
 			case("bigint"):
 			case("tinyint"):
 			case("smallint"):
-				return ((int)$strippedVal !== (int)$strippedCompareVal && (int)$this->_value !== (int)$compareValue);
+				return ((int)$this->_value !== (int)$compareValue);
 			case("double"):
 			case("decimal"):
-				return ((double)$strippedVal !== (double)$strippedCompareVal && (double)$this->_value !== (double)$compareValue);
+				return ((double)$this->_value !== (double)$compareValue);
 			case("varchar"):
 			case("char"):
 			case("text"):
 			case("enum"):
-				return ((string)$strippedVal !== (string)$strippedCompareVal && (string)$this->_value !== (string)$compareValue);
+			case("array"): //$compareValue will be serialized at this point, as is _value
+			case("object"): //$compareValue will be serialized at this point, as is _value
+				return ((string)$this->_value !== (string)$compareValue);
 			default:
-				return ($strippedVal !== $strippedCompareVal && $this->_value !== $compareValue);
+				return ($this->_value !== $compareValue);
 		}
 	}
 
@@ -374,9 +418,7 @@ class SmartCell{
 		$relatedTable = $this->Table->Database->GetTable($tableName);
 		if(!$relatedTable->PrimaryKeyExists()) throw new Exception("Function '".__FUNCTION__."' can only get related Rows from Tables that contain a primary key. Related Table '$tableName' has no primary key specified.");
 
-		
-		
-		return $relatedTable->GetColumn($columnName)->LookupRows($this->GetValue(), $options);
+		return $relatedTable->GetColumn($columnName)->LookupRows($this->GetRawValue(), $options);
 	}
 
 	/**
@@ -398,11 +440,11 @@ class SmartCell{
 		$relatedColumn = $relatedTable->GetColumn($columnName);
 		if(!$relatedColumn->IsUnique) throw new Exception("Function '".__FUNCTION__."' only works on columns specified as Unique. Table '$tableName', column '$columnName' is not specified as unique.");
 
-		return $relatedColumn->LookupRow($this->GetValue(), $options);
+		return $relatedColumn->LookupRow($this->GetRawValue(), $options);
 	}
 
 
-/////////////////////////////// CALLBACK STUFF ///////////////////////////////////
+	/////////////////////////////// CALLBACK STUFF ///////////////////////////////////
 	//event callback arrays
 	private $_onSetValue; //callbacks to be fired when this column has been set (not necessarily 'changed')
 	private $_onBeforeValueChanged; //callbacks to be fired before this column has been changed
@@ -438,7 +480,7 @@ class SmartCell{
 	 * </code>
 	 * @param mixed $callbackFunction the name of the function to callback that exists within the given $functionScope
 	 * @param mixed $functionScope [optional] the scope of the $callbackFunction, this may be an instance reference (a class that the function is within), a string that specifies the name of a class (that contains the static $callbackFunction), , or NULL if the function is in global scope
-	*/
+	 */
 	public function OnSetValue($callbackFunction, $functionScope=null){
 		if(!$functionScope){
 			$this->_onSetValue[] = $callbackFunction;
@@ -462,7 +504,7 @@ class SmartCell{
 	 * </code>
 	 * @param mixed $callbackFunction the name of the function to callback that exists within the given $functionScope
 	 * @param mixed $functionScope [optional] the scope of the $callbackFunction, this may be an instance reference (a class that the function is within), a string that specifies the name of a class (that contains the static $callbackFunction), , or NULL if the function is in global scope
-	*/
+	 */
 	public function OnBeforeValueChanged($callbackFunction, $functionScope=null){
 		if(!$functionScope){
 			$this->_onBeforeValueChanged[] = $callbackFunction;
@@ -485,7 +527,7 @@ class SmartCell{
 	 * </code>
 	 * @param mixed $callbackFunction the name of the function to callback that exists within the given $functionScope
 	 * @param mixed $functionScope [optional] the scope of the $callbackFunction, this may be an instance reference (a class that the function is within), a string that specifies the name of a class (that contains the static $callbackFunction), , or NULL if the function is in global scope
-	*/
+	 */
 	public function OnAfterValueChanged($callbackFunction, $functionScope=null){
 		if(!$functionScope) {
 			$this->_onAfterValueChanged[] = $callbackFunction;
@@ -495,7 +537,7 @@ class SmartCell{
 		}
 	}
 
-/////////////////////////////// FORM STUFF ///////////////////////////////////
+	/////////////////////////////// FORM STUFF ///////////////////////////////////
 	/**
 	 * Returns a string of HTML representing a form textbox object for this Cell.
 	 * @param string $formObjectType [optional] Will use the column's default form object type if not specified or NULL. Can be: "text" | "password" | "checkbox" | "select" | "textarea" | "hidden"
@@ -559,19 +601,15 @@ class SmartCell{
 		}
 		else $options = $defaultOptions;
 
-
-		//get formatted $value
-		if($this->IsDateColumn) //date column
-			$value = $this->GetValue(false);
-		else $value = $this->GetValue(true,true);
-
+		//get formatted $currentValue
+		$currentValue = htmlspecialchars($this->GetRawValue()); 
 
 		//ATTRIBS
 		$defaultAttribs = array(
 			'id'=>$this->GetDefaultFormObjectId(),
 			'name'=>$this->GetDefaultFormObjectName(),
 			'class'=>'inputText',
-			'value'=>$value,
+			'value'=>$currentValue,
 			'size'=>$this->GetMaxLength(),
 			'maxlength'=>$this->GetMaxLength(),
 			'disabled'=>(!$this->AllowSet ? 'disabled' : null),
@@ -622,8 +660,7 @@ class SmartCell{
 
 		//get formatted value
 		$pwd = $this->GetValue();
-		if (!empty($pwd))
-			$pwd = $this->FakePasswordFormObjectValue;
+		if ($pwd) $pwd = $this->FakePasswordFormObjectValue;
 		else $pwd = "";
 
 
@@ -637,20 +674,20 @@ class SmartCell{
 			'maxlength'=>$this->GetMaxLength(),
 			'disabled'=>(!$this->AllowSet ? 'disabled' : null),
 			'autocomplete'=>'off'
-		);
-		if(is_array($customAttribs)){ //overwrite $defaultAttribs with any $customAttribs specified
-			$customAttribs = array_change_key_case($customAttribs, CASE_LOWER);
-			$customAttribs = array_merge($defaultAttribs, $customAttribs);
-		}
-		else $customAttribs = $defaultAttribs;
+			);
+			if(is_array($customAttribs)){ //overwrite $defaultAttribs with any $customAttribs specified
+				$customAttribs = array_change_key_case($customAttribs, CASE_LOWER);
+				$customAttribs = array_merge($defaultAttribs, $customAttribs);
+			}
+			else $customAttribs = $defaultAttribs;
 
-		//formatter callback
-		if($options['custom-formatter-callback']) $customAttribs['value'] = call_user_func($options['custom-formatter-callback'], $customAttribs['value']);
+			//formatter callback
+			if($options['custom-formatter-callback']) $customAttribs['value'] = call_user_func($options['custom-formatter-callback'], $customAttribs['value']);
 
-		$attribsHtml = $this->BuildAttribsHtml($customAttribs);
-		$formObjHtml = '<input type="password"'.$attribsHtml.'>';
-		if($options['show-required-marker']) $formObjHtml .= '<span class="formFieldRequiredMarker">*</span>';
-		return $formObjHtml;
+			$attribsHtml = $this->BuildAttribsHtml($customAttribs);
+			$formObjHtml = '<input type="password"'.$attribsHtml.'>';
+			if($options['show-required-marker']) $formObjHtml .= '<span class="formFieldRequiredMarker">*</span>';
+			return $formObjHtml;
 	}
 
 
@@ -681,10 +718,11 @@ class SmartCell{
 
 
 		//get formatted $value
-		$currentValue = $this->GetValue();
+		$currentValue = $this->GetValue(); //don't get the raw value
 		$checked = null;
 		if($currentValue && ($currentValue!=="\0")){
 			$checked = 'checked';
+			$currentValue = $this->GetRawValue();
 		}
 		else $currentValue = "1";
 
@@ -720,7 +758,7 @@ class SmartCell{
 			'class'=>'inputHidden',
 			'value'=>'0',
 			'disabled'=>(!$this->AllowSet ? 'disabled' : null),
-			'checked'=>($this->GetValue()==true ? 'checked' : null)
+			'checked'=>($this->GetValue() ? 'checked' : null)
 		);
 		if(is_array($hiddenNotifierCustomAttribs)){ //overwrite $defaultAttribs with any $customAttribs specified
 			$hiddenNotifierCustomAttribs = array_change_key_case($hiddenNotifierCustomAttribs, CASE_LOWER);
@@ -784,14 +822,13 @@ class SmartCell{
 		//OPTIONS
 		if($this->IsRequired==false && $options['print-empty-option']){
 			$formObjHtml .= '<option value=""';
-			$value = $this->GetValue();
-			if( $value=="" && !$options['force-selected-key'] ) { $formObjHtml .= ' selected="selected"'; }
+			$value = $this->GetRawValue();
+			if( !$value && !$options['force-selected-key'] ) { $formObjHtml .= ' selected="selected"'; }
 			$formObjHtml.='> </option>';
 		}
-
-		if($this->IsDateColumn) //date column
-			$currentValue = $this->GetValue(false);
-		else $currentValue = $this->GetValue(true,true);
+		
+		//get formatted $currentValue
+		$currentValue = htmlspecialchars($this->GetRawValue()); 
 
 		if(count($keyValuePairs)>0){
 			foreach ($keyValuePairs as $key => $value){
@@ -824,10 +861,8 @@ class SmartCell{
 	 * @return string string of HTML representing a form textarea input object for this cell
 	 */
 	public function GetTextareaFormObject(array $customAttribs=null, array $options=null){
-		//get formatted value
-		if($this->IsDateColumn) //date column
-			$currentValue = $this->GetValue(false);
-		else $currentValue = $this->GetValue(true,true);
+		//get formatted $currentValue
+		$currentValue = htmlspecialchars($this->GetRawValue()); 
 
 		//OPTIONS
 		$defaultOptions = array( //default options
@@ -878,26 +913,23 @@ class SmartCell{
 	public function GetHiddenFormObject(array $customAttribs=null, array $options=null){
 		//OPTIONS
 		/*
-		$defaultOptions = array( //default options
-		);
-		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
+		 $defaultOptions = array( //default options
+		 );
+		 if(is_array($options)){ //overwrite $defaultOptions with any $options specified
 			$options = array_merge($defaultOptions, $options);
-		}
-		else $options = $defaultOptions;
-		*/
+			}
+			else $options = $defaultOptions;
+			*/
 
-		//get formatted $value
-		if($this->IsDateColumn) //date column
-			$value = $this->GetValue(false);
-		else $value = $this->GetValue(true,true);
-
+		//get formatted $currentValue
+		$currentValue = htmlspecialchars($this->GetRawValue()); 
 
 		//ATTRIBS
 		$defaultAttribs = array(
 			'id'=>$this->GetDefaultFormObjectId(),
 			'name'=>$this->GetDefaultFormObjectName(),
 			'class'=>'inputHidden',
-			'value'=>$value,
+			'value'=>$currentValue,
 			'disabled'=>(!$this->AllowSet ? 'disabled' : null),
 		);
 		if(is_array($customAttribs)){ //overwrite $defaultAttribs with any $customAttribs specified
@@ -949,11 +981,11 @@ class SmartCell{
 		}
 		else $options = $defaultOptions;
 
-		$currentValue = $this->GetValue();
+		$currentValue = htmlspecialchars($this->GetRawValue()); 
 		$formValue = htmlspecialchars($formValue);
 
 		$checked=null;
-		if ($options['force-checked'] || ($currentValue==$formValue) || ($currentValue=="" && $options['checked-if-null'])){
+		if ($options['force-checked'] || ($currentValue==$formValue) || (!$currentValue && $options['checked-if-null'])){
 			$checked='checked';
 		}
 
@@ -984,7 +1016,7 @@ class SmartCell{
 		if ($options['label-position']!="right") return $labelTag.' '.$formObjHtml;
 		else return $formObjHtml.' '.$labelTag;
 	}
-	
+
 	/**
 	 * Strips out and returns any characters that are not valid for use as an HTML ID attribute
 	 * @param $str string The string to cleanup
@@ -1026,19 +1058,15 @@ class SmartCell{
 		}
 		else $options = $defaultOptions;
 
-
-		//get formatted $value
-		if($this->IsDateColumn) //date column
-			$value = $this->GetValue(false);
-		else $value = $this->GetValue(true,true);
-
+		//get formatted $currentValue
+		$currentValue = htmlspecialchars($this->GetRawValue()); 
 
 		//ATTRIBS
 		$defaultAttribs = array(
 			'id'=>$this->GetDefaultFormObjectId(),
 			'name'=>$this->GetDefaultFormObjectName(),
 			'class'=>'inputText inputColorpicker',
-			'value'=>$value,
+			'value'=>$currentValue,
 			'size'=>$this->GetMaxLength(),
 			'maxlength'=>$this->GetMaxLength(),
 			'disabled'=>(!$this->AllowSet ? 'disabled' : null),
@@ -1082,19 +1110,15 @@ class SmartCell{
 		}
 		else $options = $defaultOptions;
 
-
-		//get formatted $value
-		if($this->IsDateColumn) //date column
-			$value = $this->GetValue(false);
-		else $value = $this->GetValue(true,true);
-
+		//get formatted $currentValue
+		$currentValue = htmlspecialchars($this->GetRawValue()); 
 
 		//ATTRIBS
 		$defaultAttribs = array(
 			'id'=>$this->GetDefaultFormObjectId(),
 			'name'=>$this->GetDefaultFormObjectName(),
 			'class'=>'inputText inputDatepicker',
-			'value'=>$value,
+			'value'=>$currentValue,
 			'size'=>$this->GetMaxLength(),
 			'maxlength'=>$this->GetMaxLength(),
 			'disabled'=>(!$this->AllowSet ? 'disabled' : null),
@@ -1138,19 +1162,15 @@ class SmartCell{
 		}
 		else $options = $defaultOptions;
 
-
-		//get formatted $value
-		if($this->IsDateColumn) //date column
-			$value = $this->GetValue(false);
-		else $value = $this->GetValue(true,true);
-
+		//get formatted $currentValue
+		$currentValue = htmlspecialchars($this->GetRawValue());
 
 		//ATTRIBS
 		$defaultAttribs = array(
 			'id'=>$this->GetDefaultFormObjectId(),
 			'name'=>$this->GetDefaultFormObjectName(),
 			'class'=>'inputText inputSlider',
-			'value'=>$value,
+			'value'=>$currentValue,
 			'size'=>$this->GetMaxLength(),
 			'maxlength'=>$this->GetMaxLength(),
 			'disabled'=>(!$this->AllowSet ? 'disabled' : null),
@@ -1213,7 +1233,7 @@ class SmartCell{
 		return '<label for="'.$options['for-form-obj-name'].'">'.$options['prefix'].$options['label-text'].$options['suffix'].'</label>';
 	}
 
-/////////////////////////////// INPUT VALIDATION ///////////////////////////////////
+	/////////////////////////////// INPUT VALIDATION ///////////////////////////////////
 	/**
 	 * Returns a string of current errors that exist within this cell, or FALSE if no errors were found
 	 * The row should not be committed until there are no more errors on any cell of the row
@@ -1225,7 +1245,7 @@ class SmartCell{
 	 * </code>
 	 * @param array $options [optional] See description.
 	 * @returns mixed A string of current errors that exist within this cell, or FALSE if no errors were found
-	*/
+	 */
 	public function HasErrors(array $options=null){
 		$defaultOptions = array( //default options
 			"error-message-suffix"=>"<br>\n",
@@ -1235,7 +1255,7 @@ class SmartCell{
 		}
 		else $options = $defaultOptions;
 
-		$value = $this->GetValue();
+		$value = $this->GetRawValue();
 
 		if ($this->IsPrimaryKey && $options['ignore-key-errors']) return false;
 		if($options['only-verify-set-cells'] && !isset($value)) return false;
@@ -1243,7 +1263,7 @@ class SmartCell{
 		$errors = false;
 
 		if($this->PossibleValues){ //need to validate that the value is valid (mostly for enumerations)
-		 	//for mysql, enum has null and "" as separate valid values and "" is ALWAYS valid... wtf? make it so "" and null are equal and always valid. will be caught later if null is not allowed
+			//for mysql, enum has null and "" as separate valid values and "" is ALWAYS valid... wtf? make it so "" and null are equal and always valid. will be caught later if null is not allowed
 			if($value !== '0' && !$value){
 				$value = null;
 			}
@@ -1258,7 +1278,7 @@ class SmartCell{
 		}
 
 		if ($this->IsRequired){
-			//int 0 is different from "0" (http://php.net/manual/en/types.comparisons.php). int 0 will consider the column as set for all datatypes except binary 
+			//int 0 is different from "0" (http://php.net/manual/en/types.comparisons.php). int 0 will consider the column as set for all datatypes except binary
 			//so.. if the column is binary and the value is int 0, this is an error. if the column is anything else besides binary, this is NOT an error
 			$dontAllowZero = ($this->Column->DataType == "binary");
 			$valueIsZero = ($value === 0 || $value === "0");
@@ -1311,7 +1331,11 @@ class SmartCell{
 					$numRowsFound = $dbManager->Select(array("*"), $this->Table, array( array($this->ColumnName => $value) ), '', 1);
 					if ($numRowsFound > 0 ){
 						if(!$this->Row->Exists()){ //$this row doesnt exist, so the found value is in use in another row
-							$errors .= "Selected '{$this->DisplayName}' (".$this->GetValue(true,true).") is already in use. Please select another value.";
+							
+							//get formatted $currentValue
+							$currentValue = htmlspecialchars($this->GetRawValue()); 
+							
+							$errors .= "Selected '{$this->DisplayName}' (".$currentValue.") is already in use. Please select another value.";
 							$errors .= $options['error-message-suffix'];
 						}
 						else if($this->Table->PrimaryKeyExists()){ //$this row does exist. see if the found value is part of $this row by comparing key column(s)
@@ -1320,13 +1344,17 @@ class SmartCell{
 							foreach($keyColumns as $columnName=>$Column){
 								if($row[$columnName] != $this->Row->Cell($columnName)->GetValue()){
 									//found row is not $this row, so found value is in use in another row
-									$errors .= "Selected '{$this->DisplayName}' (".$this->GetValue(true,true).") is already in use. Please select another value.";
+									
+									//get formatted $currentValue
+									$currentValue = htmlspecialchars($this->GetRawValue()); 
+									
+									$errors .= "Selected '{$this->DisplayName}' (".$currentValue.") is already in use. Please select another value.";
 									$errors .= $options['error-message-suffix'];
 									break;
 								}
 							}
 						} else {
-						//no other way to automatically determine if the found value is part of this row. leave it to the programmer/mysql errors for duplicates
+							//no other way to automatically determine if the found value is part of this row. leave it to the programmer/mysql errors for duplicates
 						}
 					}
 				}

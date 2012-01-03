@@ -212,10 +212,18 @@ function AssertNotExists($i){
 function AssertCellVal($c, $value){
 	if(!$c) throw new Exception("Column not set");
 	$rowVal = $c->GetValue();
-	if($rowVal !== $value) throw new Exception("Row value '$rowVal' (".gettype($rowVal).") doensn't match '$value' (".gettype($value).")");
-
-	$rowVal = $c(); //GetValue() shortcut, new with PHP 5.3.0
-	if($rowVal !== $value) throw new Exception("Row value '$rowVal' (".gettype($rowVal).") doensn't match '$value' (".gettype($rowVal).") when using GetValue shortcut");
+	
+	if(is_object($rowVal) || is_object($value)){ //check objects
+		if( (is_object($rowVal) && !is_object($value)) || (!is_object($rowVal) && is_object($value)) ){
+			throw new Exception("Row value '$rowVal' (".gettype($rowVal).") doensn't match '$value' (".gettype($value).")");
+		}
+	}
+	else{ //not object
+		if($rowVal !== $value) throw new Exception("Row value '$rowVal' (".gettype($rowVal).") doensn't match '$value' (".gettype($value).")");
+	
+		$rowVal = $c(); //GetValue() shortcut, new with PHP 5.3.0
+		if($rowVal !== $value) throw new Exception("Row value '$rowVal' (".gettype($rowVal).") doensn't match '$value' (".gettype($rowVal).") when using GetValue shortcut");
+	}
 }
 function Commit($i,$debug){
 	if($debug) echo "<br>Before commit: <br>\n".$i;
@@ -1170,11 +1178,23 @@ function Test16($t, $debug=false){
 	if($val != 0) Ex("Invalid count-distinct: '$val' != 0");
 }
 
+class TestClass{
+	public $x = 0;
+	public $y = "\\1";
+	public $z = "some quote's\"";
+	public $a = null;
+	public function __toString(){
+		return "TestClass object";
+	}
+}
+
 //types
 function Test17($t, $debug=false){
 	$db = $t['database'];
 	
 	//---- CHECK EXACT DATA TYPES AFTER COMMIT ----
+		$testClass = new TestClass();
+		
 		$row = $db['AllDataTypes']->GetNewRow();
 		$row['char'] = 'char';
 		$row['varchar'] = 'varchar';
@@ -1199,6 +1219,11 @@ function Test17($t, $debug=false){
 		$row['binary'] = '1';
 		$row['binary8'] = 'abcd1234'; //gets padded with null characters (\0) to the length of the column
 		$row['enum'] = 'Option 2';
+		$row['array'] = array();
+		$row['object'] = null;
+		$row['array-notnull'] = array(1,2,3);
+		$row['object-notnull'] = $testClass;
+		
 	
 		AssertIsDirty($row);
 		Commit($row,$debug);
@@ -1229,6 +1254,10 @@ function Test17($t, $debug=false){
 		AssertCellVal($row['binary'], '1');
 		AssertCellVal($row['binary8'], 'abcd1234');
 		AssertCellVal($row['enum'], 'Option 2');
+		AssertCellVal($row['array'], array());
+		AssertCellVal($row['object'], null);
+		AssertCellVal($row['array-notnull'], array(1,2,3));
+		AssertCellVal($row['object-notnull'], $testClass);
 	
 		Delete($row,$debug);
 	
@@ -1251,6 +1280,8 @@ function Test17($t, $debug=false){
 		$row['double'] = '056.780';
 		$row['decimal'] = '0100.0010';
 		$row['binary'] = true;
+		$row['array-notnull'] = array('1'=>11,'a2'=>'a"33','b'=>"b'z\\4");
+		$row['object-notnull'] = $testClass;
 	
 		AssertIsDirty($row);
 		Commit($row,$debug);
@@ -1275,6 +1306,8 @@ function Test17($t, $debug=false){
 		AssertCellVal($row['double'], 56.78);
 		AssertCellVal($row['decimal'], 100.001);
 		AssertCellVal($row['binary'], '1');
+		AssertCellVal($row['array-notnull'], array('1'=>11,'a2'=>'a"33','b'=>"b'z\\4"));
+		AssertCellVal($row['object-notnull'], $testClass);
 	
 		Delete($row,$debug);
 		
@@ -1303,6 +1336,9 @@ function Test17($t, $debug=false){
 		$row['binary'] = '1';
 		$row['binary8'] = 'abcd1234'; //gets padded with null characters (\0) to the length of the column
 		$row['enum'] = 'Option 2';
+		$row['array-notnull'] = array('1'=>11,'a2'=>'a"33','b'=>"b'z\\4");
+		$row['object-notnull'] = $testClass;
+		
 	
 		AssertIsDirty($row);
 
@@ -1349,6 +1385,8 @@ function Test17($t, $debug=false){
 		$row['double'] = '056.780';
 		$row['decimal'] = '0100.0010';
 		$row['binary'] = true;
+		$row['array-notnull'] = array('1'=>11,'a2'=>'a"33','b'=>"b'z\\4");
+		$row['object-notnull'] = $testClass;
 		
 		AssertIsDirty($row);
 		
@@ -1380,6 +1418,8 @@ function Test17($t, $debug=false){
 		$row['bigint'] = 0;
 		$row['binary'] = 0;
 		$row['binaryreq'] = 0; //error
+		$row['array-notnull'] = array('1'=>11,'a2'=>'a"33','b'=>"b'z\\4");
+		$row['object-notnull'] = $testClass;
 		if(count($row->GetColumnsInError())!=1) Ex('wrong number of cells in error');
 		if(!$row['binaryreq']->HasErrors()) Ex('binary field should be required!');
 
@@ -1391,6 +1431,8 @@ function Test17($t, $debug=false){
 		$row['bigint'] = "0";
 		$row['binary'] = "0";
 		$row['binaryreq'] = "0"; //error
+		$row['array-notnull'] = array('1'=>11,'a2'=>'a"33','b'=>"b'z\\4");
+		$row['object-notnull'] = $testClass;
 		if(count($row->GetColumnsInError())!=1) Ex('wrong number of cells in error');
 		if(!$row['binaryreq']->HasErrors()) Ex('binary field should be required!');
 		
@@ -1402,6 +1444,8 @@ function Test17($t, $debug=false){
 		$row['bigint'] = false;
 		$row['binary'] = false;
 		$row['binaryreq'] = false; //error
+		$row['array-notnull'] = array('1'=>11,'a2'=>'a"33','b'=>"b'z\\4");
+		$row['object-notnull'] = $testClass;
 		if(count($row->GetColumnsInError())!=2) Ex('wrong number of cells in error');
 		if($row['int']->HasErrors()) Ex('int field should not have errors!');
 		
@@ -1413,6 +1457,8 @@ function Test17($t, $debug=false){
 		$row['bigint'] = null;
 		$row['binary'] = null;
 		$row['binaryreq'] = null; //error
+		$row['array-notnull'] = array('1'=>11,'a2'=>'a"33','b'=>"b'z\\4");
+		$row['object-notnull'] = $testClass;
 		if(count($row->GetColumnsInError())!=3) Ex('wrong number of cells in error');
 		
 		//test 5
@@ -1423,6 +1469,8 @@ function Test17($t, $debug=false){
 		$row['bigint'] = "";
 		$row['binary'] = "";
 		$row['binaryreq'] = ""; //error
+		$row['array-notnull'] = array('1'=>11,'a2'=>'a"33','b'=>"b'z\\4");
+		$row['object-notnull'] = $testClass;
 		if(count($row->GetColumnsInError())!=3) Ex('wrong number of cells in error');
 		
 		//test 6
@@ -1433,6 +1481,8 @@ function Test17($t, $debug=false){
 		$row['bigint'] = true;
 		$row['binary'] = true;
 		$row['binaryreq'] = true; //1 - ok
+		$row['array-notnull'] = array('1'=>11,'a2'=>'a"33','b'=>"b'z\\4");
+		$row['object-notnull'] = $testClass;
 		if(count($row->GetColumnsInError())!=0) Ex('wrong number of cells in error');
 		
 		//test 7
@@ -1443,6 +1493,8 @@ function Test17($t, $debug=false){
 		$row['bigint'] = "1";
 		$row['binary'] = "1";
 		$row['binaryreq'] = "1"; //1 - ok
+		$row['array-notnull'] = array('1'=>11,'a2'=>'a"33','b'=>"b'z\\4");
+		$row['object-notnull'] = $testClass;
 		if(count($row->GetColumnsInError())!=0) Ex('wrong number of cells in error');
 	
 	//--- TEST LOOKUP ASSOC WITH TYPES
@@ -1471,7 +1523,8 @@ function Test17($t, $debug=false){
 		$row['time'] = '16:20:01';
 		$row['binary8'] = null;
 		$row['enum'] = 'Option 2';
-	
+		$row['array-notnull'] = array('1'=>11,'a2'=>'a"33','b'=>"b'z\\4");
+		$row['object-notnull'] = $testClass;
 		AssertIsDirty($row);
 		Commit($row,$debug);
 		
@@ -1521,6 +1574,8 @@ function Test17($t, $debug=false){
 		$row['decimal'] = true;
 		$row['binary'] = 1;
 		$row['binaryreq'] = true; 
+		$row['array-notnull'] = array('1'=>11,'a2'=>'a"33','b'=>"b'z\\4");
+		$row['object-notnull'] = $testClass;
 		Commit($row,$debug);
  
 		//lookup1 - same data as insert

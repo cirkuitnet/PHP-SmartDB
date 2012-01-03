@@ -29,6 +29,7 @@ class SmartColumn{
 				'DataType',
 				'Collation',
 				'IsDateColumn',
+				'IsSerializedColumn',
 				'PossibleValues',
 				'MinSize',
 				'MaxSize',
@@ -83,6 +84,10 @@ class SmartColumn{
 	 * @var bool True if this is a date column, false otherwise. Should be computed based of the $DataType
 	 */
 	public $IsDateColumn;
+	/**
+	 * @var bool True if this is a serialized or compressed column, false otherwise. Should be computed based of the $DataType
+	 */
+	public $IsSerializedColumn;
 	/**
 	 * @var array An array of all possible values that this column accepts. null or empty array means no values are restricted. In theory, the column does NOT have to be an 'enum' data type for this to work... it will work with any column data type... but why would you do that?
 	 */
@@ -385,7 +390,11 @@ class SmartColumn{
 
 			$returnVals = array();
 			while ($row = $dbManager->FetchAssoc()) {
-				$returnVals[$row[$keyColumnName]]=$row[$this->ColumnName];
+				$colValue = $row[$this->ColumnName];
+				if($this->IsSerializedColumn){ //unserialize serialized values
+					$colValue = $this->GetUnserializedValue($colValue); 
+				}
+				$returnVals[$row[$keyColumnName]] = $colValue;
 			}
 			return $returnVals;
 		}
@@ -398,7 +407,11 @@ class SmartColumn{
 
 			$returnVals = array();
 			while ($row = $dbManager->FetchAssoc()) {
-				$returnVals[]=$row[$this->ColumnName];
+				$colValue = $row[$this->ColumnName];
+				if($this->IsSerializedColumn){ //unserialize serialized values
+					$colValue = $this->GetUnserializedValue($colValue); 
+				}
+				$returnVals[] = $colValue;
 			}
 			return $returnVals;
 		}
@@ -437,6 +450,7 @@ class SmartColumn{
 	 * @see SmartColumn::GetMinValue()
 	 */
 	public function GetAggregateValue($aggregateFunction, array $lookupAssoc=null, array $options=null){
+		if($this->IsSerializedColumn) throw new Exception("Function '".__FUNCTION__."' does not work with serialized column types (array or object) (table: {$this->Table->TableName}, column: {$this->ColumnName})");
 		$aggregateFunction = strtolower($aggregateFunction);
 		switch($aggregateFunction){
 			//MySQL reference - http://dev.mysql.com/doc/refman/5.0/en/group-by-functions.html
@@ -497,6 +511,9 @@ class SmartColumn{
 		if($this->Table->PrimaryKeyIsComposite()) throw new Exception("Function '".__FUNCTION__."' not yet implemented for composite keys.");
 		$keyColumnNames = array_keys($this->Table->GetKeyColumns());
 		$keyColumnName = $keyColumnNames[0];
+		
+		//normalize serialized data
+		if($this->IsSerializedColumn) $value = $this->GetSerializedValue($value);
 
 		$limit = trim($options['limit']);
 		$inputSortByFinal = $this->Table->BuildSortArray($options['sort-by']);
@@ -564,6 +581,9 @@ class SmartColumn{
 	public function LookupRow($value){
 		if(!$this->Table->PrimaryKeyExists()) throw new Exception("Function '".__FUNCTION__."' only works on Tables that contain a primary key");
 		if(!$this->IsUnique) throw new Exception("Function '".__FUNCTION__."' only works on columns specified as Unique.");
+		
+		//normalize serialized data
+		if($this->IsSerializedColumn) $value = $this->GetSerializedValue($value);
 
 		//table must have a single primary key column
 		if($this->Table->PrimaryKeyIsComposite()) throw new Exception("Function '".__FUNCTION__."' not yet implemented for composite keys.");
@@ -629,6 +649,10 @@ class SmartColumn{
 	public function DeleteRows($value){
 		$dbManager = $this->Table->Database->DbManager;
 		if(!$dbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
+
+		//normalize serialized data
+		if($this->IsSerializedColumn) $value = $this->GetSerializedValue($value);
+		
 		return $dbManager->Delete($this->Table, array(array($this->ColumnName=>$value)), '', array('add-column-quotes'=>true, 'add-dot-notation'=>true));
 	}
 	/**
@@ -647,10 +671,84 @@ class SmartColumn{
 	 * @return int the number of rows affected
 	 */
 	public function SetAllValues($value){
-		if($this->IsUnique || $this->IsPrimaryKey) throw new Exception("Cannot clear all values for a column specified as Unique or Primary Key (table: {$this->Table->TableName}, column: {$this->ColumnName})");
+		if($this->IsUnique || $this->IsPrimaryKey) throw new Exception("Cannot set all values for a column specified as Unique or Primary Key (table: {$this->Table->TableName}, column: {$this->ColumnName})");
 		$dbManager = $this->Table->Database->DbManager;
 		if(!$dbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
+		
+		//may need to serialize the $value data
+		if($this->IsSerializedColumn){
+			$value = $this->GetSerializedValue($value);
+		}
+		
 		return $dbManager->Update($this->Table, array($this->ColumnName=>$value), '', '', array('add-column-quotes'=>true, 'add-dot-notation'=>true));
+	}
+	
+/////////////////////////////// Serialize/Unserialize Array/Object functions ///////////////////////////////////
+	public function GetSerializedValue($value){
+		switch($this->DataType){
+			case 'array':
+				$value = self::SerializeArray($value);
+				break;
+
+			case 'object':
+				$value = self::SerializeObject($value);
+				break;
+		}
+		return $value;
+	}
+	
+	public function GetUnserializedValue($value){
+		switch($this->DataType){
+			case 'array':
+				$value = self::UnserializeArray($value);
+				break;
+
+			case 'object':
+				$value = self::UnserializeObject($value);
+				break;
+		}
+		return $value;
+	}
+	
+	public static function SerializeArray($array){
+		if(!$array) $array = null; //force null if nothing is set. note, this includes an empty array
+		else if(!is_array($array)){ //verify array type
+			//not an array, though it may already be serialized. test it
+			$arrayValue = @unserialize($array); //returns false if not serialized
+			if($arrayValue === false || !is_array($arrayValue)){ //not valid array or serizlied array
+				return serialize(array($array)); //make the given $array valid. return the passed value as the only item in the serialized array
+			}
+		}
+		else $array = serialize($array);
+		return $array;
+	}
+	
+	public static function SerializeObject($object){
+		if(!$object) $object = null; //force null if nothing is set
+		else if(!is_object($object)){ //verify object type
+			//not an object, though it may already be serialized. test it
+			$objectValue = @unserialize($object); //returns false if not serialized
+			if($objectValue === false || !is_object($objectValue)){ //not valid object or serizlied object
+				throw new Exception("Value '$object' is not of object type, as expected.");
+			}
+		}
+		else $object = serialize($object);
+		return $object;
+	}
+	
+	public static function UnserializeArray($serializedArray){
+		if(!$serializedArray) return array(); //return empty array always instead of null
+		$arrayValue = @unserialize($serializedArray);
+		if($arrayValue===false || !is_array($arrayValue)){ //could not unserialize
+			return array($serializedArray); //return value as is, inside an array
+		}
+		return $arrayValue;
+	}
+	
+	public static function UnserializeObject($serializedObject){
+		if(!$serializedObject) return null;
+		$objValue = @unserialize($serializedObject);
+		return $objValue; 
 	}
 
 //////////////////////////// FORM STUFF //////////////////////////////////

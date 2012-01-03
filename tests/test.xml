@@ -69,6 +69,10 @@
 		<Field Name="binaryreq" DataType="binary" InputRequired="true" DefaultValue="1" />
 		<Field Name="binary8" DataType="binary" MaxSize="8" />
 		<Field Name="enum" DataType="enum('Option 1','Option 2','Option 3')" />
+		<Field Name="array" DataType="array" />
+		<Field Name="object" DataType="object" />
+		<Field Name="array-notnull" DataType="array" InputRequired="true" />
+		<Field Name="object-notnull" DataType="object" InputRequired="true" />
   	</Database>
   </Class>
 

@@ -378,7 +378,7 @@ class SmartRow implements ArrayAccess{
 				$passedVal = $this->GetPassedValueForCell($tableName, $columnName, $Cell, $keyColumnValuesAssoc);
 
 				//compare the passed key value to the current key value
-				if($Cell->GetValue() != $passedVal){
+				if($Cell->GetRawValue() != $passedVal){
 					$keyChanged = true;
 					break;
 				}
@@ -388,7 +388,7 @@ class SmartRow implements ArrayAccess{
 			$nullKeyFound = false;
 			foreach($this->_cells as $columnName=>$Cell){
 				if($Cell->IsPrimaryKey && !$Cell->IsAutoIncrement){ //only working with NON auto-increment key columns
-					if($Cell->GetValue() == null){
+					if($Cell->GetRawValue() == null){
 						$nullKeyFound = true;
 					}
 				}
@@ -606,7 +606,7 @@ class SmartRow implements ArrayAccess{
 		$keyColumnCount = 0;
 		foreach($this->_cells as $columnName=>$Cell){
 			if($Cell->IsValueSet()) {
-				$whereArray[0][$columnName] = $Cell->GetValue();
+				$whereArray[0][$columnName] = $Cell->GetRawValue();
 			}
 			if($Cell->IsPrimaryKey){
 				$selectArray[] = $columnName;
@@ -630,7 +630,7 @@ class SmartRow implements ArrayAccess{
 			//check if the 1 found row has the same key as $this row
 			$keyDiffers = false;
 			foreach($keyColumns as $columnName=>$Cell){
-				if($Cell->GetValue() !== $resultArray[$columnName]) {
+				if($Cell->GetRawValue() !== $resultArray[$columnName]) {
 					$keyDiffers = true;
 					break;
 				}
@@ -703,7 +703,7 @@ class SmartRow implements ArrayAccess{
 			if (count($this->Table->GetKeyColumns()) > 0) {
 				//if key is not set, don't lookup row
 				foreach($this->_cells as $columnName=>$Cell){
-					if($Cell->IsPrimaryKey && $Cell->GetValue()==null){
+					if($Cell->IsPrimaryKey && $Cell->GetRawValue()==null){
 						//primary key is not yet set in this row/table, so nothing is in the database to get.
 						$this->_initialized = true;
 						$this->_existsInDb = false;
@@ -715,7 +715,7 @@ class SmartRow implements ArrayAccess{
 			$whereArray = array();
 			foreach($this->_cells as $columnName=>$Cell){
 				if($Cell->IsPrimaryKey){
-					$whereArray[0][$columnName] = $Cell->GetValue();
+					$whereArray[0][$columnName] = $Cell->GetRawValue();
 				}
 			}
 			if(!$this->DbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
@@ -782,10 +782,10 @@ class SmartRow implements ArrayAccess{
 				$whereArray = array();
 				foreach($this->_cells as $columnName=>$Cell){
 					if(!$Cell->IsPrimaryKey && $Cell->AllowSet){
-						$updateVals[$columnName] = $Cell->GetValue();
+						$updateVals[$columnName] = $Cell->GetRawValue();
 					}
 					else if ($Cell->IsPrimaryKey) {
-						$whereArray[0][$columnName] = $Cell->GetValue();
+						$whereArray[0][$columnName] = $Cell->GetRawValue();
 					}
 				}
 
@@ -813,7 +813,7 @@ class SmartRow implements ArrayAccess{
 		$keyCells = array();
 		foreach($this->_cells as $columnName=>$Cell){
 			if($Cell->IsPrimaryKey && !$Cell->IsAutoIncrement){
-				if($Cell->GetValue() == null) throw new Exception("Non-AutoIncrement Key Column '{$columnName}' requires its value to be set before insertion to table");
+				if($Cell->GetRawValue() == null) throw new Exception("Non-AutoIncrement Key Column '{$columnName}' requires its value to be set before insertion to table");
 				$nonAutoIncrementKeyCells[$columnName] = $Cell;
 			}
 			else if(!$Cell->IsPrimaryKey && $Cell->AllowSet){
@@ -827,10 +827,10 @@ class SmartRow implements ArrayAccess{
 
 		$insertValsArray = array();
 		foreach ($nonAutoIncrementKeyCells as $columnName=>$Cell){
-			$insertValsArray[$columnName] = $Cell->GetValue();
+			$insertValsArray[$columnName] = $Cell->GetRawValue();
 		}
 		foreach ($settableNonKeyCells as $columnName=>$Cell){
-			$insertValsArray[$columnName] = $Cell->GetValue();
+			$insertValsArray[$columnName] = $Cell->GetRawValue();
 		}
 
 		if(!$this->DbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
@@ -878,7 +878,7 @@ class SmartRow implements ArrayAccess{
 			foreach($this->_cells as $columnName=>$Cell){
 				if(!$Cell->IsPrimaryKey) continue;
 
-				$whereArray[0][$columnName] = $Cell->GetValue();
+				$whereArray[0][$columnName] = $Cell->GetRawValue();
 				$keyCells[] = $Cell;
 			}
 

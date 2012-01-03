@@ -616,12 +616,15 @@ class DbManager_MySQL implements DbManager {
 	}
 
 	/**
-	 * Runs stripslashes() and mysql_real_escape_string() on the given $string and returns it.
-	 * @param string $string The string to run stripslashes() and mysql_real_escape_string() on.
-	 * @return string Runs stripslashes() and mysql_real_escape_string() on the given $string and returns it.
+	 * Runs mysql_real_escape_string() on the given $string and returns it.
+	 * @param string $string The string to run mysql_real_escape_string() on.
+	 * @return string Runs mysql_real_escape_string() on the given $string and returns it.
 	 */
 	public function EscapeString($string) {
-		$string = stripslashes($string);
+		//TODO: get rid of this completely and disable magic quotes: http://www.php.net/manual/en/info.configuration.php#ini.magic-quotes-gpc
+		if (get_magic_quotes_gpc()) { //DEPRECATED! will be removed in PHP 6
+			$string = stripslashes($string);
+		}
 		
 		if(!$this->_isConnected) $this->OpenConnection();
 		$string = mysql_real_escape_string($string,$this->_connection);
@@ -817,7 +820,17 @@ class DbManager_MySQL implements DbManager {
 			}
 			else $ret = $column." is null"; //'is null' for null
 		}
-		else $ret = "$column $condition ".$castQuoteVal;
+		else{ //value is not null
+			
+			//SPECIAL CASE FOR "LIKE" CONDITION - See http://dev.mysql.com/doc/refman/5.0/en/string-comparison-functions.html
+			//"To search for "\", specify it as "\\\\"; this is because the backslashes are stripped once by the
+			//parser and again when the pattern match is made, leaving a single backslash to be matched against." 
+			if($condition == "LIKE" || $condition == "NOT LIKE"){
+				$castQuoteVal = addcslashes($castQuoteVal, '\\\\');
+			}
+			
+			$ret = "$column $condition ".$castQuoteVal;
+		}
 		
 		//HACK-ish: MySQL doesn't recognize NULL as '!=' some value. we have to force null checking.
 		if($condition == "!=" && $castQuoteVal !== null){
@@ -904,7 +917,7 @@ class DbManager_MySQL implements DbManager {
 	}
 	
 	/**
-	 * Returns true if the given $value should be quoted when used in SQL queries (ie numerics versus strings)
+	 * Returns the given $value with appropriate casts and quotes for SQL queries
 	 * <code>
 	 * $options = array(
 	 * 	'quote-numerics' => false //for reverse compatibility. only used if $table is a string and not a SmartTable object
@@ -914,7 +927,7 @@ class DbManager_MySQL implements DbManager {
 	 * @param mixed $value The value to check for quote usage
 	 * @param string $column The column name this value is used for. Used for looking up the data type in the SmartDb
 	 * @param array $options [optional] Array of function options. See description.
-	 * @return boolean True if the given $value should be quoteded in SQL queries  (ie numerics versus strings)
+	 * @return mixed Returns the given $value with appropriate casts and quotes for SQL queries
 	 */
 	private function CastQuoteValue($table, $column, $value, $options=null){
 		/*
@@ -925,6 +938,11 @@ class DbManager_MySQL implements DbManager {
 		}
 		else $options = $defaultOptions;
 		*/
+				
+		//HACKish - handle SmartCells in case someone accidentally forgets to call ->GetValue() on the smart cell
+		if( is_object($value) && get_class($value)=="SmartCell" ){
+			$value = $value->GetRawValue();
+		}
 		
 		//null is null
 		if($value === null){
@@ -934,12 +952,6 @@ class DbManager_MySQL implements DbManager {
 		//if $table is not a string, it has to be a SmartTable object. we can use this to get the column type
 		if($table && !is_string($table)){
 			try{
-				
-				//HACKish - handle SmartCells in case someone accidentally forgets to call ->GetValue() on the smart cell
-				if( is_object($value) && get_class($value)=="SmartCell" ){
-					$value = $value->GetValue();
-				}
-				
 				//handle booleans.
 				$isBool = is_bool($value); 
 				if($isBool){ //boolean false is '\0'. make booleans default to 1 and 0
