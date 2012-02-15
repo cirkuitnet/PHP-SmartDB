@@ -20,16 +20,20 @@ require_once(dirname(__FILE__)."/DbManager.php");
 class DbManager_MySQL implements DbManager {
 
 	// Variables
+	protected $_connection;
+	protected $_lastResult;
+	protected $_databaseName;
 	private $_isConnected = false;
-	private $_connection;
-	private $_lastResult;
-	private $_databaseName;
 	private $_isDbSelected = false;
 
-	private $_server;
-	private $_user;
-	private $_password; //encrypted. use $this->GetPassword();
-	private $_connectParams;
+	protected $_server;
+	protected $_user;
+	protected $_password; //encrypted. use $this->GetPassword();
+	protected $_connectParams;
+
+	protected $_driver = 1; //default. see consts below
+	const MYSQL_DRIVER = 1;
+	const MYSQLI_DRIVER = 2;
 	
 	private $PHP_INT_MAX; //the PHP_INT_MAX constant doesnt work in some encrypters
 	private $PHP_INT_MAX_HALF;
@@ -49,6 +53,7 @@ class DbManager_MySQL implements DbManager {
 	 * 	'new_link'=>false,	//this is the 4th parameters for mysql_connect. see mysql_connect documentation
 	 * 	'client_flags'=>'',	//this is the 5th parameters for mysql_connect. see mysql_connect documentation
 	 * 	'charset'=>'',		//if set, OpenConnection does a mysql_set_charset() with the given option (ie 'utf8')
+	 * 	'driver'=>'mysql',	//can be 'mysql' or 'mysqli' - the PHP extension to use for sql interaction
 	 * );
 	 * </code>
 	 * @param string $server The server to connect to. Ex: "localhost"
@@ -62,12 +67,32 @@ class DbManager_MySQL implements DbManager {
 		$this->_server = $server;
 		$this->_user = $user;
 		$this->_databaseName = $databaseName;
+		
+		//set the db driver from options (mysql or mysqli)
+		$this->SetDriver($options['driver']);
+		unset($options['driver']);
+		
+		//the rest of the options are our connection params
 		$this->_connectParams = $options;
 		
 		$this->SetPassword($password);
 		
 		$this->PHP_INT_MAX = self::PHP_INT_MAX();
 		$this->PHP_INT_MAX_HALF = $this->PHP_INT_MAX/2;
+	}
+	
+	private function SetDriver($driver){
+		switch ($driver){
+			case '': //default
+			case 'mysql':
+				$this->_driver = self::MYSQL_DRIVER;
+				break;
+			case 'mysqli':
+				$this->_driver = self::MYSQLI_DRIVER;
+				break;
+			default:
+				throw new Exception("Invalid Driver - ".$driver);
+		}
 	}
 	
 	/**
@@ -105,16 +130,27 @@ class DbManager_MySQL implements DbManager {
 			return true;
 		}
 		try {
-			$this->_connection = mysql_connect($this->_server, $this->_user, $this->GetPassword(), $this->_connectParams['new_link'], $this->_connectParams['client_flags']);
+			if($this->_driver == self::MYSQL_DRIVER){ //-- mysql
+				$this->_connection = mysql_connect($this->_server, $this->_user, $this->GetPassword(), $this->_connectParams['new_link'], $this->_connectParams['client_flags']);
+			}
+			else{ //-- mysqli
+				$this->_connection = mysqli_connect($this->_server, $this->_user, $this->GetPassword());
+			}
+			
 			if(!$this->_connection) throw new Exception("Couldn't connect to the server. Please check your settings.");
 			
 			//see if a charset is set (ie "utf8");
 			if($this->_connectParams['charset']){
-				mysql_set_charset($this->_connectParams['charset'], $this->_connection);
+				if($this->_driver == self::MYSQL_DRIVER){ //-- mysql
+					mysql_set_charset($this->_connectParams['charset'], $this->_connection);
+				}
+				else{ //-- mysqli
+					mysqli_set_charset($this->_connection, $this->_connectParams['charset']);
+				}
 			}
 
 			if(!$options['skip-select-db']){
-				$this->SelectDatabase();			
+				$this->SelectDatabase();
 			}
 
 			$this->_isConnected = true;
@@ -134,12 +170,17 @@ class DbManager_MySQL implements DbManager {
 	 * @see DbManager_MySQL::OpenConnection() 
 	 */
 	public function CloseConnection() {
-		if($this->_isConnected){
+		if(!$this->_isConnected) return false;
+		
+		$this->FlushResults();
+		if($this->_driver == self::MYSQL_DRIVER){ //-- mysql
 			mysql_close($this->_connection);
-			$this->_isConnected = false;
-			return true;
 		}
-		return false;
+		else{ //-- mysqli
+			mysqli_close($this->_connection);
+		}
+		$this->_isConnected = false;
+		return true;
 	}
 
 	/**
@@ -174,7 +215,13 @@ class DbManager_MySQL implements DbManager {
 	private function SelectDatabase(){
 		if(!$this->_databaseName) throw new Exception("Database Name is not set.");
 		
-		$dbSelected = mysql_select_db($this->_databaseName, $this->_connection);
+		if($this->_driver == self::MYSQL_DRIVER){ //-- mysql
+			$dbSelected = mysql_select_db($this->_databaseName, $this->_connection);
+		}
+		else{ //-- mysqli
+			$dbSelected = mysqli_select_db($this->_connection, $this->_databaseName);
+		}
+		
 		if(!$dbSelected) throw new Exception("Couldn't select database '".$this->_databaseName."'. Please make sure it exists.");
 		
 		$this->_isDbSelected = true;			
@@ -408,6 +455,7 @@ class DbManager_MySQL implements DbManager {
 	 * $options = array(
 	 * 	'force-select-db' => false, //set to true if writing a query without dot notation (database.table.field) AND your app uses multiple databases with 1 connection (ie not using the 'new_link' flag on any database connection)
 	 * 	'skip-select-db' => false, //if true, will skip any call to mysql_select_db. good for creating databases and etc management
+	 * 	'multi-query' => false, //(NOT SUPPORTED WITH DRIVER 'mysql') - if true, will use mysqli_multi_query. use NextResult() to iterate through each query's result set. throws an exception on error
 	 * );
 	 * </code>
 	 * @param string $query The query to execute. Ex: "SELECT * FROM Customers WHERE CustomerId=1"
@@ -424,6 +472,9 @@ class DbManager_MySQL implements DbManager {
 		if($GLOBALS['SQL_DEBUG_MODE']){
 			echo "DbManager->Query - ".$query."<br>\n";	// Troubleshoot Query command
 		}
+		
+		//reset vars
+		$this->FlushResults();
 
 		if(!$this->_isConnected){
 			$this->OpenConnection(array(
@@ -434,14 +485,104 @@ class DbManager_MySQL implements DbManager {
 			$this->SelectDatabase();
 		}
 
-		$this->_lastResult = mysql_query($query, $this->_connection);
+		if($this->_driver == self::MYSQL_DRIVER){ //-- mysql
+			if($options['multi-query']){ //NOT SUPPORTED with mysql
+				throw new Exception("'multi-query' not supported with driver 'mysql' (use mysqli)");
+			}
+			$this->_lastResult = mysql_query($query, $this->_connection);
+		}
+		else{ //-- mysqli
+			if($options['multi-query']){
+				if( mysqli_multi_query($this->_connection, $query) ){
+					$this->_lastResult = mysqli_store_result($this->_connection);
+				}
+				if( mysqli_errno($this->_connection) ){
+					throw new Exception("Query(): Invalid multi-query: ".$this->Error()." - SQL: ".$query);
+				}
+				
+				//if last_result is false and there is no error, this could have been an insert. this is valid
+				if($this->_lastResult===false){
+					$this->_lastResult = true;
+				}
+			}
+			else{
+				//var_dump($query);
+				//var_dump($this->_connection);
+				$this->_lastResult = mysqli_query($this->_connection, $query);
+				//var_dump($this->_lastResult);
+			}
+		}
 
 		if (!$this->_lastResult) {
-			throw new Exception($this->Error()." SQL: ".$query);
+			throw new Exception("Query() Exception: ".$this->Error()." - SQL: ".$query);
 		}
 		return $this->_lastResult;
 	}
+	
+	/**
+	 * (NOT SUPPORT WITH DRIVER 'mysql') To be used with Query() and the 'multi-query' option set to true. This will get the result set of the next query in the batch from 'multi-query'. Use FetchAssoc* and FetchArray* functions to iterate over each result set of rows.
+	 * Returns true if the next result set is ready for use, false if there are no more result sets. throws an exception on error
+	 * @return mixed Returns true if the next result set is ready for use, false if there are no more result sets. throws an exception on error 
+	 */
+	public function NextResult(){
+		if(!$this->_isConnected) return false;
+		
+		if($this->_driver == self::MYSQL_DRIVER){ //-- mysql //NOT SUPPORTED with mysql
+			throw new Exception("NextResult() and 'multi-query' are not supported with driver 'mysql' (use mysqli)");
+		}
+		else{ //-- mysqli
+			$this->FreeResult();
+			if(mysqli_more_results($this->_connection)==false || mysqli_next_result($this->_connection)==false){
+				//no more results
+				return false;
+			}
+			$this->_lastResult = mysqli_store_result($this->_connection);
+			if( mysqli_errno($this->_connection) ){
+				throw new Exception("NextResult(): Invalid multi-query: ".$this->Error());
+			}
+			
+			//if last_result is false and there is no error, this could have been an insert. this is valid
+			if($this->_lastResult===false){
+				$this->_lastResult = true;
+			}
+			return $this->_lastResult;
+		}
+	}
+	
+	/**
+	 * clears remaining results of a multi-query result set. you must do this before you execute the next query.
+	 * see http://php.net/manual/en/mysqli.multi-query.php
+	 */
+	private function FlushResults(){
+		$this->FreeResult();
+		if(!$this->_isConnected) return false;
+		
+		if($this->_driver == self::MYSQL_DRIVER){ //-- mysql //NOT SUPPORTED with mysql
+			//throw new Exception("NextResult(), FlushResults(), and 'multi-query' are not supported with driver 'mysql' (use mysqli)");
+			return false;
+		}
+		else{ //-- mysqli
+			while(mysqli_more_results($this->_connection) && mysqli_next_result($this->_connection));
+			return true;
+		}		
+	}
 
+	/**
+	 * frees the current result set. mostly needed for multi-query statements
+	 */
+	private function FreeResult(){
+		if(is_resource($this->_lastResult)) {
+			if($this->_driver == self::MYSQL_DRIVER){ //-- mysql
+				mysql_free_result($this->_lastResult);
+			}
+			else{ //-- mysqli
+				mysqli_free_result($this->_lastResult);
+			}
+		}
+		$this->_lastResult = null;
+		return true;
+	}
+	
 	/**
 	 * Places the last query results into an array of ASSOC arrays, and returns it. Each row is an index in the array. Returns an empty array if there are no results.
 	 * Example:
@@ -539,8 +680,12 @@ class DbManager_MySQL implements DbManager {
 	 * @see DbManager_MySQL::NumRows()
 	 */
 	public function FetchAssoc() {
-		$array = mysql_fetch_assoc($this->_lastResult);
-		return $array;
+		if($this->_driver == self::MYSQL_DRIVER){ //-- mysql
+			return mysql_fetch_assoc($this->_lastResult);
+		}
+		else{ //-- mysqli
+			return mysqli_fetch_assoc($this->_lastResult);
+		}
 	}
 
 	/**
@@ -565,8 +710,12 @@ class DbManager_MySQL implements DbManager {
 	 * @see DbManager_MySQL::NumRows()
 	 */
 	public function FetchArray() {
-		$array = mysql_fetch_array($this->_lastResult);
-		return $array;
+		if($this->_driver == self::MYSQL_DRIVER){ //-- mysql
+			return mysql_fetch_array($this->_lastResult);
+		}
+		else{ //-- mysqli
+			return mysqli_fetch_array($this->_lastResult);
+		}
 	}
 
 	/**
@@ -579,8 +728,12 @@ class DbManager_MySQL implements DbManager {
 	 * @see DbManager_MySQL::Delete()
 	 */
 	public function NumRows() {
-		$rows = mysql_num_rows($this->_lastResult);
-		return $rows;
+		if($this->_driver == self::MYSQL_DRIVER){ //-- mysql
+			return mysql_num_rows($this->_lastResult);
+		}
+		else{ //-- mysqli
+			return mysqli_num_rows($this->_lastResult);
+		}
 	}
 
 	/**
@@ -588,8 +741,14 @@ class DbManager_MySQL implements DbManager {
 	 * @return string Returns the error text from the last MySQL function, or empty string ("")
 	 */
 	public function Error() {
-		if($this->_isConnected) return mysql_error($this->_connection);
-		else return false;
+		if(!$this->_isConnected) return false;
+	
+		if($this->_driver == self::MYSQL_DRIVER){ //-- mysql
+			return mysql_error($this->_connection);
+		}
+		else{ //-- mysqli
+			return mysqli_error($this->_connection);
+		} 
 	}
 
 	/**
@@ -597,8 +756,14 @@ class DbManager_MySQL implements DbManager {
 	 * @return int The ID generated for an AUTO_INCREMENT column by the previous query, or FALSE
 	 */
 	public function InsertId() {
-		if($this->_isConnected) return mysql_insert_id($this->_connection);
-		else return false;
+		if(!$this->_isConnected) return false;
+		
+		if($this->_driver == self::MYSQL_DRIVER){ //-- mysql
+			return mysql_insert_id($this->_connection);
+		}
+		else{ //-- mysqli
+			return mysqli_insert_id($this->_connection);
+		}
 	}
 
 	/**
@@ -611,23 +776,36 @@ class DbManager_MySQL implements DbManager {
 	 * @see DbManager_MySQL::Delete() 
 	 */
 	public function AffectedRows() {
-		if($this->_isConnected) return mysql_affected_rows($this->_connection);
-		else return false;
+		if(!$this->_isConnected) return false;
+		
+		if($this->_driver == self::MYSQL_DRIVER){ //-- mysql
+			return mysql_affected_rows($this->_connection);
+		}
+		else{ //-- mysqli
+			return mysqli_affected_rows($this->_connection);
+		}
 	}
 
 	/**
 	 * Runs mysql_real_escape_string() on the given $string and returns it.
 	 * @param string $string The string to run mysql_real_escape_string() on.
+	 * @param array $options [optional] These options are passed to OpenConnection()
 	 * @return string Runs mysql_real_escape_string() on the given $string and returns it.
 	 */
-	public function EscapeString($string) {
+	public function EscapeString($string, $options=null) {
 		//TODO: get rid of this completely and disable magic quotes: http://www.php.net/manual/en/info.configuration.php#ini.magic-quotes-gpc
 		if (get_magic_quotes_gpc()) { //DEPRECATED! will be removed in PHP 6
 			$string = stripslashes($string);
 		}
 		
-		if(!$this->_isConnected) $this->OpenConnection();
-		$string = mysql_real_escape_string($string,$this->_connection);
+		if(!$this->_isConnected) $this->OpenConnection($options);
+		
+		if($this->_driver == self::MYSQL_DRIVER){ //-- mysql
+			$string = mysql_real_escape_string($string,$this->_connection);
+		}
+		else{ //-- mysqli
+			$string = mysqli_real_escape_string($this->_connection, $string);
+		}
 		
 		return $string;
 	}
@@ -1021,11 +1199,13 @@ class DbManager_MySQL implements DbManager {
 	 */
 	public function DatabaseExists($databaseName){
 		if(!$databaseName) throw new Exception('$databaseName not set');
-
-		$sql = "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '".$this->EscapeString($databaseName)."'";
-		$this->Query($sql, array(
+		
+		$connectOptions = array(
 			"skip-select-db" => true
-		));
+		);
+
+		$sql = "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '".$this->EscapeString($databaseName, $connectOptions)."'";
+		$this->Query($sql, $connectOptions);
 		$results = $this->FetchAssocList();
 		return (count($results)>0);
 	}
@@ -1072,11 +1252,13 @@ class DbManager_MySQL implements DbManager {
 		if(!$databaseName) throw new Exception('$databaseName not set');
 		
 		if($this->DatabaseExists($databaseName)) return true; //database already exists
-
-		$sql = "CREATE DATABASE `".$this->EscapeString($databaseName)."`";
-		$this->Query($sql, array(
+		
+		$connectOptions = array(
 			"skip-select-db" => true
-		));
+		);
+
+		$sql = "CREATE DATABASE `".$this->EscapeString($databaseName, $connectOptions)."`";
+		$this->Query($sql, $connectOptions);
 		
 		if(!$this->DatabaseExists($databaseName)) return false; //database wasn't created
 		else return true; //database created
@@ -1090,11 +1272,13 @@ class DbManager_MySQL implements DbManager {
 		if(!$databaseName) throw new Exception('$databaseName not set');
 		
 		if(!$this->DatabaseExists($databaseName)) return true; //database doesn't exist to drop
-
-		$sql = "DROP DATABASE `".$this->EscapeString($databaseName)."`";
-		$this->Query($sql, array(
+		
+		$connectOptions = array(
 			"skip-select-db" => true
-		));
+		);
+
+		$sql = "DROP DATABASE `".$this->EscapeString($databaseName, $connectOptions)."`";
+		$this->Query($sql, $connectOptions);
 		
 		if($this->DatabaseExists($databaseName)) return false; //database still exists
 		else return true; //database doesn't exist anymore
@@ -1194,11 +1378,13 @@ class DbManager_MySQL implements DbManager {
 	public function UserExists($username, $host="localhost"){
 		if(!$username) throw new Exception('$username not set');
 		if(!$host) throw new Exception('$host not set');
-
-		$sql = "SELECT `User` FROM `mysql`.`user` WHERE `User`='".$this->EscapeString($username)."' AND `Host`='".$this->EscapeString($host)."'";
-		$this->Query($sql, array(
+		
+		$connectOptions = array(
 			"skip-select-db" => true
-		));
+		);
+
+		$sql = "SELECT `User` FROM `mysql`.`user` WHERE `User`='".$this->EscapeString($username, $connectOptions)."' AND `Host`='".$this->EscapeString($host, $connectOptions)."'";
+		$this->Query($sql, $connectOptions);
 		$results = $this->FetchAssocList();
 		return (count($results)>0);
 	}
@@ -1213,11 +1399,13 @@ class DbManager_MySQL implements DbManager {
 		if(!$username) throw new Exception('$username not set');
 		if(!$password) throw new Exception('$password not set');
 		if(!$host) throw new Exception('$host not set');
-
-		$sql = "CREATE USER '".$this->EscapeString($username)."'@'".$this->EscapeString($host)."' IDENTIFIED BY '".$this->EscapeString($password)."'";
-		$this->Query($sql, array(
+		
+		$connectOptions = array(
 			"skip-select-db" => true
-		));
+		);
+
+		$sql = "CREATE USER '".$this->EscapeString($username, $connectOptions)."'@'".$this->EscapeString($host, $connectOptions)."' IDENTIFIED BY '".$this->EscapeString($password, $connectOptions)."'";
+		$this->Query($sql, $connectOptions);
 		return $this->AffectedRows();
 	}
 	/**
@@ -1229,11 +1417,13 @@ class DbManager_MySQL implements DbManager {
 	public function DropUser($username, $host="localhost"){
 		if(!$username) throw new Exception('$username not set');
 		if(!$host) throw new Exception('$host not set');
-
-		$sql = "DROP USER '".$this->EscapeString($username)."'@'".$this->EscapeString($host)."'";
-		$this->Query($sql, array(
+		
+		$connectOptions = array(
 			"skip-select-db" => true
-		));
+		);
+
+		$sql = "DROP USER '".$this->EscapeString($username, $connectOptions)."'@'".$this->EscapeString($host, $connectOptions)."'";
+		$this->Query($sql, $connectOptions);
 		return $this->AffectedRows();
 	}
 	/**
@@ -1247,11 +1437,13 @@ class DbManager_MySQL implements DbManager {
 		if(!$databaseName) throw new Exception('$databaseName not set');
 		if(!$username) throw new Exception('$username not set');
 		if(!$host) throw new Exception('$host not set');
-
-		$sql = "GRANT ALL PRIVILEGES ON `".$this->EscapeString($databaseName)."`.* TO '".$this->EscapeString($username)."'@'".$this->EscapeString($host)."'";
-		$this->Query($sql, array(
+		
+		$connectOptions = array(
 			"skip-select-db" => true
-		));
+		);
+
+		$sql = "GRANT ALL PRIVILEGES ON `".$this->EscapeString($databaseName, $connectOptions)."`.* TO '".$this->EscapeString($username, $connectOptions)."'@'".$this->EscapeString($host, $connectOptions)."'";
+		$this->Query($sql, $connectOptions);
 		return $this->AffectedRows();
 	}
 	/**
@@ -1263,11 +1455,13 @@ class DbManager_MySQL implements DbManager {
 	public function GrantGlobalFilePermissions($username, $host="localhost"){
 		if(!$username) throw new Exception('$username not set');
 		if(!$host) throw new Exception('$host not set');
-
-		$sql = "GRANT FILE ON *.* TO '".$this->EscapeString($username)."'@'".$this->EscapeString($host)."'";
-		$this->Query($sql, array(
+		
+		$connectOptions = array(
 			"skip-select-db" => true
-		));
+		);
+
+		$sql = "GRANT FILE ON *.* TO '".$this->EscapeString($username, $connectOptions)."'@'".$this->EscapeString($host, $connectOptions)."'";
+		$this->Query($sql, $connectOptions);
 		return $this->AffectedRows();
 	}
 	/**
@@ -1281,11 +1475,13 @@ class DbManager_MySQL implements DbManager {
 		if(!$databaseName) throw new Exception('$databaseName not set');
 		if(!$username) throw new Exception('$username not set');
 		if(!$host) throw new Exception('$host not set');
-
-		$sql = "REVOKE ALL PRIVILEGES ON `".$this->EscapeString($databaseName)."`.* FROM '".$this->EscapeString($username)."'@'".$this->EscapeString($host)."'";
-		$this->Query($sql, array(
+		
+		$connectOptions = array(
 			"skip-select-db" => true
-		));
+		);
+
+		$sql = "REVOKE ALL PRIVILEGES ON `".$this->EscapeString($databaseName, $connectOptions)."`.* FROM '".$this->EscapeString($username, $connectOptions)."'@'".$this->EscapeString($host, $connectOptions)."'";
+		$this->Query($sql, $connectOptions);
 
 		return $this->AffectedRows();
 	}

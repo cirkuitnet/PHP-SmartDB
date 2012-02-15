@@ -38,6 +38,8 @@ class DbManager_Tests extends DbManager_MySQL{
 		$result = $this->TestWhereClause21();	if($result['passed']) $passed++; else $failed++;
 		$result = $this->TestWhereClause22();	if($result['passed']) $passed++; else $failed++;
 		
+		$result = $this->TestMultiQuery();		if($result['passed']) $passed++; else $failed++;
+		
 		// test database copy. connected user should have permissions to drop/create tables and databases
 		//this also tests creating and dropping databases and tables
 		$success = $this->CopyDatabase('smartdb_test', 'smartdb_test_copy', array(
@@ -57,6 +59,57 @@ class DbManager_Tests extends DbManager_MySQL{
 		echo "<br><br> -- RESULTS -- ";
 		echo "<br>Tests passed: $passed";
 		echo "<br>Tests failed: $failed";
+	}
+	
+	private function TestMultiQuery(){
+		try{
+			$sql = 'insert into `FastSetting` (`Id`,`Name`,`ShortName`) values (444, "4@44.44", "444!");';
+			$sql .= 'select * from `FastSetting` where `Id`=444;';
+			$sql .= 'delete from `FastSetting` where `Id`=444;';
+			$bool = $this->Query($sql, array(
+				'multi-query' => true
+			));
+			
+			if(!$bool){
+				throw new Exception("multi-query 1 failed");
+			}
+			
+			$bool = $this->NextResult();
+			if(!$bool){
+				throw new Exception("multi-query 2 failed");
+			}
+			
+			//get rows from query 2
+			$rows = $this->FetchAssocList();
+			//print_r($rows);
+			if(count($rows)!=1) throw new Exception("1 row was expected for query: 'select * from `FastSetting` where `Id`=444;'");
+			
+			$bool = $this->NextResult();
+			if(!$bool){
+				throw new Exception("multi-query 3 failed");
+			}
+			
+			$bool = $this->NextResult();
+			if($bool !== false){
+				throw new Exception('Next result did not return FALSE as expected. Returned: '.$bool);
+			}
+		}
+		catch(Exception $e){
+			if($this->_driver == self::MYSQL_DRIVER){ //not supported, so an exception here is a PASS
+				$failed = false;
+			}
+			else{
+				$failed = true;
+				$failMsg = $e->getMessage();
+			}
+		}
+		
+		if($failed) echo ($msg = __FUNCTION__." <strong>FAILED</strong>:<br>".$failMsg);
+		else echo ($msg = __FUNCTION__." passed.");
+		
+		echo "<br><br>";
+		
+		return array('passed'=>!$failMsg, 'message'=>$msg);
 	}
 	
 	
@@ -398,5 +451,12 @@ class DbManager_Tests extends DbManager_MySQL{
 
 
 //$tests = new DbManager_Tests('SERVER','USERNAME','PASSWORD','DATABASE_NAME');
-$tests = new DbManager_Tests('localhost','smartdb','smartdb123','smartdb_test');
+$tests = new DbManager_Tests('localhost','smartdb','smartdb123','smartdb_test', array(
+	'driver'=>'mysql'
+));
+$tests->TestAll();
+
+$tests = new DbManager_Tests('localhost','smartdb','smartdb123','smartdb_test', array(
+	'driver'=>'mysqli'
+));
 $tests->TestAll();

@@ -47,8 +47,8 @@ $allRows = $cTable->GetAllRows(array(
 				?>
 				<tr>
 					<td><?=$Customer['CustomerId']()?></td>
-					<td><?=$Customer['Name'](true,true)?></td>
-					<td><?=$Customer['EmailAddress'](true,true)?></td>
+					<td><?=$Customer['Name'](true)?></td>
+					<td><?=$Customer['EmailAddress'](true)?></td>
 					<td><?=$Customer['Gender']()?></td>
 					<td><?=$Customer["DateCreated"]() ? date("M d, Y - g:i:s a",$Customer["DateCreated"](true)) : ""?></td>
 					<td><?=$Customer["DateLastModified"]()  ? date("M d, Y - g:i:s a",$Customer["DateLastModified"](true)) : ""?></td>
@@ -101,8 +101,8 @@ $allRows = $cTable->GetAllRows(array(
 				?>
 				<tr>
 					<td><?=$Customer["CustomerId"]()?></td>
-					<td><?=$Customer["Name"](true,true)?></td>
-					<td><?=$Customer["EmailAddress"](true,true)?></td>
+					<td><?=$Customer["Name"](true)?></td>
+					<td><?=$Customer["EmailAddress"](true)?></td>
 					<td><?=$Customer["Gender"]()?></td>
 					<td><?=$Customer["DateCreated"]()
 						? date("M d, Y - g:i:s a",

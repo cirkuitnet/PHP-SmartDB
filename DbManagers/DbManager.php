@@ -30,9 +30,11 @@ interface DbManager {
 	public function FetchAssoc();
     public function FetchArray();
 	public function NumRows();
+	public function NextResult();
 	public function Error();
 	public function InsertId();
 	public function AffectedRows();
+	public function OpenConnection($options = null);
     public function CloseConnection();
     
     //utility functions
@@ -48,6 +50,8 @@ interface DbManager {
 	public function UserExists($username, $host="localhost");
 	public function CreateUser($username, $password, $host="localhost");
 	public function DropUser($username);
+	public function TableExists($databaseName, $tableName);
+	public function DropTable($databaseName, $tableName);
 	public function GrantUserPermissions($databaseName, $uesrname, $host="localhost");
 	public function GrantGlobalFilePermissions($username, $host="localhost");
 	public function RevokeUserPermissions($databaseName, $uesrname, $host="localhost");

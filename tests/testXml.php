@@ -94,7 +94,10 @@ class JunkExtended extends Junk{
 }
 
 //--create db manager
-$dbManager = $t['dbManager'] = new DbManager_MySQL('localhost','smartdb','smartdb123','smartdb_test');
+$dbManagerOptions = array(
+	'driver'=>'mysqli',
+);
+$dbManager = $t['dbManager'] = new DbManager_MySQL('localhost','smartdb','smartdb123','smartdb_test', $dbManagerOptions);
 
 //--build the Database instance
 $database = $t['database'] = new SmartDatabase($dbManager, dirname(__FILE__).'/test.xml');

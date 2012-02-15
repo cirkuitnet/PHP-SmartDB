@@ -75,13 +75,13 @@ class SmartCell{
 
 	/**
 	 * NEW WITH PHP 5.3.0, A shortcut for ->GetValue() that returns the actual value of the cell.
-	 * Example usage: $smartrow['columnName']() instead of $smartrow['columnName']->GetValue(), $smartrow['columnName'](true,true) instead of $smartrow['columnName']->GetValue(true,true), and etc.
+	 * Example usage: $smartrow['columnName']() instead of $smartrow['columnName']->GetValue(), $smartrow['columnName'](true) instead of $smartrow['columnName']->GetValue(true), and etc.
 	 * @return mixed The value of this cell through GetValue()
 	 * @see SmartCell::GetValue()
 	 * @ignore
 	 */
-	public function __invoke($returnOption1=false, $returnOption2=false){
-		return $this->GetValue($returnOption1, $returnOption2);
+	public function __invoke($returnOption1=false){
+		return $this->GetValue($returnOption1);
 	}
 
 
@@ -115,7 +115,7 @@ class SmartCell{
 	 * <code>
 	 * //this shorthand is recommended:
 	 * $columnValue = $row['YOUR_COLUMN_NAME'](); //same thing as $row['YOUR_COLUMN_NAME']->GetValue();
-	 * $columnValue = $row['YOUR_COLUMN_NAME'](true,true); //same thing as $row['YOUR_COLUMN_NAME']->GetValue(true,true);
+	 * $columnValue = $row['YOUR_COLUMN_NAME'](true); //same thing as $row['YOUR_COLUMN_NAME']->GetValue(true);
 	 *
 	 * //NOTE: This is not recommended, but you can skip the function call (i.e. $row['YOUR_COLUMN_NAME']) when the returned value is used as a STRING ONLY! Otherwise, $row['YOUR_COLUMN_NAME'] gives you the actual SmartCell object. For example:
 	 * echo $row['YOUR_COLUMN_NAME']; //is fine and will echo the column value
@@ -782,15 +782,18 @@ class SmartCell{
 	 * 	'custom-formatter-callback' =>null, //can be either: 1. array("functionName", $obj) if function belongs to $obj, 2. array("functionName", "className") if the function is static within class "classname", or 3. just "functionName" if function is in global scope. this function will be called when getting the form object and the value returned by it will be used as the form object's value. the callback's signiture is functionName($value), where $value is the current cell value
 	 * 	'print-empty-option' => !$this->IsRequired, //if true, an empty option will be the first option printed
 	 * 	'force-selected-key' => null, //string. if set, the given key within $keyValuePairs will be forced as the selected option (if found. if not found, the browser's default choice will be selected, probably the first in the list)
+	 * 	'use-possible-values' => false, //if true, this will populate the select object with the "PossibleValues" for this particular column (as defined in the xml db schema)
 	 * );
 	 * </code>
-	 * @param array $keyValuePairs [optional] The key-value pairs that set the values for the input dropdown html tag. ie each key-value pair generates &lt;option name="KEY"&gt;VALUE&lt;/option&gt;
+	 * @param mixed $keyValuePairs [optional] (see below)
+	 * 				- If $keyValuePairs is "true", this will populate the select object with the "PossibleValues" for this particular column (as defined in the xml db schema)
+	 * 				- If $keyValuePairs is an array- If an array- The key-value pairs that set the values for the input dropdown html tag. ie each key-value pair generates &lt;option name="KEY"&gt;VALUE&lt;/option&gt;
 	 * @param array $customAttribs [optional] An assoc-array of attributes to set in this form object's html (ie 'class'=>'yourClass'). If this array contains 'name', a custom name will be set for this form object, though 'name' should be left blank on most cases as the default name will be generated so it can be tracked by this class; custom names require you to handle getting/setting POST/GET values
 	 * @param array $options [optional] Array of key-value pairs, see description
 	 * @see SmartCell::GetFormObject()
 	 * @return string string of HTML representing a select dropdown input object for this cell
 	 */
-	public function GetSelectFormObject(array $keyValuePairs=null, array $customAttribs=null, array $options=null){
+	public function GetSelectFormObject($keyValuePairs=null, array $customAttribs=null, array $options=null){
 		//OPTIONS
 		$defaultOptions = array( //default options
 			"show-required-marker"=>$this->IsRequired,
@@ -800,7 +803,10 @@ class SmartCell{
 			$options = array_merge($defaultOptions, $options);
 		}
 		else $options = $defaultOptions;
-
+		
+		if($keyValuePairs===true){ //set the 'use-possible-values' option to true if this parameter is true. it's a shortcut
+			$options['use-possible-values'] = true;
+		}
 
 		//ATTRIBS
 		$defaultAttribs = array(
@@ -829,8 +835,12 @@ class SmartCell{
 		
 		//get formatted $currentValue
 		$currentValue = htmlspecialchars($this->GetRawValue()); 
+		
+		if($options['use-possible-values']){
+			$keyValuePairs = array_combine(($pv=$this->Column->PossibleValues), $pv);	//populate select values from xml
+		}
 
-		if(count($keyValuePairs)>0){
+		if($keyValuePairs){
 			foreach ($keyValuePairs as $key => $value){
 				$key = htmlspecialchars($key);
 				$value = htmlspecialchars($value);
