@@ -343,7 +343,7 @@ class SmartRow implements ArrayAccess{
 	 */
 	public function UnsetNonKeyColumnValues(){
 		foreach($this->Table->GetNonKeyColumns() as $Column){
-			$this->Cell($Column->ColumnName)->ForceUnset();
+			$this->_cells[$Column->ColumnName]->ForceUnset();
 		}
 
 		$this->_isDirty = true;
@@ -370,9 +370,9 @@ class SmartRow implements ArrayAccess{
 		$nonAutoIncrementKeyCols = $this->Table->GetNonAutoIncrementKeyColumns();
 		foreach($nonAutoIncrementKeyCols as $Column){ //only working with NON auto-increment key columns
 			$columnName = $Column->ColumnName;
-			$Cell = $this->Cell($columnName);
+			$Cell = $this->_cells[$columnName];
 			//get the passed value... either with the real column name or the first found alias (ignores multiple matches)
-			$passedVal = $this->GetPassedValueForCell($tableName, $columnName, $keyColumnValuesAssoc);
+			$passedVal = $this->GetPassedValueForCell($tableName, $columnName, $keyColumnValuesAssoc, $Cell);
 
 			//compare the passed key value to the current key value
 			if($Cell->GetRawValue() != $passedVal){
@@ -383,7 +383,7 @@ class SmartRow implements ArrayAccess{
 		if ($keyChanged) {
 			$nullKeyFound = false;
 			foreach($nonAutoIncrementKeyCols as $Column){ //only working with NON auto-increment key columns
-				if($this->Cell($Column->ColumnName)->GetRawValue() == null){
+				if($this->_cells[$columnName]->GetRawValue() == null){
 					$nullKeyFound = true;
 				}
 			}
@@ -412,10 +412,10 @@ class SmartRow implements ArrayAccess{
 
 			//set new key columns
 			foreach($nonAutoIncrementKeyCols as $Column){ //only working with NON auto-increment key columns
-				$Cell = $this->Cell($Column->ColumnName);
 				$columnName = $Column->ColumnName;
+				$Cell = $this->_cells[$columnName];
 				//get the passed value... either with the real column name or the first found alias (ignores multiple matches)
-				$passedVal = $this->GetPassedValueForCell($tableName, $columnName, $keyColumnValuesAssoc);
+				$passedVal = $this->GetPassedValueForCell($tableName, $columnName, $keyColumnValuesAssoc, $Cell);
 				$Cell->ForceValue($passedVal);
 			}
 
@@ -431,17 +431,20 @@ class SmartRow implements ArrayAccess{
 	 * Get the passed value within $keyColumnValuesAssoc... either matches the real column name or the first found alias (ignores multiple matches)
 	 * @param string $tableName
 	 * @param string $columnName
-	 * @param SmartCell $Cell
+	 * @param SmartCell $Cell - pass it if you have it. good for caching
 	 * @param array $keyColumnValuesAssoc
 	 * @return mixed The matching object for this $Cell, found within $keyColumnValuesAssoc
 	 */
-	private function GetPassedValueForCell($tableName, $columnName, array $keyColumnValuesAssoc){
+	private function GetPassedValueForCell($tableName, $columnName, array $keyColumnValuesAssoc, $Cell=null){
 		//get the passed value... either with the real column name or first found alias (ignores multiple matches)
 		if($keyColumnValuesAssoc[$tableName][$columnName]){ //real column name
 			return $keyColumnValuesAssoc[$tableName][$columnName];
 		}
 		else{ //check aliased columns
-			$aliases = $this->Cell($columnName)->Column->GetAliases();
+			if(!$Cell){
+				$Cell = $this->_cells[$columnName];
+			}
+			$aliases = $Cell->Column->GetAliases();
 			foreach($aliases as $alias=>$nothing){
 				if($keyColumnValuesAssoc[$tableName][$alias]){ //real column name
 					return $keyColumnValuesAssoc[$tableName][$alias];
@@ -467,7 +470,7 @@ class SmartRow implements ArrayAccess{
 		foreach($this->Table->GetNonKeyColumns() as $Column){
 			if($Column->AllowSet==false) continue;
 			$columnName = $Column->ColumnName;
-			$Cell = $this->Cell($columnName);
+			$Cell = $this->_cells[$columnName];
 
 			if(isset($assocArray[$this->Table->TableName][$columnName])){ //real columns
 				$Cell->SetValue($assocArray[$this->Table->TableName][$columnName]);
@@ -517,7 +520,7 @@ class SmartRow implements ArrayAccess{
 			if($Column->AllowGet == false) continue;
 			
 			$columnName = $Column->ColumnName;
-			$Cell = $this->Cell($columnName);
+			$Cell = $this->_cells[$columnName];
 			if(!$onlyAddSetColumns || ($onlyAddSetColumns && $Cell->IsValueSet())) $assocArray[$this->Table->TableName][$columnName] = $Cell->GetValue();
 		}
 		return $assocArray;
@@ -537,7 +540,7 @@ class SmartRow implements ArrayAccess{
 			if($Column->AllowGet == false) continue;
 			
 			$columnName = $Column->ColumnName;
-			$Cell = $this->Cell($columnName);
+			$Cell = $this->_cells[$columnName];
 			if(!$onlyAddSetColumns || ($onlyAddSetColumns && $Cell->IsValueSet())) $assocArray[$this->Table->TableName][$columnName] = $Cell->GetValue();
 		}
 		return $assocArray;
@@ -706,7 +709,7 @@ class SmartRow implements ArrayAccess{
 			//if key is not set, don't lookup row
 			
 			foreach($keyColumns as $Column){
-				if($this->Cell($Column->ColumnName)->GetRawValue() == null){
+				if($this->_cells[$Column->ColumnName]->GetRawValue() == null){
 					//primary key is not yet set in this row/table, so nothing is in the database to get.
 					$this->_initialized = true;
 					$this->_existsInDb = false;
@@ -718,7 +721,7 @@ class SmartRow implements ArrayAccess{
 			$whereArray = array();
 			foreach($keyColumns as $Column){
 				$columnName = $Column->ColumnName;
-				$whereArray[0][$columnName] = $this->Cell($Column->ColumnName)->GetRawValue();
+				$whereArray[0][$columnName] = $this->_cells[$columnName]->GetRawValue();
 			}
 			if(!$this->DbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
 			$numRowsSelected = $this->DbManager->Select(array("*"), $this->Table, $whereArray, null, 1, array('add-column-quotes'=>true, 'add-dot-notation'=>true));
@@ -728,7 +731,7 @@ class SmartRow implements ArrayAccess{
 
 				foreach($this->Table->GetNonKeyColumns() as $Column){
 					$columnName = $Column->ColumnName;
-					$this->Cell($columnName)->ForceValue($row[$columnName]);
+					$this->_cells[$columnName]->ForceValue($row[$columnName]);
 				}
 
 				$this->_initialized = true;
@@ -882,7 +885,7 @@ class SmartRow implements ArrayAccess{
 			$keyCells = array();
 			foreach($this->Table->GetKeyColumns() as $Column){
 				$columnName = $Column->ColumnName;
-				$Cell = $this->Cell($columnName);
+				$Cell = $this->_cells[$columnName];
 				$whereArray[0][$columnName] = $Cell->GetRawValue();
 				$keyCells[] = $Cell;
 			}
