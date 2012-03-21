@@ -130,8 +130,8 @@ class SmartCell{
 	 * @return mixed The value of the cell
 	 */
 	public function GetValue($returnOption1=false){
-		if(!$this->AllowGet) throw new Exception("AllowGet is set to false for column '{$this->ColumnName}' on table '{$this->Table->TableName}'");
-		if($this->Row->IsInitialized() == false && !$this->IsPrimaryKey) $this->Row->ForceInitialization(); //initialize the row if not a primary key. may set $this->_value
+		if(!$this->Column->AllowGet) throw new Exception("AllowGet is set to false for column '{$this->Column->ColumnName}' on table '{$this->Column->Table->TableName}'");
+		if($this->Row->IsInitialized() == false && !$this->Column->IsPrimaryKey) $this->Row->ForceInitialization(); //initialize the row if not a primary key. may set $this->_value
 
 		$value = $this->_value;
 		
@@ -142,7 +142,7 @@ class SmartCell{
 		
 		//handle special return options (as described in the function comments)
 		if($returnOption1){
-			if($this->IsDateColumn){ //is a date column
+			if($this->Column->IsDateColumn){ //is a date column
 				$value = strtotime($value);
 			}
 			else{ //not a date column
@@ -160,8 +160,8 @@ class SmartCell{
 	 * @see SmartCell::GetValue()
 	 */
 	public function GetRawValue(){
-		if(!$this->AllowGet) throw new Exception("AllowGet is set to false for column '{$this->ColumnName}' on table '{$this->Table->TableName}'");
-		if($this->Row->IsInitialized() == false && !$this->IsPrimaryKey) $this->Row->ForceInitialization(); //initialize the row if not a primary key. may set $this->_value
+		if(!$this->Column->AllowGet) throw new Exception("AllowGet is set to false for column '{$this->Column->ColumnName}' on table '{$this->Column->Table->TableName}'");
+		if($this->Row->IsInitialized() == false && !$this->Column->IsPrimaryKey) $this->Row->ForceInitialization(); //initialize the row if not a primary key. may set $this->_value
 		
 		return $this->_value;
 	}
@@ -176,16 +176,16 @@ class SmartCell{
 	 * @param mixed $value The new value for the cell
 	 */
 	public function SetValue($value){
-		if(!$this->AllowSet) throw new Exception("AllowSet is set to false for column '{$this->ColumnName}' on table '{$this->Table->TableName}'");
+		if(!$this->Column->AllowSet) throw new Exception("AllowSet is set to false for column '{$this->Column->ColumnName}' on table '{$this->Column->Table->TableName}'");
 		$this->VerifyValueType($value);
 
-		if($this->IsPrimaryKey){ //changing a primary key column value?
-			if($this->IsAutoIncrement) throw new Exception("Setting an auto-increment key column is not allowed: column '{$this->ColumnName}', table '{$this->Table->TableName}'");
-			else if($this->Table->PrimaryKeyIsNonCompositeNonAutoIncrement()){ //setting a non-autoincrement, non composite key
-				$this->Row->SetKeyColumnValues(array($this->Table->TableName=>array($this->ColumnName=>$value)),true,false);
+		if($this->Column->IsPrimaryKey){ //changing a primary key column value?
+			if($this->Column->IsAutoIncrement) throw new Exception("Setting an auto-increment key column is not allowed: column '{$this->Column->ColumnName}', table '{$this->Column->Table->TableName}'");
+			else if($this->Column->Table->PrimaryKeyIsNonCompositeNonAutoIncrement()){ //setting a non-autoincrement, non composite key
+				$this->Row->SetKeyColumnValues(array($this->Column->Table->TableName=>array($this->Column->ColumnName=>$value)),true,false);
 				return;
 			}
-			else if($this->Table->PrimaryKeyIsComposite()) throw new Exception("Setting individual key column '{$this->ColumnName}' in composite key table '{$this->Table->TableName}' is not allowed. Use the SetKeyColumnValues() function on the Row.");
+			else if($this->Column->Table->PrimaryKeyIsComposite()) throw new Exception("Setting individual key column '{$this->Column->ColumnName}' in composite key table '{$this->Column->Table->TableName}' is not allowed. Use the SetKeyColumnValues() function on the Row.");
 		}
 		else { //changing a non primary key column value
 			if($this->Row->IsInitialized() == false) $this->Row->ForceInitialization();
@@ -193,12 +193,12 @@ class SmartCell{
 			if($this->_onSetValue) $this->FireCallback($this->_onSetValue, $e=array('cancel-event'=>&$cancelEvent, 'Cell'=>&$this, 'current-value'=>$valueBeforeChanged, 'new-value'=>&$value ) );
 			if($cancelEvent) return; //event cancelled, do not set the value
 
-			if($this->TrimAndStripTagsOnSet && $value!==null){
+			if($this->Column->TrimAndStripTagsOnSet && $value!==null){
 				$value = strip_tags(trim($value));
 			}
 
-			if($this->IsDateColumn && $value!==null){
-				if($this->DataType == "date"){ //date has a slightly different format than other DateColumns
+			if($this->Column->IsDateColumn && $value!==null){
+				if($this->Column->DataType == "date"){ //date has a slightly different format than other DateColumns
 					$value = date("Y-m-d", strtotime($value));
 				}
 				else{
@@ -261,12 +261,12 @@ class SmartCell{
 				}
 				else{
 					$type = gettype($value);
-					throw new Exception("Cannot set this Cell's value to an object of type $type. Table: '{$this->Table->TableName}', Column: '{$this->ColumnName}' ");
+					throw new Exception("Cannot set this Cell's value to an object of type $type. Table: '{$this->Column->Table->TableName}', Column: '{$this->Column->ColumnName}' ");
 				}
 			}
 			else if( ($columnDataType !== "array" && is_array($value)) || is_resource($value)){
 				$type = gettype($value);
-				throw new Exception("Cannot set a Cell's value to a '$type' type. You can only set Cell values with simple types (ie string, int, etc.). Table: '{$this->Table->TableName}', Column: '{$this->ColumnName}' ");
+				throw new Exception("Cannot set a Cell's value to a '$type' type. You can only set Cell values with simple types (ie string, int, etc.). Table: '{$this->Column->Table->TableName}', Column: '{$this->Column->ColumnName}' ");
 			}
 		}
 		else { //production mode
@@ -354,7 +354,8 @@ class SmartCell{
 			return true;
 		}
 
-		switch(strtolower($this->DataType)){
+		$dataType = strtolower($this->Column->DataType);
+		switch($dataType){
 			case("float"):
 				return ((float)$this->_value !== (float)$compareValue);
 			case("binary"):
@@ -394,6 +395,10 @@ class SmartCell{
 	 * $options = array(
 	 * 	'sort-by'=>null, //Either a string of the column to sort ASC by, or an assoc array of "ColumnName"=>"ASC"|"DESC" to sort by. An exception will be thrown if a column does not exist.
 	 * 	'return-assoc'=>false, //if true, the returned assoc-array will have the row's primary key column value as its key and the row as its value. ie array("2"=>$row,...) instead of just array($row,...);
+	 *  'return-next-row'=>null, //OUT variable. integer. if you set this parameter in the $options array, then this function will return only 1 row of the result set at a time. If there are no rows selected or left to iterate over, null is returned.
+	 *  						// THIS PARAMETER MUST BE PASSED BY REFERENCE - i.e. array( "return-next-row" => &$curCount ) - the incoming value of this parameter doesn't matter and will be overwritten)
+	 *  						// After this function is executed, this OUT variable will be set with the number of rows that have been returned thus far.
+	 *  						// Each consecutive call to this function with the 'return-next-row' option set will return the next row in the result set, and also increment the 'return-next-row' variable to the number of rows that have been returned thus far
 	 *  'limit'=>null, // With one argument (ie $limit="10"), the value specifies the number of rows to return from the beginning of the result set
 	 *				   // With two arguments (ie $limit="100,10"), the first argument specifies the offset of the first row to return, and the second specifies the maximum number of rows to return. The offset of the initial row is 0 (not 1):
 	 *  'return-count'=>null, //OUT variable only. integer. after this function is executed, this variable will be set with the number of rows being returned. Usage ex: array('return-count'=>&$count)
@@ -408,14 +413,14 @@ class SmartCell{
 	public function GetRelatedRows($tableName, $columnName=null, array $options=null){
 		if(is_array($columnName)){ //shortcut support for GetRelatedRows(tableName, options)
 			$options = $columnName;
-			$columnName = $this->ColumnName;
+			$columnName = $this->Column->ColumnName;
 		}
 		else if($columnName == null){ //shortcut support for GetRelatedRows(tableName)
-			$columnName = $this->ColumnName;
+			$columnName = $this->Column->ColumnName;
 		}
-		if(!$this->HasRelation($tableName, $columnName)) throw new Exception("No relation specified between table '$tableName', column '$columnName' and table '{$this->Table->TableName}', column '{$this->ColumnName}'. ");
+		if(!$this->Column->HasRelation($tableName, $columnName)) throw new Exception("No relation specified between table '$tableName', column '$columnName' and table '{$this->Column->Table->TableName}', column '{$this->Column->ColumnName}'. ");
 
-		$relatedTable = $this->Table->Database->GetTable($tableName);
+		$relatedTable = $this->Column->Table->Database->GetTable($tableName);
 		if(!$relatedTable->PrimaryKeyExists()) throw new Exception("Function '".__FUNCTION__."' can only get related Rows from Tables that contain a primary key. Related Table '$tableName' has no primary key specified.");
 
 		return $relatedTable->GetColumn($columnName)->LookupRows($this->GetRawValue(), $options);
@@ -431,10 +436,10 @@ class SmartCell{
 	 * @see SmartRow::Exists()
 	 */
 	public function GetRelatedRow($tableName, $columnName=null){
-		if(!$columnName) $columnName = $this->ColumnName;
-		if(!$this->HasRelation($tableName, $columnName)) throw new Exception("No relation specified between table '$tableName', column '$columnName' and table '{$this->Table->TableName}', column '{$this->ColumnName}'. ");
+		if(!$columnName) $columnName = $this->Column->ColumnName;
+		if(!$this->Column->HasRelation($tableName, $columnName)) throw new Exception("No relation specified between table '$tableName', column '$columnName' and table '{$this->Column->Table->TableName}', column '{$this->Column->ColumnName}'. ");
 
-		$relatedTable = $this->Table->Database->GetTable($tableName);
+		$relatedTable = $this->Column->Table->Database->GetTable($tableName);
 		if(!$relatedTable->PrimaryKeyExists()) throw new Exception("Function '".__FUNCTION__."' can only get related Rows from Tables that contain a primary key. Related Table '$tableName' has no primary key specified.");
 
 		$relatedColumn = $relatedTable->GetColumn($columnName);
@@ -559,7 +564,7 @@ class SmartCell{
 	 */
 	public function GetFormObject($formObjectType=null, $param1=null, $param2=null, $param3=null){
 		if(!$formObjectType){
-			$formObjectType = $this->DefaultFormType;
+			$formObjectType = $this->Column->DefaultFormType;
 		}
 		$formObjectType = strtolower($formObjectType);
 		switch($formObjectType){
@@ -594,7 +599,7 @@ class SmartCell{
 	public function GetTextFormObject(array $customAttribs=null, array $options=null){
 		//OPTIONS
 		$defaultOptions = array( //default options
-			"show-required-marker"=>$this->IsRequired,
+			"show-required-marker"=>$this->Column->IsRequired
 		);
 		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
 			$options = array_merge($defaultOptions, $options);
@@ -612,7 +617,7 @@ class SmartCell{
 			'value'=>$currentValue,
 			'size'=>$this->GetMaxLength(),
 			'maxlength'=>$this->GetMaxLength(),
-			'disabled'=>(!$this->AllowSet ? 'disabled' : null),
+			'disabled'=>(!$this->Column->AllowSet ? 'disabled' : null)
 		);
 		if(is_array($customAttribs)){ //overwrite $defaultAttribs with any $customAttribs specified
 			$customAttribs = array_change_key_case($customAttribs, CASE_LOWER);
@@ -650,7 +655,7 @@ class SmartCell{
 	public function GetPasswordFormObject(array $customAttribs=null, array $options=null){
 		//OPTIONS
 		$defaultOptions = array( //default options
-			"show-required-marker"=>$this->IsRequired,
+			"show-required-marker"=>$this->Column->IsRequired
 		);
 		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
 			$options = array_merge($defaultOptions, $options);
@@ -672,7 +677,7 @@ class SmartCell{
 			'value'=>$pwd,
 			'size'=>$this->GetMaxLength(),
 			'maxlength'=>$this->GetMaxLength(),
-			'disabled'=>(!$this->AllowSet ? 'disabled' : null),
+			'disabled'=>(!$this->Column->AllowSet ? 'disabled' : null),
 			'autocomplete'=>'off'
 			);
 			if(is_array($customAttribs)){ //overwrite $defaultAttribs with any $customAttribs specified
@@ -709,7 +714,7 @@ class SmartCell{
 	public function GetCheckboxFormObject(array $customAttribs=null, $hiddenNotifierCustomAttribs=null, array $options=null){
 		//OPTIONS
 		$defaultOptions = array( //default options
-			"show-required-marker"=>$this->IsRequired,
+			"show-required-marker"=>$this->Column->IsRequired
 		);
 		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
 			$options = array_merge($defaultOptions, $options);
@@ -733,8 +738,8 @@ class SmartCell{
 			'name'=>$this->GetDefaultFormObjectName(),
 			'class'=>'inputCheckbox',
 			'value'=>$currentValue,
-			'disabled'=>(!$this->AllowSet ? 'disabled' : null),
-			'checked'=>$checked,
+			'disabled'=>(!$this->Column->AllowSet ? 'disabled' : null),
+			'checked'=>$checked
 		);
 		if(is_array($customAttribs)){ //overwrite $defaultAttribs with any $customAttribs specified
 			$customAttribs = array_change_key_case($customAttribs, CASE_LOWER);
@@ -757,7 +762,7 @@ class SmartCell{
 			'name'=>$this->GetDefaultFormObjectName('_Notifier'),
 			'class'=>'inputHidden',
 			'value'=>'0',
-			'disabled'=>(!$this->AllowSet ? 'disabled' : null),
+			'disabled'=>(!$this->Column->AllowSet ? 'disabled' : null),
 			'checked'=>($this->GetValue() ? 'checked' : null)
 		);
 		if(is_array($hiddenNotifierCustomAttribs)){ //overwrite $defaultAttribs with any $customAttribs specified
@@ -796,8 +801,8 @@ class SmartCell{
 	public function GetSelectFormObject($keyValuePairs=null, array $customAttribs=null, array $options=null){
 		//OPTIONS
 		$defaultOptions = array( //default options
-			"show-required-marker"=>$this->IsRequired,
-			"print-empty-option"=>!$this->IsRequired,
+			"show-required-marker"=>$this->Column->IsRequired,
+			"print-empty-option"=>!$this->Column->IsRequired
 		);
 		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
 			$options = array_merge($defaultOptions, $options);
@@ -813,7 +818,7 @@ class SmartCell{
 			'id'=>$this->GetDefaultFormObjectId(),
 			'name'=>$this->GetDefaultFormObjectName(),
 			'class'=>'inputSelect',
-			'disabled'=>(!$this->AllowSet ? 'disabled' : null),
+			'disabled'=>(!$this->Column->AllowSet ? 'disabled' : null)
 		);
 		if(is_array($customAttribs)){ //overwrite $defaultAttribs with any $customAttribs specified
 			$customAttribs = array_change_key_case($customAttribs, CASE_LOWER);
@@ -826,7 +831,7 @@ class SmartCell{
 		$formObjHtml = '<select'.$attribsHtml.'>';
 
 		//OPTIONS
-		if($this->IsRequired==false && $options['print-empty-option']){
+		if($this->Column->IsRequired==false && $options['print-empty-option']){
 			$formObjHtml .= '<option value=""';
 			$value = $this->GetRawValue();
 			if( !$value && !$options['force-selected-key'] ) { $formObjHtml .= ' selected="selected"'; }
@@ -876,7 +881,7 @@ class SmartCell{
 
 		//OPTIONS
 		$defaultOptions = array( //default options
-			"show-required-marker"=>$this->IsRequired,
+			"show-required-marker"=>$this->Column->IsRequired,
 			"value"=>$currentValue
 		);
 		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
@@ -890,7 +895,7 @@ class SmartCell{
 			'id'=>$this->GetDefaultFormObjectId(),
 			'name'=>$this->GetDefaultFormObjectName(),
 			'class'=>'inputText inputTextarea',
-			'disabled'=>(!$this->AllowSet ? 'disabled' : null),
+			'disabled'=>(!$this->Column->AllowSet ? 'disabled' : null)
 		);
 		if(is_array($customAttribs)){ //overwrite $defaultAttribs with any $customAttribs specified
 			$customAttribs = array_change_key_case($customAttribs, CASE_LOWER);
@@ -940,7 +945,7 @@ class SmartCell{
 			'name'=>$this->GetDefaultFormObjectName(),
 			'class'=>'inputHidden',
 			'value'=>$currentValue,
-			'disabled'=>(!$this->AllowSet ? 'disabled' : null),
+			'disabled'=>(!$this->Column->AllowSet ? 'disabled' : null)
 		);
 		if(is_array($customAttribs)){ //overwrite $defaultAttribs with any $customAttribs specified
 			$customAttribs = array_change_key_case($customAttribs, CASE_LOWER);
@@ -983,7 +988,7 @@ class SmartCell{
 			"checked-if-null"=>false,
 			"checked-if-dbtable-value-is-null"=>false, //deprecated. alias to checked-if-null
 			"label-text"=>$labelText,
-			"label-position"=>"left",
+			"label-position"=>"left"
 		);
 		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
 			$options = array_merge($defaultOptions, $options);
@@ -1005,8 +1010,8 @@ class SmartCell{
 			'name'=>$this->GetDefaultFormObjectName(),
 			'class'=>'inputRadio',
 			'value'=>$formValue,
-			'disabled'=>(!$this->AllowSet ? 'disabled' : null),
-			'checked'=>$checked,
+			'disabled'=>(!$this->Column->AllowSet ? 'disabled' : null),
+			'checked'=>$checked
 		);
 		if(is_array($customAttribs)){ //overwrite $defaultAttribs with any $customAttribs specified
 			$customAttribs = array_change_key_case($customAttribs, CASE_LOWER);
@@ -1061,7 +1066,7 @@ class SmartCell{
 	public function GetColorpickerFormObject(array $customAttribs=null, array $options=null){
 		//OPTIONS
 		$defaultOptions = array( //default options
-			"show-required-marker"=>$this->IsRequired,
+			"show-required-marker"=>$this->Column->IsRequired,
 		);
 		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
 			$options = array_merge($defaultOptions, $options);
@@ -1079,7 +1084,7 @@ class SmartCell{
 			'value'=>$currentValue,
 			'size'=>$this->GetMaxLength(),
 			'maxlength'=>$this->GetMaxLength(),
-			'disabled'=>(!$this->AllowSet ? 'disabled' : null),
+			'disabled'=>(!$this->Column->AllowSet ? 'disabled' : null)
 		);
 		if(is_array($customAttribs)){ //overwrite $defaultAttribs with any $customAttribs specified
 			$customAttribs = array_change_key_case($customAttribs, CASE_LOWER);
@@ -1113,7 +1118,7 @@ class SmartCell{
 	public function GetDatepickerFormObject(array $customAttribs=null, array $options=null){
 		//OPTIONS
 		$defaultOptions = array( //default options
-			"show-required-marker"=>$this->IsRequired,
+			"show-required-marker"=>$this->Column->IsRequired
 		);
 		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
 			$options = array_merge($defaultOptions, $options);
@@ -1131,7 +1136,7 @@ class SmartCell{
 			'value'=>$currentValue,
 			'size'=>$this->GetMaxLength(),
 			'maxlength'=>$this->GetMaxLength(),
-			'disabled'=>(!$this->AllowSet ? 'disabled' : null),
+			'disabled'=>(!$this->Column->AllowSet ? 'disabled' : null)
 		);
 		if(is_array($customAttribs)){ //overwrite $defaultAttribs with any $customAttribs specified
 			$customAttribs = array_change_key_case($customAttribs, CASE_LOWER);
@@ -1165,7 +1170,7 @@ class SmartCell{
 	public function GetSliderFormObject(array $customAttribs=null, array $options=null){
 		//OPTIONS
 		$defaultOptions = array( //default options
-			"show-required-marker"=>$this->IsRequired,
+			"show-required-marker"=>$this->Column->IsRequired
 		);
 		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
 			$options = array_merge($defaultOptions, $options);
@@ -1183,7 +1188,7 @@ class SmartCell{
 			'value'=>$currentValue,
 			'size'=>$this->GetMaxLength(),
 			'maxlength'=>$this->GetMaxLength(),
-			'disabled'=>(!$this->AllowSet ? 'disabled' : null),
+			'disabled'=>(!$this->Column->AllowSet ? 'disabled' : null)
 		);
 		if(is_array($customAttribs)){ //overwrite $defaultAttribs with any $customAttribs specified
 			$customAttribs = array_change_key_case($customAttribs, CASE_LOWER);
@@ -1231,9 +1236,9 @@ class SmartCell{
 	public function GetFormObjectLabel(array $options=null){
 		$defaultOptions = array( //default options
 			"for-form-obj-name"=>$this->GetDefaultFormObjectId(),
-			"label-text"=>($this->DisplayName ? $this->DisplayName : $this->ColumnName),
+			"label-text"=>($this->Column->DisplayName ? $this->Column->DisplayName : $this->Column->ColumnName),
 			"prefix"=>"",
-			"suffix"=>": ",
+			"suffix"=>": "
 		);
 		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
 			$options = array_merge($defaultOptions, $options);
@@ -1258,7 +1263,7 @@ class SmartCell{
 	 */
 	public function HasErrors(array $options=null){
 		$defaultOptions = array( //default options
-			"error-message-suffix"=>"<br>\n",
+			"error-message-suffix"=>"<br>\n"
 		);
 		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
 			$options = array_merge($defaultOptions, $options);
@@ -1267,90 +1272,90 @@ class SmartCell{
 
 		$value = $this->GetRawValue();
 
-		if ($this->IsPrimaryKey && $options['ignore-key-errors']) return false;
+		if ($this->Column->IsPrimaryKey && $options['ignore-key-errors']) return false;
 		if($options['only-verify-set-cells'] && !isset($value)) return false;
 
 		$errors = false;
 
-		if($this->PossibleValues){ //need to validate that the value is valid (mostly for enumerations)
+		if($this->Column->PossibleValues){ //need to validate that the value is valid (mostly for enumerations)
 			//for mysql, enum has null and "" as separate valid values and "" is ALWAYS valid... wtf? make it so "" and null are equal and always valid. will be caught later if null is not allowed
 			if($value !== '0' && !$value){
 				$value = null;
 			}
 			else { //non-null value
 				//for mysql, enums are case-insensetitive! "AAA"=="aAa" as valid enum values
-				$isValidValue = in_array(strtolower($value), array_map('strtolower', $this->PossibleValues)); //case-insensitive array search
+				$isValidValue = in_array(strtolower($value), array_map('strtolower', $this->Column->PossibleValues)); //case-insensitive array search
 				if(!$isValidValue){
-					$errorMsg = "Invalid value '$value' specified for Table: '{$this->Table->TableName}', Column: '{$this->ColumnName}'";
+					$errorMsg = "Invalid value '$value' specified for Table: '{$this->Column->Table->TableName}', Column: '{$this->Column->ColumnName}'";
 					$errors .= $errorMsg . $options['error-message-suffix'];
 				}
 			}
 		}
 
-		if ($this->IsRequired){
+		if ($this->Column->IsRequired){
 			//int 0 is different from "0" (http://php.net/manual/en/types.comparisons.php). int 0 will consider the column as set for all datatypes except binary
 			//so.. if the column is binary and the value is int 0, this is an error. if the column is anything else besides binary, this is NOT an error
 			$dontAllowZero = ($this->Column->DataType == "binary");
 			$valueIsZero = ($value === 0 || $value === "0");
 			if( ($value==null && !$valueIsZero) || ($valueIsZero && $dontAllowZero) || strlen($value)<=0 ){
-				$errorMsg = ( trim($this->IsRequiredMessage)!="" ? $this->IsRequiredMessage : "'{$this->DisplayName}' field is required." );
+				$errorMsg = ( trim($this->Column->IsRequiredMessage)!="" ? $this->Column->IsRequiredMessage : "'{$this->Column->DisplayName}' field is required." );
 				$errors .= $errorMsg . $options['error-message-suffix'];
 				$inputRequiredErrorFound = true;
 			}
 		}
 
-		$maxLength = $this->GetMaxLength();
+		$maxLength = $this->Column->GetMaxLength();
 		if($maxLength) {
 			if (strlen($value) > $maxLength){
-				$errors .= "Number of characters allowed for '{$this->DisplayName}' exceeds the $maxLength character limit.";
+				$errors .= "Number of characters allowed for '{$this->Column->DisplayName}' exceeds the $maxLength character limit.";
 				$errors .= $options['error-message-suffix'];
 			}
 		}
 
-		if($this->MinSize) {
+		if($this->Column->MinSize) {
 			if(!$inputRequiredErrorFound){ //ignore this if the field is required and empty. already have that error message
 				$strlen = strlen($value);
-				if(!$this->IsRequired && $strlen == 0){
+				if(!$this->Column->IsRequired && $strlen == 0){
 					//let this case pass because input is not required
 				}
-				else if ($strlen < $this->MinSize){
-					$errors .= "Minimum of {$this->MinSize} characters are required for '{$this->DisplayName}'.";
+				else if ($strlen < $this->Column->MinSize){
+					$errors .= "Minimum of {$this->Column->MinSize} characters are required for '{$this->Column->DisplayName}'.";
 					$errors .= $options['error-message-suffix'];
 				}
 			}
 		}
 
-		if($this->RegexCheck) {
+		if($this->Column->RegexCheck) {
 			if(!$inputRequiredErrorFound){ //ignore regex if the field is required and empty. already have that error message
-				if(!$this->IsRequired && strlen($value) == 0){
+				if(!$this->Column->IsRequired && strlen($value) == 0){
 					//let this case pass because input is not required
 				}
-				else if (!preg_match('/'.$this->RegexCheck.'/i', $value)){ //both PHP and javascript do case-insensitive regex checking
-					$errorMsg = ( trim($this->RegexFailMessage)!="" ? $this->RegexFailMessage : "Invalid valid for '{$this->DisplayName}'." );
+				else if (!preg_match('/'.$this->Column->RegexCheck.'/i', $value)){ //both PHP and javascript do case-insensitive regex checking
+					$errorMsg = ( trim($this->Column->RegexFailMessage)!="" ? $this->Column->RegexFailMessage : "Invalid valid for '{$this->Column->DisplayName}'." );
 					$errors .= $errorMsg . $options['error-message-suffix'];
 					$inputRegexCheckErrorFound = true;
 				}
 			}
 		}
 
-		if ($this->IsUnique && !$this->IsPrimaryKey) {
+		if ($this->Column->IsUnique && !$this->Column->IsPrimaryKey) {
 			if(!$inputRequiredErrorFound && !$inputRegexCheckErrorFound){
 				if($value !== null){ //ignore 'null' values when checking uniqueness
 					$dbManager = $this->Row->Database->DbManager;
 					if(!$dbManager) throw new Exception("DbManager is not set. DbManager must be set to verify column value uniqueness within function '".__FUNCTION__."'. ");
-					$numRowsFound = $dbManager->Select(array("*"), $this->Table, array( array($this->ColumnName => $value) ), '', 1);
+					$numRowsFound = $dbManager->Select(array("*"), $this->Column->Table, array( array($this->Column->ColumnName => $value) ), '', 1);
 					if ($numRowsFound > 0 ){
 						if(!$this->Row->Exists()){ //$this row doesnt exist, so the found value is in use in another row
 							
 							//get formatted $currentValue
 							$currentValue = htmlspecialchars($this->GetRawValue()); 
 							
-							$errors .= "Selected '{$this->DisplayName}' (".$currentValue.") is already in use. Please select another value.";
+							$errors .= "Selected '{$this->Column->DisplayName}' (".$currentValue.") is already in use. Please select another value.";
 							$errors .= $options['error-message-suffix'];
 						}
-						else if($this->Table->PrimaryKeyExists()){ //$this row does exist. see if the found value is part of $this row by comparing key column(s)
+						else if($this->Column->Table->PrimaryKeyExists()){ //$this row does exist. see if the found value is part of $this row by comparing key column(s)
 							$row = $dbManager->FetchArray();
-							$keyColumns = $this->Table->GetKeyColumns();
+							$keyColumns = $this->Column->Table->GetKeyColumns();
 							foreach($keyColumns as $columnName=>$Column){
 								if($row[$columnName] != $this->Row->Cell($columnName)->GetValue()){
 									//found row is not $this row, so found value is in use in another row
@@ -1358,7 +1363,7 @@ class SmartCell{
 									//get formatted $currentValue
 									$currentValue = htmlspecialchars($this->GetRawValue()); 
 									
-									$errors .= "Selected '{$this->DisplayName}' (".$currentValue.") is already in use. Please select another value.";
+									$errors .= "Selected '{$this->Column->DisplayName}' (".$currentValue.") is already in use. Please select another value.";
 									$errors .= $options['error-message-suffix'];
 									break;
 								}

@@ -31,6 +31,7 @@ interface DbManager {
     public function FetchArray();
 	public function NumRows();
 	public function NextResult();
+	public function FlushResults();
 	public function Error();
 	public function InsertId();
 	public function AffectedRows();

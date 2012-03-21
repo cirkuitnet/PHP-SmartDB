@@ -322,7 +322,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 				if($Column->DefaultValue || $Column->DefaultValue===0 || $Column->DefaultValue==="0"){
 					$xml .= ' DefaultValue="'.htmlspecialchars($Column->DefaultValue).'"';
 				}
-				if($Column->IsRequired && !($Column->IsPrimaryKey && $Column->IsAutoIncrement)){ //primary key's 
+				if($Column->IsRequired && !$Column->IsAutoIncrement){ //auto-increment shouldnt be required, otherwise we dont get the autoincrement value
 					$xml .= ' InputRequired="'.bs($Column->IsRequired).'"';
 				}
 				if($Column->IsRequiredMessage){
@@ -470,7 +470,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 					$column->IsPrimaryKey = (strtolower($xmlColumn['a']['PrimaryKey']) === 'true' ? true : false);
 					$column->IsAutoIncrement = (strtolower($xmlColumn['a']['AutoIncrement']) === 'true' ? true : false);
 					$column->DefaultFormType = ($xmlColumn['a']['FormType'] ? $xmlColumn['a']['FormType'] : "text"); //"text" is default value
-					$column->IsRequired = (strtolower($xmlColumn['a']['InputRequired']) === 'true' ? true : false);
+					$column->IsRequired = (!$column->IsAutoIncrement && strtolower($xmlColumn['a']['InputRequired']) === 'true' ? true : false); //auto-increment shouldnt be required, otherwise we dont get the autoincrement value
 					$column->IsRequiredMessage = $xmlColumn['a']['InputEmptyError'];
 					$column->RegexCheck = $xmlColumn['a']['InputRegexCheck'];
 					$column->RegexFailMessage = $xmlColumn['a']['InputRegexFailError'];
@@ -643,7 +643,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 			'backup-tables' => true,
 			'create' => true,
 			'update' => true,
-			'delete' => true, 
+			'delete' => true
 		);
 		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
 			$options = array_merge($defaultOptions, $options);
@@ -840,6 +840,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 	 * 	$options = array(
 	 * 		'preserve-current' => false, //if true, the current smart database structure will be preserved. existing tables/column will be overwritten by the db definitions
 	 * 		'ignore-table-prefix' => 'backup_', //will not import tables that start with the given prefix
+	 * 		'table' => null, //string - if provided, will only read the structure of the given table name
 	 * 	)
 	 * </code> 
 	 * @param array $options
@@ -848,6 +849,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 		$defaultOptions = array( //default options
 			'preserve-current' => false,
 			'ignore-table-prefix' => 'backup_',
+			'table' => null
 		);
 		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
 			$options = array_merge($defaultOptions, $options);
@@ -864,7 +866,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 		//TODO: support other databases
 		require_once (dirname(__FILE__)."/ReadDb/ReadDb_MySQL.php"); //currently only works with PMA_MYSQL_INT_VERSION >= 50002
 		
-		$sqlStructure = ReadDb_MySQL::Instance()->GetArray($this->DbManager, $this->DbManager->GetDatabaseName());
+		$sqlStructure = ReadDb_MySQL::Instance()->GetArray($this->DbManager, $this->DbManager->GetDatabaseName(), $options['table']);
 		//print_nice($sqlStructure);
 		
 		foreach($sqlStructure as $tableName=>$tableProps){
@@ -960,7 +962,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 				$column->IsPrimaryKey = ( ($columnProps['Key']==="PRI") ? true : false);
 				$column->IsAutoIncrement = ( (strpos($columnProps['Extra'], "auto_increment") !== false) ? true : false);
 				$column->FulltextIndex = ( ($columnProps['IndexType'] === "FULLTEXT") ? true : false);
-				$column->IsRequired = ( ($columnProps['Null']==="NO" || $column->IsPrimaryKey) ? true : false);
+				$column->IsRequired = ( !$column->IsAutoIncrement && ($columnProps['Null']==="NO" || $column->IsPrimaryKey) ? true : false); //auto-increment shouldnt be required, otherwise we dont get the autoincrement value
 				$column->SortOrder = $colNum++;
 				
 				if(!$column->DisplayName){

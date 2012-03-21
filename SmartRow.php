@@ -169,16 +169,17 @@ class SmartRow implements ArrayAccess{
 		if($keyColumnValues){
 			if(is_array($keyColumnValues)){ //ARRAY
 				foreach($keyColumnValues as $columnName=>$value){
-					$Column = $this->Cell($columnName);
-					if(!$Column->IsPrimaryKey) throw new Exception("Column '$columnName' is not a key column for table '$tableName'.");
+					$Cell = $this->Cell($columnName);
+					if(!$Cell->Column->IsPrimaryKey) throw new Exception("Column '$columnName' is not a key column for table '$tableName'.");
 
-					$Column->ForceValue($value);
+					$Cell->ForceValue($value);
 				}
 			}
 			else{ //1 NON-ARRAY
 				$keyColumns = $this->Table->GetKeyColumns();
-				if(count($keyColumns) === 0) throw new Exception("'keyColumnValues' must not be set for '$tableName' since it contains no key columns.");
-				if(count($keyColumns) > 1) throw new Exception("'keyColumnValues' must be an assoc-array when passed to Row constructor for table '$tableName' since it contains '".count($keyColumns)."' key columns.");
+				$keyColCount = count($keyColumns);
+				if($keyColCount === 0) throw new Exception("'keyColumnValues' must not be set for '$tableName' since it contains no key columns.");
+				if($keyColCount > 1) throw new Exception("'keyColumnValues' must be an assoc-array when passed to Row constructor for table '$tableName' since it contains '".count($keyColumns)."' key columns.");
 
 				$keyColumnNameInArray = array_keys($keyColumns);
 				$keyColumnName = $keyColumnNameInArray[0];
@@ -234,11 +235,7 @@ class SmartRow implements ArrayAccess{
 	 */
 	public function Exists() {
 		if($this->_initialized == false) {
-			try{
-				$this->TryGetDatabaseValues();
-			} catch(Exception $e){
-				return false;
-			}
+			$this->TryGetDatabaseValues(false); //no exception on error
 		}
 		return $this->_existsInDb;
 	}
@@ -258,7 +255,7 @@ class SmartRow implements ArrayAccess{
 	 */
 	public function HasErrors(array $options=null){
 		$defaultOptions = array( //default options
-			"error-message-suffix"=>"<br>\n",
+			"error-message-suffix"=>"<br>\n"
 		);
 		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
 			$options = array_merge($defaultOptions, $options);
@@ -345,10 +342,8 @@ class SmartRow implements ArrayAccess{
 	 * @see SmartRow::LookupKeys()
 	 */
 	public function UnsetNonKeyColumnValues(){
-		foreach($this->_cells as $columnName=>$Cell){
-			if(!$Cell->IsPrimaryKey){ //dont touch the key columns
-				$Cell->ForceUnset();
-			}
+		foreach($this->Table->GetNonKeyColumns() as $Column){
+			$this->Cell($Column->ColumnName)->ForceUnset();
 		}
 
 		$this->_isDirty = true;
@@ -372,37 +367,35 @@ class SmartRow implements ArrayAccess{
 
 		$keyChanged = false; //true if changes have been made to the key from what was previously defined before calling this function
 		$tableName = $this->Table->TableName;
-		foreach($this->_cells as $columnName=>$Cell){
-			if($Cell->IsPrimaryKey && !$Cell->IsAutoIncrement){ //only working with NON auto-increment key columns
-				//get the passed value... either with the real column name or the first found alias (ignores multiple matches)
-				$passedVal = $this->GetPassedValueForCell($tableName, $columnName, $Cell, $keyColumnValuesAssoc);
+		$nonAutoIncrementKeyCols = $this->Table->GetNonAutoIncrementKeyColumns();
+		foreach($nonAutoIncrementKeyCols as $Column){ //only working with NON auto-increment key columns
+			$columnName = $Column->ColumnName;
+			$Cell = $this->Cell($columnName);
+			//get the passed value... either with the real column name or the first found alias (ignores multiple matches)
+			$passedVal = $this->GetPassedValueForCell($tableName, $columnName, $keyColumnValuesAssoc);
 
-				//compare the passed key value to the current key value
-				if($Cell->GetRawValue() != $passedVal){
-					$keyChanged = true;
-					break;
-				}
+			//compare the passed key value to the current key value
+			if($Cell->GetRawValue() != $passedVal){
+				$keyChanged = true;
+				break;
 			}
 		}
 		if ($keyChanged) {
 			$nullKeyFound = false;
-			foreach($this->_cells as $columnName=>$Cell){
-				if($Cell->IsPrimaryKey && !$Cell->IsAutoIncrement){ //only working with NON auto-increment key columns
-					if($Cell->GetRawValue() == null){
-						$nullKeyFound = true;
-					}
+			foreach($nonAutoIncrementKeyCols as $Column){ //only working with NON auto-increment key columns
+				if($this->Cell($Column->ColumnName)->GetRawValue() == null){
+					$nullKeyFound = true;
 				}
 			}
 			$numRowsSelected = 0;
 			if (!$nullKeyFound) {//check if this new key already exists in database
 				//build the where clause array
 				$whereArray = array();
-				foreach($this->_cells as $columnName=>$Cell){
-					if($Cell->IsPrimaryKey && !$Cell->IsAutoIncrement){ //only working with NON auto-increment key columns
-						//get the passed value... either with the real column name or the first found alias (ignores multiple matches)
-						$passedVal = $this->GetPassedValueForCell($tableName, $columnName, $Cell, $keyColumnValuesAssoc);
-						$whereArray[0][$columnName] = $passedVal;
-					}
+				foreach($nonAutoIncrementKeyCols as $Column){ //only working with NON auto-increment key columns
+					//get the passed value... either with the real column name or the first found alias (ignores multiple matches)
+					$columnName = $Column->ColumnName;
+					$passedVal = $this->GetPassedValueForCell($tableName, $columnName, $keyColumnValuesAssoc);
+					$whereArray[0][$columnName] = $passedVal;
 				}
 
 				if(!$this->DbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
@@ -418,12 +411,12 @@ class SmartRow implements ArrayAccess{
 			}
 
 			//set new key columns
-			foreach($this->_cells as $columnName=>$Cell){
-				if($Cell->IsPrimaryKey && !$Cell->IsAutoIncrement){ //only working with NON auto-increment key columns
-					//get the passed value... either with the real column name or the first found alias (ignores multiple matches)
-					$passedVal = $this->GetPassedValueForCell($tableName, $columnName, $Cell, $keyColumnValuesAssoc);
-					$Cell->ForceValue($passedVal);
-				}
+			foreach($nonAutoIncrementKeyCols as $Column){ //only working with NON auto-increment key columns
+				$Cell = $this->Cell($Column->ColumnName);
+				$columnName = $Column->ColumnName;
+				//get the passed value... either with the real column name or the first found alias (ignores multiple matches)
+				$passedVal = $this->GetPassedValueForCell($tableName, $columnName, $keyColumnValuesAssoc);
+				$Cell->ForceValue($passedVal);
 			}
 
 			$this->_initialized = !$nullKeyFound;
@@ -442,13 +435,13 @@ class SmartRow implements ArrayAccess{
 	 * @param array $keyColumnValuesAssoc
 	 * @return mixed The matching object for this $Cell, found within $keyColumnValuesAssoc
 	 */
-	private function GetPassedValueForCell($tableName, $columnName, SmartCell $Cell, array $keyColumnValuesAssoc){
+	private function GetPassedValueForCell($tableName, $columnName, array $keyColumnValuesAssoc){
 		//get the passed value... either with the real column name or first found alias (ignores multiple matches)
 		if($keyColumnValuesAssoc[$tableName][$columnName]){ //real column name
 			return $keyColumnValuesAssoc[$tableName][$columnName];
 		}
 		else{ //check aliased columns
-			$aliases = $Cell->GetAliases();
+			$aliases = $this->Cell($columnName)->Column->GetAliases();
 			foreach($aliases as $alias=>$nothing){
 				if($keyColumnValuesAssoc[$tableName][$alias]){ //real column name
 					return $keyColumnValuesAssoc[$tableName][$alias];
@@ -468,11 +461,13 @@ class SmartRow implements ArrayAccess{
 	 * @param array $assocArray see function description
 	 */
 	public function SetNonKeyColumnValues(array $assocArray){
-		if($assocArray == null || count($assocArray) == 0) return;
+		if(!$assocArray) return;
 
 		//check real columns
-		foreach($this->_cells as $columnName=>$Cell){
-			if($Cell->AllowSet==false || $Cell->IsPrimaryKey) continue;
+		foreach($this->Table->GetNonKeyColumns() as $Column){
+			if($Column->AllowSet==false) continue;
+			$columnName = $Column->ColumnName;
+			$Cell = $this->Cell($columnName);
 
 			if(isset($assocArray[$this->Table->TableName][$columnName])){ //real columns
 				$Cell->SetValue($assocArray[$this->Table->TableName][$columnName]);
@@ -481,7 +476,7 @@ class SmartRow implements ArrayAccess{
 				$Cell->SetValue($assocArray[$this->Table->TableName][$columnName.'_Notifier']); //notifier let us know this column was in use on the page, but as a checkbox, its POST does not get sent if the checkbox is not checked. so set the 'not checked' value
 			}
 			else{ //check column alias only as a last resort if the real column name was not found
-				$aliases = $Cell->GetAliases();
+				$aliases = $Column->GetAliases();
 				foreach($aliases as $alias=>$nothing){
 					if(isset($assocArray[$this->Table->TableName][$alias])){ //aliased column
 						$Cell->SetValue($assocArray[$this->Table->TableName][$alias]);
@@ -518,8 +513,11 @@ class SmartRow implements ArrayAccess{
 	 */
 	public function GetKeyColumnValues(array &$assocArray=null, $onlyAddSetColumns=false){
 		if($assocArray == null){ $assocArray=array(); }
-		foreach($this->_cells as $columnName=>$Cell){
-			if($Cell.AllowGet == false || !$Cell->IsPrimaryKey) continue;
+		foreach($this->Table->GetKeyColumns() as $Column){
+			if($Column->AllowGet == false) continue;
+			
+			$columnName = $Column->ColumnName;
+			$Cell = $this->Cell($columnName);
 			if(!$onlyAddSetColumns || ($onlyAddSetColumns && $Cell->IsValueSet())) $assocArray[$this->Table->TableName][$columnName] = $Cell->GetValue();
 		}
 		return $assocArray;
@@ -535,8 +533,11 @@ class SmartRow implements ArrayAccess{
 	public function GetNonKeyColumnValues(array &$assocArray=null, $onlyAddSetColumns=false){
 		if($assocArray == null){ $assocArray=array(); }
 		if($this->_initialized == false) $this->TryGetDatabaseValues();
-		foreach($this->_cells as $columnName=>$Cell){
-			if($Cell.AllowGet == false || $Cell->IsPrimaryKey) continue;
+		foreach($this->Table->GetNonKeyColumns() as $Column){
+			if($Column->AllowGet == false) continue;
+			
+			$columnName = $Column->ColumnName;
+			$Cell = $this->Cell($columnName);
 			if(!$onlyAddSetColumns || ($onlyAddSetColumns && $Cell->IsValueSet())) $assocArray[$this->Table->TableName][$columnName] = $Cell->GetValue();
 		}
 		return $assocArray;
@@ -574,9 +575,10 @@ class SmartRow implements ArrayAccess{
 		if($assocArray == null){ $assocArray=array(); }
 		if($this->_initialized == false) $this->TryGetDatabaseValues();
 		foreach($this->_cells as $columnName=>$Cell){
-			if($Cell.AllowGet == false) continue;
-			if($options['get-key-columns'] == false && $Cell->IsPrimaryKey) continue; //ignore key columns
-			if($options['get-non-key-columns'] == false && !$Cell->IsPrimaryKey) continue; //ignore non-key columns
+			$Column = $Cell->Column;
+			if($Column->AllowGet == false) continue;
+			if($options['get-key-columns'] == false && $Column->IsPrimaryKey) continue; //ignore key columns
+			if($options['get-non-key-columns'] == false && !$Column->IsPrimaryKey) continue; //ignore non-key columns
 			if(!$options['only-add-set-columns'] || ($options['only-add-set-columns'] && $Cell->IsValueSet())) $assocArray[$this->Table->TableName][$columnName] = $Cell->GetValue();
 		}
 		return $assocArray;
@@ -608,7 +610,7 @@ class SmartRow implements ArrayAccess{
 			if($Cell->IsValueSet()) {
 				$whereArray[0][$columnName] = $Cell->GetRawValue();
 			}
-			if($Cell->IsPrimaryKey){
+			if($Cell->Column->IsPrimaryKey){
 				$selectArray[] = $columnName;
 				$keyColumns[$columnName] = $Cell;
 				$keyColumnCount++;
@@ -692,7 +694,7 @@ class SmartRow implements ArrayAccess{
 	 * @todo add comments that explain what happens if no primary key exists
 	 * @return bool	<b>true</b> if successfully retrieved all columns from database, if this Row/Table has no key columns, or if this is a new row to insert later.<br><b>false</b> if this is not a new row and values were not retreived because the key column(s) was/were not found in database table
 	 */
-	private function TryGetDatabaseValues() {
+	private function TryGetDatabaseValues($exceptionOnError=true) {
 		if (!$this->Table->PrimaryKeyExists()) {
 			//this row/table has no key columns, so nothing to look up
 			$this->_initialized = true;
@@ -700,23 +702,23 @@ class SmartRow implements ArrayAccess{
 		}
 		else { //some sort of primary key exists
 			//make sure every primary key is set. if not, do not query the database
-			if (count($this->Table->GetKeyColumns()) > 0) {
-				//if key is not set, don't lookup row
-				foreach($this->_cells as $columnName=>$Cell){
-					if($Cell->IsPrimaryKey && $Cell->GetRawValue()==null){
-						//primary key is not yet set in this row/table, so nothing is in the database to get.
-						$this->_initialized = true;
-						$this->_existsInDb = false;
-						return $this->_initialized;
-					}
+			$keyColumns = $this->Table->GetKeyColumns();
+			//if key is not set, don't lookup row
+			
+			foreach($keyColumns as $Column){
+				if($this->Cell($Column->ColumnName)->GetRawValue() == null){
+					//primary key is not yet set in this row/table, so nothing is in the database to get.
+					$this->_initialized = true;
+					$this->_existsInDb = false;
+					return $this->_initialized;
 				}
 			}
+			
 			//primary key is set in this row/table, so get the record from the database that matches this primary key
 			$whereArray = array();
-			foreach($this->_cells as $columnName=>$Cell){
-				if($Cell->IsPrimaryKey){
-					$whereArray[0][$columnName] = $Cell->GetRawValue();
-				}
+			foreach($keyColumns as $Column){
+				$columnName = $Column->ColumnName;
+				$whereArray[0][$columnName] = $this->Cell($Column->ColumnName)->GetRawValue();
 			}
 			if(!$this->DbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
 			$numRowsSelected = $this->DbManager->Select(array("*"), $this->Table, $whereArray, null, 1, array('add-column-quotes'=>true, 'add-dot-notation'=>true));
@@ -724,10 +726,9 @@ class SmartRow implements ArrayAccess{
 			if ($numRowsSelected == 1) { //successfully got matching row from database table
 				$row = $this->DbManager->FetchAssoc();
 
-				foreach($this->_cells as $columnName=>$Cell){
-					if(!$Cell->IsPrimaryKey) { //set non-key column values
-						$Cell->ForceValue($row[$Cell->ColumnName]);
-					}
+				foreach($this->Table->GetNonKeyColumns() as $Column){
+					$columnName = $Column->ColumnName;
+					$this->Cell($columnName)->ForceValue($row[$columnName]);
 				}
 
 				$this->_initialized = true;
@@ -737,7 +738,9 @@ class SmartRow implements ArrayAccess{
 				if ($this->Table->PrimaryKeyIsNonCompositeAutoIncrement()) { //primary key is auto-increment
 					$this->_initialized = false;
 					$this->_existsInDb = false;
-					throw new Exception($numRowsSelected . " rows exist for primary key column(s) ".print_r($whereArray, true)." in table '".$this->Table->TableName."'. 1 row was expected.");
+					if($exceptionOnError){
+						throw new Exception($numRowsSelected . " rows exist for primary key column(s) ".print_r($whereArray, true)." in table '".$this->Table->TableName."'. 1 row was expected.");
+					}
 				}
 				else { //primary key is not auto-increment
 					$this->_initialized = true;
@@ -781,10 +784,11 @@ class SmartRow implements ArrayAccess{
 				$updateVals = array();
 				$whereArray = array();
 				foreach($this->_cells as $columnName=>$Cell){
-					if(!$Cell->IsPrimaryKey && $Cell->AllowSet){
+					$isPrimaryKey = $Cell->Column->IsPrimaryKey;
+					if(!$isPrimaryKey && $Cell->Column->AllowSet){
 						$updateVals[$columnName] = $Cell->GetRawValue();
 					}
-					else if ($Cell->IsPrimaryKey) {
+					else if ($isPrimaryKey) {
 						$whereArray[0][$columnName] = $Cell->GetRawValue();
 					}
 				}
@@ -812,15 +816,16 @@ class SmartRow implements ArrayAccess{
 		$settableNonKeyCells = array();
 		$keyCells = array();
 		foreach($this->_cells as $columnName=>$Cell){
-			if($Cell->IsPrimaryKey && !$Cell->IsAutoIncrement){
+			$isPrimaryKey = $Cell->Column->IsPrimaryKey;
+			if($isPrimaryKey && !$Cell->Column->IsAutoIncrement){
 				if($Cell->GetRawValue() == null) throw new Exception("Non-AutoIncrement Key Column '{$columnName}' requires its value to be set before insertion to table");
 				$nonAutoIncrementKeyCells[$columnName] = $Cell;
 			}
-			else if(!$Cell->IsPrimaryKey && $Cell->AllowSet){
+			else if(!$isPrimaryKey && $Cell->Column->AllowSet){
 				$settableNonKeyCells[$columnName] = $Cell;
 			}
 
-			if($Cell->IsPrimaryKey){
+			if($isPrimaryKey){
 				$keyCells[] = $Cell;
 			}
 		}
@@ -875,9 +880,9 @@ class SmartRow implements ArrayAccess{
 		if(!$cancelEvent){
 			$whereArray = array();
 			$keyCells = array();
-			foreach($this->_cells as $columnName=>$Cell){
-				if(!$Cell->IsPrimaryKey) continue;
-
+			foreach($this->Table->GetKeyColumns() as $Column){
+				$columnName = $Column->ColumnName;
+				$Cell = $this->Cell($columnName);
 				$whereArray[0][$columnName] = $Cell->GetRawValue();
 				$keyCells[] = $Cell;
 			}
@@ -896,8 +901,8 @@ class SmartRow implements ArrayAccess{
 			$this->_isDirty = ($this->_existsInDb ? $this->_isDirty : false); //if the row still exists in the database, the isDirty status will not have changed. otherwise the row doesnt exist, so not dirty
 
 			//clear the values of auto-increment key columns
-			foreach($keyCells as $columnName=>$Cell){
-				if($Cell->IsAutoIncrement) $Cell->ForceUnset();
+			foreach($keyCells as $Cell){
+				if($Cell->Column->IsAutoIncrement) $Cell->ForceUnset();
 			}
 
 			if($this->_onAfterDelete) $this->FireCallback($this->_onAfterDelete);
@@ -980,8 +985,8 @@ class SmartRow implements ArrayAccess{
 	public function ToStringColumnValues(){
 		$str = "";
 		foreach($this->_cells as $columnName=>$Cell){
-			if ($Cell->AllowGet==false) continue;
-			$str .= $Cell->ColumnName.": ".$Cell->GetValue()."<br>\n";
+			if ($Cell->Column->AllowGet==false) continue;
+			$str .= $Cell->Column->ColumnName.": ".$Cell->GetValue()."<br>\n";
 		}
 		return $str;
 	}

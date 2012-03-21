@@ -373,48 +373,7 @@ class SmartColumn{
 	 * @return mixed An array of key-value pairs. The keys are either 1: nothing, or 2: the primary key (if 'return-assoc' option is TRUE and 'get-unique' option is false and the table has a primary key), and the values are the actual column values. Alternatively, if the option 'return-count-only'=true, returns an integer of number of rows selected.
 	 */
 	public function GetAllValues(array $options=null){
-		if($this->Table->PrimaryKeyIsComposite()) throw new Exception("Function '".__FUNCTION__."' not yet implemented for composite keys.");
-		$limit = trim($options['limit']);
-		$inputSortByFinal = $this->Table->BuildSortArray($options['sort-by']);
-		$dbManager = $this->Table->Database->DbManager;
-		if(!$dbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
-		if($options['return-assoc'] && !$options['get-unique'] && $this->Table->PrimaryKeyExists()){
-			//table has a single primary key column
-			$keyColumnNames = array_keys($this->Table->GetKeyColumns());
-			$keyColumnName = $keyColumnNames[0];
-			$numRowsSelected = $dbManager->Select(array($keyColumnName,$this->ColumnName), $this->Table, null, $inputSortByFinal, $limit, array('add-column-quotes'=>true, 'add-dot-notation'=>true));
-			$options['return-count'] = $numRowsSelected;
-
-			//check the 'return-count-only' option
-			if($options['return-count-only']) return $numRowsSelected;
-
-			$returnVals = array();
-			while ($row = $dbManager->FetchAssoc()) {
-				$colValue = $row[$this->ColumnName];
-				if($this->IsSerializedColumn){ //unserialize serialized values
-					$colValue = $this->GetUnserializedValue($colValue); 
-				}
-				$returnVals[$row[$keyColumnName]] = $colValue;
-			}
-			return $returnVals;
-		}
-		else { //table has no primary key columns, or we're getting unique values only
-			$numRowsSelected = $dbManager->Select(array($this->ColumnName), $this->Table, null, $inputSortByFinal, $limit, array('add-column-quotes'=>true, 'add-dot-notation'=>true, 'distinct'=>$options['get-unique']));
-			$options['return-count'] = $numRowsSelected;
-
-			//check the 'return-count-only' option
-			if($options['return-count-only']) return $numRowsSelected;
-
-			$returnVals = array();
-			while ($row = $dbManager->FetchAssoc()) {
-				$colValue = $row[$this->ColumnName];
-				if($this->IsSerializedColumn){ //unserialize serialized values
-					$colValue = $this->GetUnserializedValue($colValue); 
-				}
-				$returnVals[] = $colValue;
-			}
-			return $returnVals;
-		}
+		return $this->Table->LookupColumnValues(null, $this->ColumnName, $options);
 	}
 	
 	/**
@@ -492,6 +451,10 @@ class SmartColumn{
 	 * $options = array(
 	 * 	'sort-by'=>null, //Either a string of the column to sort ASC by, or an assoc array of "ColumnName"=>"ASC"|"DESC" to sort by. An exception will be thrown if a column does not exist.
 	 * 	'return-assoc'=>false, //if true, the returned assoc-array will have the row's primary key column value as its key and the row as its value. ie array("2"=>$row,...) instead of just array($row,...);
+	 *  'return-next-row'=>null, //OUT variable. integer. if you set this parameter in the $options array, then this function will return only 1 row of the result set at a time. If there are no rows selected or left to iterate over, null is returned.
+	 *  						// THIS PARAMETER MUST BE PASSED BY REFERENCE - i.e. array( "return-next-row" => &$curCount ) - the incoming value of this parameter doesn't matter and will be overwritten)
+	 *  						// After this function is executed, this OUT variable will be set with the number of rows that have been returned thus far.
+	 *  						// Each consecutive call to this function with the 'return-next-row' option set will return the next row in the result set, and also increment the 'return-next-row' variable to the number of rows that have been returned thus far
 	 *  'limit'=>null, // With one argument (ie $limit="10"), the value specifies the number of rows to return from the beginning of the result set
 	 *				   // With two arguments (ie $limit="100,10"), the first argument specifies the offset of the first row to return, and the second specifies the maximum number of rows to return. The offset of the initial row is 0 (not 1):
 	 *  'return-count'=>null, //OUT variable only. integer. after this function is executed, this variable will be set with the number of rows being returned. Usage ex: array('return-count'=>&$count)
@@ -505,58 +468,10 @@ class SmartColumn{
 	 * @todo Implement table's with composite keys into this function
 	 */
 	public function LookupRows($value, array $options=null){
-		if(!$this->Table->PrimaryKeyExists()) throw new Exception("Function '".__FUNCTION__."' only works on Tables that contain a primary key");
-
-		//table must have a single primary key column
-		if($this->Table->PrimaryKeyIsComposite()) throw new Exception("Function '".__FUNCTION__."' not yet implemented for composite keys.");
-		$keyColumnNames = array_keys($this->Table->GetKeyColumns());
-		$keyColumnName = $keyColumnNames[0];
-		
 		//normalize serialized data
 		if($this->IsSerializedColumn) $value = $this->GetSerializedValue($value);
-
-		$limit = trim($options['limit']);
-		$inputSortByFinal = $this->Table->BuildSortArray($options['sort-by']);
-		$dbManager = $this->Table->Database->DbManager;
-		if(!$dbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
-		$numRowsSelected = $dbManager->Select(array($keyColumnName), $this->Table, array( array($this->ColumnName => $value )), $inputSortByFinal, $limit, array('add-column-quotes'=>true, 'add-dot-notation'=>true));
-		$options['return-count'] = $numRowsSelected;
-
-		//check the 'return-count-only' option
-		if($options['return-count-only']) return $numRowsSelected;
-		
-		//get an array of all of the rows
-		$results = $dbManager->FetchAssocList();
-
-		$returnVals = array();
-		if($this->Table->ExtendedByClassName && class_exists($this->Table->ExtendedByClassName,true)){
-			if($options['return-assoc']){ //return an assoc array
-				foreach($results as $row){
-					$returnVals[$row[$keyColumnName]] = new $this->Table->ExtendedByClassName($this->Table->Database, $row[$keyColumnName]);
-				}
-			}
-			else{ //return a regular array
-				foreach($results as $row){
-					$returnVals[] = new $this->Table->ExtendedByClassName($this->Table->Database, $row[$keyColumnName]);
-				}
-			}
-		}
-		else {
-			if($this->Table->ExtendedByClassName && $this->Table->Database->DEV_MODE_WARNINGS)
-				trigger_error("Warning: no class reference found for Table '{$this->Table->TableName}'. ExtendedByClassName = '{$this->Table->ExtendedByClassName}'. Make sure this value is not empty and that the file containing that class is included.", E_USER_WARNING);
-
-			if($options['return-assoc']){ //return an assoc array
-				foreach($results as $row){
-					$returnVals[$row[$keyColumnName]] = new SmartRow($this->Table->TableName, $this->Table->Database,$row[$keyColumnName]);
-				}
-			}
-			else{
-				foreach($results as $row){
-					$returnVals[] = new SmartRow($this->Table->TableName, $this->Table->Database,$row[$keyColumnName]);
-				}
-			}
-		}
-		return $returnVals;
+		$lookupAssoc = array($this->ColumnName => $value);
+		return $this->Table->LookupRows($lookupAssoc, $options);
 	}
 
 	/**
@@ -570,8 +485,8 @@ class SmartColumn{
 	}
 
 	/**
-	 * Looks up an a row instance that matches the given column $value. If there is no match, an instance is still returned but ->Exists() will be false. The returned row will have the searched column=>value set by default (excluding auto-increment primary key columns)
-	 * To execute this function, this table must have a primary key and the column must be unique.
+	 * Looks up an a row that matches the given column $value. If there is no match, an instance is still returned but ->Exists() will be false. The returned row will have the searched column=>value set by default (excluding auto-increment primary key columns)
+	 * To execute this function, this table must have a primary key. Throws an exception if more than 1 row is returned.
 	 * @param mixed $value The $value to lookup in this column
 	 * @return SmartRow Looks up an a row instance that matches the given column $value.  If there is no match, an instance is still returned but ->Exists() will be false. The returned row will have the searched column=>value set by default (excluding auto-increment primary key columns when the row does not exist)
 	 * @see SmartColumn::LookupRows()
@@ -579,57 +494,10 @@ class SmartColumn{
 	 * @todo Implement table's with composite keys into this function
 	 */
 	public function LookupRow($value){
-		if(!$this->Table->PrimaryKeyExists()) throw new Exception("Function '".__FUNCTION__."' only works on Tables that contain a primary key");
-		if(!$this->IsUnique) throw new Exception("Function '".__FUNCTION__."' only works on columns specified as Unique.");
-		
 		//normalize serialized data
 		if($this->IsSerializedColumn) $value = $this->GetSerializedValue($value);
-
-		//table must have a single primary key column
-		if($this->Table->PrimaryKeyIsComposite()) throw new Exception("Function '".__FUNCTION__."' not yet implemented for composite keys.");
-		$keyColumnNames = array_keys($this->Table->GetKeyColumns());
-		$keyColumnName = $keyColumnNames[0];
-		
-		$dbManager = $this->Table->Database->DbManager;
-		if(!$dbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
-		$numRowsSelected = $dbManager->Select(array($keyColumnName), $this->Table, array( array($this->ColumnName => $value )), '', '', array('add-column-quotes'=>true, 'add-dot-notation'=>true));
-
-		if($numRowsSelected > 1) throw new Exception("Returned more than 1 row when looking up on a unique column");
-
-		$returnVal = null;
-		if ($row = $dbManager->FetchAssoc()) { //match
-			$returnVal = $row[$keyColumnName];
-			if($this->Table->ExtendedByClassName && class_exists($this->Table->ExtendedByClassName,true)){
-				return new $this->Table->ExtendedByClassName($this->Table->Database, $returnVal);
-			}
-			else {
-				if($this->Table->ExtendedByClassName && $this->Table->Database->DEV_MODE_WARNINGS)
-					trigger_error("Warning: no class reference found for Table '{$this->Table->TableName}'. ExtendedByClassName = '{$this->Table->ExtendedByClassName}'. Make sure this value is not empty and that the file containing that class is included.", E_USER_WARNING);
-
-				return new SmartRow($this->Table->TableName, $this->Table->Database, $returnVal);
-			}
-		}
-		else { //no match. return a new instance with this value set.
-			if($this->Table->ExtendedByClassName && class_exists($this->Table->ExtendedByClassName,true)){
-				$row = new $this->Table->ExtendedByClassName($this->Table->Database);
-			}
-			else {
-				$row = new SmartRow($this->Table->TableName, $this->Table->Database);
-			}
-			//foce disable commit changes immediately in this case
-			$defaultCommitVal = $row->Table->AutoCommit;
-			$row->Table->AutoCommit = false;
-
-			//set value
-			if($this->AllowSet && !$this->IsPrimaryKey){
-				$cell = $row->Cell($this->ColumnName);
-				$cell->SetValue($value);
-			}
-
-			//set commit changes immediately back to its old value
-			$row->Table->AutoCommit = $defaultCommitVal;
-			return $row;
-		}
+		$lookupAssoc = array($this->ColumnName => $value);
+		return $this->Table->LookupRow($lookupAssoc);
 	}
 	/**
 	 * Alias for LookupRow. See SmartColumn::LookupRow()

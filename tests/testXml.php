@@ -485,6 +485,10 @@ function Test5($t, $debug=false){
 	AssertCellVal($i['Level'], 12.34);
 
 	$GLOBALS['test5']['cell'] = $i['Timestamp'];
+	/**
+ 	 * @package Tests
+ 	 * @ignore
+	 */
 	class TestStaticCallbackClass{
 		public static function ValueSet($eventObject, $eventArgs){
 			//Msg(true,"Timestamp ValueSet callback",$eventObject);
@@ -727,6 +731,23 @@ function Test9($t, $debug=false){
 		}
 	}
 	
+	//GetAllRows() with 'return-next-row' option set
+	$lastRow = null;
+	$totalIterations = 0;
+	while( $row = $db['Setting']->GetAllRows(array(
+		'return-next-row'=>&$curCount,
+		'return-count'=>&$totalCount
+	))){
+		//echo "$curCount - $totalCount - $row<br>";
+		$totalIterations++;
+		$lastRow = $row;
+	}
+	if($debug) echo "Get all rows, count: $totalCount<br>\n";
+	if($totalCount !== 2) Ex("Wrong number of rows returned");
+	if($totalCount != $totalIterations) Ex("Wrong number of iterations: $totalCount");
+
+	AssertCellVal($lastRow['Id'], 70);
+	
 	//LookupRows() with empty array, should be idential to GetAllRows() (as above)
 	$allRows = $db['Setting']->LookupRows(array(), array('sort-by'=>array("Id"=>"desc")));
 	$count=count($allRows);
@@ -741,6 +762,23 @@ function Test9($t, $debug=false){
 			echo $keyValue.'='.$Row;
 		}
 	}
+	
+	//LookupRows() with 'return-next-row' option set, should be idential to GetAllRows() (as above)
+	$lastRow = null;
+	$totalIterations = 0;
+	while( $row = $db['Setting']->LookupRows(array(), array(
+		'return-next-row'=>&$curCount,
+		'return-count'=>&$totalCount
+	))){
+		//echo "$curCount - $totalCount - $row<br>";
+		$totalIterations++;
+		$lastRow = $row;
+	}
+	if($debug) echo "Get all rows, count: $totalCount<br>\n";
+	if($totalCount !== 2) Ex("Wrong number of rows returned");
+	if($totalCount != $totalIterations) Ex("Wrong number of iterations: $totalCount");
+
+	AssertCellVal($lastRow['Id'], 70);
 
 	//GetAllRows()
 	$allRows = $db['Setting']->GetAllRows(array('sort-by'=>array("Id"=>"asc"), 'limit'=>1));
@@ -832,13 +870,17 @@ function Test10($t, $debug=false){
 	InsretSomeFastSettingRows($db);
 
 	//LookupColumnValues
-	$rows = $db['FastSetting']->LookupColumnValues(array("ShortName"=>"short name"),"Name",array('sort-by'=>'Id'));
-	if(count($rows) !== 2) Ex("Wrong row count");
-	if($rows[0] !== "my@name.com") Ex("Row name value not equal");
+	$values = $db['FastSetting']->LookupColumnValues(array("ShortName"=>"short name"),"Name",array('sort-by'=>'Id'));
+	if(count($values) !== 2) Ex("Wrong return count");
+	if($values[0] !== "my@name.com") Ex("Row ShortName value not correct");
 
-	$rows = $db['FastSetting']->LookupColumnValues(array("ShortName"=>"short name"),"Name",array('sort-by'=>array('Id'=>'DEsC'),'return-assoc'=>true));
-	if(count($rows) !== 2) Ex("Wrong row count");
-	if($rows[35] !== "my@name2.com") Ex("Row name value not equal");
+	$values = $db['FastSetting']->LookupColumnValues(array("ShortName"=>"short name"),"Name",array('sort-by'=>array('Id'=>'DEsC'),'return-assoc'=>true));
+	if(count($values) !== 2) Ex("Wrong return count");
+	if($values[35] !== "my@name2.com") Ex("Row ShortName value not correct");
+	
+	$values = $db['FastSetting']->LookupColumnValues(array("Name"=>array('or'=>array('my@name2.com','my@name.com'))),"ShortName",array('sort-by'=>array('Id'=>'DEsC'),'get-unique'=>true));
+	if(count($values) !== 1) Ex("Wrong return count");
+	if($values[0] !== "short name") Ex("Row ShortName value not correct");
 
 	//LookupRow
 	$caughtError = false;
@@ -921,6 +963,21 @@ function Test10($t, $debug=false){
 	//Lookup Rows
 	$rows = $db['FastSetting']->LookupRows(array("ShortName"=>"short name not exist"));
 	if(count($rows) !== 0) Ex("Wrong count of rows returned");
+	
+	//Lookup Rows in loop with 'return-next-row' option set
+	$lastRow = null;
+	$totalIterations = 0;
+	while( $row = $db['FastSetting']->LookupRows(array("ShortName"=>"short name"), array(
+		'return-next-row'=>&$curCount,
+		'return-count'=>&$totalCount
+	))){
+		//echo "$curCount - $totalCount - $row<br>";
+		$totalIterations++;
+		$lastRow = $row;
+	}
+	if($totalCount !== 2) Ex("Wrong number of rows returned");
+	if($totalCount != $totalIterations) Ex("Wrong number of iterations: $totalCount");
+	AssertCellVal($lastRow['Id'], 34);
 }
 
 /**
@@ -947,7 +1004,23 @@ function Test11($t, $debug=false){
 	$setting = new SmartRow('FastSetting', $db, 35);
 	$relatedRows = $setting['Id']->GetRelatedRows('Log','Id');
 	if(count($relatedRows) !== 0) Ex("found related rows");
+	
+	//GetRelatedRows with 'return-next-row' option set
+	$setting = new SmartRow('FastSetting', $db, 34);
+	$lastRow = null;
+	$totalIterations = 0;
+	while( $row = $setting['Id']->GetRelatedRows('Log', 'Id', array(
+		'return-next-row'=>&$curCount,
+		'return-count'=>&$totalCount
+	))){
+		//echo "$curCount - $totalCount - $row<br>";
+		$totalIterations++;
+		$lastRow = $row;
+	}
+	if($totalCount !== 1) Ex("Wrong number of rows returned");
+	if($totalCount != $totalIterations) Ex("Wrong number of iterations: $totalCount");
 
+	//more GetRelatedRows
 	$setting = new SmartRow('FastSetting', $db, 34);
 	$relatedRows = $setting['Id']->GetRelatedRows('Log'); //column "Id" should be assumed
 	if(count($relatedRows) === 0) Ex("found no related rows");
@@ -1181,6 +1254,10 @@ function Test16($t, $debug=false){
 	if($val != 0) Ex("Invalid count-distinct: '$val' != 0");
 }
 
+/**
+ * @package Tests
+ * @ignore
+ */
 class TestClass{
 	public $x = 0;
 	public $y = "\\1";

@@ -553,7 +553,7 @@ class DbManager_MySQL implements DbManager {
 	 * clears remaining results of a multi-query result set. you must do this before you execute the next query.
 	 * see http://php.net/manual/en/mysqli.multi-query.php
 	 */
-	private function FlushResults(){
+	public function FlushResults(){
 		$this->FreeResult();
 		if(!$this->_isConnected) return false;
 		

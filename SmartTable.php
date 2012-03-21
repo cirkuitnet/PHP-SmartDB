@@ -93,6 +93,8 @@ class SmartTable implements ArrayAccess, Countable{
 	private $_nonKeyColumns = array(); //computed from $this->_columns
 	private $_autoIncrementKeyColumns = array(); //computed from $this->_columns
 	private $_nonAutoIncrementKeyColumns = array(); //computed from $this->_columns
+		
+	private $_storedDbManagers = array(); //key is the function name, value is the DbManager results to cache
 
 	private $_primaryKeyExists;
 	private $_primaryKeyIsComposite;
@@ -119,17 +121,15 @@ class SmartTable implements ArrayAccess, Countable{
 	}
 
 	/**
-	 *
+	 * Returns an assoc of all key columns. The returned array's key=$columnAlias, value=$realColumnName
 	 * @return array
-	 * @ignore
 	 */
 	public function GetKeyColumns(){
 		return $this->_keyColumns;
 	}
 	/**
-	 *
+	 * Returns an assoc of all non key columns. The returned array's key=$columnAlias, value=$realColumnName
 	 * @return array
-	 * @ignore
 	 */
 	public function GetNonKeyColumns(){
 		return $this->_nonKeyColumns;
@@ -479,6 +479,39 @@ class SmartTable implements ArrayAccess, Countable{
 			}		
 		}
     }
+	
+	/**
+	 * Checks if the "return-next-row" key is set in the given $options array and verifies that it is passed by reference.
+	 * Returns true if the above is true, false if not, and throws an exception if the key is set but is not passed by reference.
+	 * @ignore
+	 */
+	private function CheckReturnNextRow(array $options=null, $storedDbManager, $functionName){
+		//check that the 'return-next-row' option is set
+		if(!$options || !array_key_exists('return-next-row', $options)){
+			return false; //option not not set
+		}
+		
+		//verify the 'return-next-row' option is passed by reference. it MUST be
+		$curVal = $options['return-next-row'];
+		
+		//copy options array and test if the 'return-next-row' is passed by reference
+		$optionsCopy = $options;
+		$optionsCopy['return-next-row'] = -1;
+		if($options['return-next-row']!==-1){ //not passed by reference
+			throw new \Exception('The "return-next-row" $option must be passed by reference to function "'.$functionName.'" - i.e. array( "return-next-row" => &$curCount )');
+		}
+		
+		//'return-next-row' is passed by reference.
+		//restore the original return-next-row option.
+		if(!is_int($curVal)) $curVal = 0; //make sure the original is an int
+		else if($curVal && !$storedDbManager){ //if $curVal is >0 here, then we're returning the NEXT row and should have a cached dbmanager to use
+			$curVal = 0; //no cached dbmanager? assume this is the first call and we should return the first row of the result set
+		}
+		
+		$options['return-next-row'] = $curVal;
+		
+		return $curVal;
+	}
 
 	/**
 	 * Returns an array of all Row instances that match the given $lookupAssoc column values, or an empty array if there are no matches. If the option 'return-count-only'=true, returns an integer of number of rows selected. To execute this function, this table must have a primary key.
@@ -487,6 +520,10 @@ class SmartTable implements ArrayAccess, Countable{
 	 * $options = array(
 	 * 	'sort-by'=>null, //Either a string of the column to sort ASC by, or an assoc array of "ColumnName"=>"ASC"|"DESC" to sort by. An exception will be thrown if a column does not exist.
 	 * 	'return-assoc'=>false, //if true, the returned assoc-array will have the row's primary key column value as its key (if a non-composite primary key exists on the table. otherwise this option is ignored) and the Row instance as its value. ie array("2"=>$row,...) instead of just array($row,...);
+	 *  'return-next-row'=>null, //OUT variable. integer. if you set this parameter in the $options array, then this function will return only 1 row of the result set at a time. If there are no rows selected or left to iterate over, null is returned.
+	 *  						// THIS PARAMETER MUST BE PASSED BY REFERENCE - i.e. array( "return-next-row" => &$curCount ) - the incoming value of this parameter doesn't matter and will be overwritten)
+	 *  						// After this function is executed, this OUT variable will be set with the number of rows that have been returned thus far.
+	 *  						// Each consecutive call to this function with the 'return-next-row' option set will return the next row in the result set, and also increment the 'return-next-row' variable to the number of rows that have been returned thus far
 	 *  'limit'=>null, // With one argument (ie $limit="10"), the value specifies the number of rows to return from the beginning of the result set
 	 *				   // With two arguments (ie $limit="100,10"), the first argument specifies the offset of the first row to return, and the second specifies the maximum number of rows to return. The offset of the initial row is 0 (not 1):
 	 *  'return-count'=>null, //OUT variable only. integer. after this function is executed, this variable will be set with the number of rows being returned. Usage ex: array('return-count'=>&$count)
@@ -501,40 +538,71 @@ class SmartTable implements ArrayAccess, Countable{
 	 * @see SmartTable::GetAllRows()
 	 */
 	public function LookupRows($lookupAssoc=null, array $options=null){
-		if(!$this->PrimaryKeyExists()) throw new Exception("Function '".__FUNCTION__."' only works on Tables that contain a primary key");
-
-		//$lookupAssoc is not required. if no $lookupAssoc is given, this will be identical to GetAllRows().
-		if($lookupAssoc){
-			$lookupAssoc = $this->VerifyLookupAssoc($lookupAssoc, __FUNCTION__);
-		}
-
+		if(!$this->PrimaryKeyExists()) throw new Exception("Function '".__FUNCTION__."' only works on Tables that contain a primary key, but could probably be changed to work for any table structure");
+		
 		//table must have a single primary key column
 		if($this->PrimaryKeyIsComposite()) throw new Exception("Function '".__FUNCTION__."' not yet implemented for composite keys.");
 		$keyColumnNames = array_keys($this->GetKeyColumns());
 		$keyColumnName = $keyColumnNames[0];
-
-		$limit = trim($options['limit']);
-		$sortByFinal = $this->BuildSortArray($options['sort-by']);
+		
+		//get DbManager we need to use. could be a stored result set if $returnNextRow > 0
 		$dbManager = $this->Database->DbManager;
 		if(!$dbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
-		$numRowsSelected = $dbManager->Select(array($keyColumnName), $this, $lookupAssoc, $sortByFinal, $limit, array('add-column-quotes'=>true, 'add-dot-notation'=>true));
-		$options['return-count'] = $numRowsSelected;
 
-		//check the 'return-count-only' option
-		if($options['return-count-only']) return $numRowsSelected;
-		
-		//get an array of all of the rows
-		$results = $dbManager->FetchAssocList();
+		//check for the 'return-next-row' option to return 1 row at a time
+		$returnNextRow = $this->CheckReturnNextRow($options, $this->_storedDbManagers['LookupRows'], __FUNCTION__); //returns INT >= 0 or FALSE
+
+		//do the query if we're not returning the next row from our result set
+		if(!$returnNextRow || $returnNextRow==0){ //spelling out both cases for clarity - $returnNextRow could be 0 or false here. both should run the new query
+			if($this->_storedDbManagers['LookupRows']){  //clear any cached result sets we may have
+				$this->_storedDbManagers['LookupRows']->FlushResults();
+				unset($this->_storedDbManagers['LookupRows']);
+			}
+			
+			//$lookupAssoc is not required. if no $lookupAssoc is given, this will be identical to GetAllRows().
+			if($lookupAssoc){
+				$lookupAssoc = $this->VerifyLookupAssoc($lookupAssoc, __FUNCTION__);
+			}
+			
+			//do the new query
+			$limit = trim($options['limit']);
+			$sortByFinal = $this->BuildSortArray($options['sort-by']);
+			$numRowsSelected = $dbManager->Select(array($keyColumnName), $this, $lookupAssoc, $sortByFinal, $limit, array('add-column-quotes'=>true, 'add-dot-notation'=>true));
+			$options['return-count'] = $numRowsSelected;
+	
+			//check the 'return-count-only' option
+			if($options['return-count-only']) return $numRowsSelected;
+		}
+
+		if($returnNextRow!==false){ //specifically check for FALSE here (zero is valid for returning the 1st row of the set)
+			//if we're returning the first row of a result set, we need to store this particular result dbmanager to iterate over later, so clone our current DbManager and save it to this Table object
+			if($returnNextRow===0){
+				$this->_storedDbManagers['LookupRows'] = clone $dbManager;
+			}
+
+			//return just a single result at a time from the stored DbManager's result set
+			$row = $this->_storedDbManagers['LookupRows']->FetchAssoc();
+			if(!$row) return null; //no more rows to fetch in this result set
+			
+			$options['return-next-row']++; //track the number of records we've returned
+		}
+		else{ //'return-next-row' option is not set. return array of all results
+			$results = $dbManager->FetchAssocList(); //get an array of all of the rows
+		}
 
 		$returnVals = array();
 		if($this->ExtendedByClassName && class_exists($this->ExtendedByClassName,true)){
-			if($options['return-assoc']){ //return an assoc array
-				foreach($results as $row){
+			if($returnNextRow!==false){ //specifically check for FALSE here (zero is valid for returning the 1st row of the set)
+				//return only a single row at a time
+				return new $this->ExtendedByClassName($this->Database, $row[$keyColumnName]);
+			}
+			else if($options['return-assoc']){ //return all rows as an assoc array with row-key as array-key
+				foreach ($results as $row) {
 					$returnVals[$row[$keyColumnName]] = new $this->ExtendedByClassName($this->Database, $row[$keyColumnName]);
 				}
 			}
-			else{ //return a regular array
-				foreach($results as $row){
+			else{ //return all rows pushed onto an array
+				foreach ($results as $row) {
 					$returnVals[] = new $this->ExtendedByClassName($this->Database, $row[$keyColumnName]);
 				}
 			}
@@ -543,13 +611,17 @@ class SmartTable implements ArrayAccess, Countable{
 			if($this->ExtendedByClassName && $this->Database->DEV_MODE_WARNINGS)
 				trigger_error("Warning: no class reference found for Table '{$this->TableName}'. ExtendedByClassName = '{$this->ExtendedByClassName}'. Make sure this value is not empty and that the file containing that class is included.", E_USER_WARNING);
 
-			if($options['return-assoc']){ //return an assoc array
-				foreach($results as $row){
+			if($returnNextRow!==false){ //specifically check for FALSE here (zero is valid for returning the 1st row of the set)
+				//return only a single row at a time
+				return new SmartRow($this->TableName, $this->Database, $row[$keyColumnName]);
+			}
+			else if($options['return-assoc']){ //return all rows as an assoc array with row-key as array-key
+				foreach ($results as $row) {
 					$returnVals[$row[$keyColumnName]] = new SmartRow($this->TableName, $this->Database,$row[$keyColumnName]);
 				}
 			}
-			else{ //return a regular array
-				foreach($results as $row){
+			else{ //return all rows pushed onto an array
+				foreach ($results as $row) {
 					$returnVals[] = new SmartRow($this->TableName, $this->Database,$row[$keyColumnName]);
 				}
 			}
@@ -558,7 +630,8 @@ class SmartTable implements ArrayAccess, Countable{
 	}
 
 	/**
-	 * Looks up a row instance matching the criteria of $lookupVals. The returned row may or may not Exist
+	 * Looks up an a row that matches the given column $value. If there is no match, an instance is still returned but ->Exists() will be false. The returned row will have the searched columns=>values set by default (excluding auto-increment primary key columns)
+	 * To execute this function, this table must have a primary key. Throws an exception if more than 1 row is returned.
 	 * As a shortcut, invoking the SmartTable directly will call LookupRow, i.e., $smartdb['tablename'](212) instead of $smartdb['tablename']->LookupRow(212) or $smartdb['tablename']->LookupRow(array('id'=>212))
 	 * @param mixed $lookupVals Either 1) An assoc-array of column=>value to lookup. For example: array("column1"=>"lookupVal", "column2"=>"lookupVal", ...). OR 2) As a shorthand, if the table contains a single primary key column, $lookupVals can be the value of that column to lookup instead of an array, ie 421
 	 * @return SmartRow A Row instance matching the criteria of $lookupVals. The returned row may or may not Exist
@@ -690,11 +763,12 @@ class SmartTable implements ArrayAccess, Countable{
 	}
 
 	/**
-	 * Returns an assoc array of [id of table's key column (if exists. otherwise values are simply pushed onto the array with no key specified)]=>[value of the column specified in $returnColumn]. Or if the option 'return-count-only'=true, returns an integer of number of rows selected.
+	 * Gets all values in all rows for the given $returnColumn, optionally unique and sorted. Optionally in an assoc with the primary key column value as the assoc's key value. Alternatively, if the option 'return-count-only'=true, returns an integer of number of rows selected.
 	 * Options are as follows:
 	 * <code>
 	 * $options = array(
 	 * 	'sort-by'=>null, //Either a string of the column to sort ASC by, or an assoc array of "ColumnName"=>"ASC"|"DESC" to sort by. An exception will be thrown if a column does not exist.
+	 *  'get-unique'=>false, //If true, only unique values will be returned. Note: array keys in the returned array will NOT be the key column when this is true)
 	 * 	'return-assoc'=>false, //if true, the returned assoc-array will have the row's primary key column value as its key (if a non-composite primary key exists on the table. otherwise this option is ignored) and the $returnColumn's value as its value. ie array("2"=>$returnColumnValue,...) instead of just array($returnColumnValue,...);
 	 *  'limit'=>null, // With one argument (ie $limit="10"), the value specifies the number of rows to return from the beginning of the result set
 	 *				   // With two arguments (ie $limit="100,10"), the first argument specifies the offset of the first row to return, and the second specifies the maximum number of rows to return. The offset of the initial row is 0 (not 1):
@@ -705,7 +779,7 @@ class SmartTable implements ArrayAccess, Countable{
 	 * @param array $lookupAssoc [optional] An assoc-array of column=>value to lookup. For example: array("column1"=>"lookupVal", "column2"=>"lookupVal", ...). If this is left null or empty array, all column values for all rows will be returned.
 	 * @param string $returnColumn The name of the column to return the values of
 	 * @param array $options [optional] See description
-	 * @return mixed An assoc array of [id of table's key column (if exists. otherwise values are simply pushed onto the array with no key specified)]=>[value of the column specified in $returnColumn]. Or if the option 'return-count-only'=true, returns an integer of number of rows selected.
+	 * @return mixed An array of key-value pairs. The keys are either 1: nothing, or 2: the primary key (if 'return-assoc' option is TRUE and 'get-unique' option is false and the table has a primary key), and the values are the actual column values. Alternatively, if the option 'return-count-only'=true, returns an integer of number of rows selected.
 	 */
 	public function LookupColumnValues($lookupAssoc=null, $returnColumn, array $options=null){
 		if(!$this->ColumnExists($returnColumn)) throw new Exception("Bad return column for function '".__FUNCTION__."': Column '{$returnColumn}' does not exist in table {$this->TableName}");
@@ -725,7 +799,7 @@ class SmartTable implements ArrayAccess, Countable{
 		if(!$dbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
 
 		$returnVals = array();
-		if($this->PrimaryKeyIsNonComposite()){
+		if($this->PrimaryKeyIsNonComposite() && !$options['get-unique']){
 			//table must have a single primary key column
 			$keyColumnNames = array_keys($this->GetKeyColumns());
 			$keyColumnName = $keyColumnNames[0];
@@ -755,8 +829,8 @@ class SmartTable implements ArrayAccess, Countable{
 				}
 			}
 		}
-		else{ // no primary key
-			$numRowsSelected = $dbManager->Select(array($returnColumn), $this, $lookupAssoc, $sortByFinal, $limit, array('add-column-quotes'=>true, 'add-dot-notation'=>true));
+		else{ // no primary key or returning UNIQUE results only
+			$numRowsSelected = $dbManager->Select(array($returnColumn), $this, $lookupAssoc, $sortByFinal, $limit, array('add-column-quotes'=>true, 'add-dot-notation'=>true, 'distinct'=>$options['get-unique']));
 			$options['return-count'] = $numRowsSelected;
 
 			//check the 'return-count-only' option
@@ -867,6 +941,10 @@ class SmartTable implements ArrayAccess, Countable{
 	 * $options = array(
 	 * 	'sort-by'=>null, //Either a string of the column to sort ASC by, or an assoc array of "ColumnName"=>"ASC"|"DESC" to sort by. An exception will be thrown if a column does not exist.
 	 * 	'return-assoc'=>false, //if true, the returned assoc-array will have the row's primary key column value as its key and the row as its value. ie array("2"=>$row,...) instead of just array($row,...);
+	 *  'return-next-row'=>null, //OUT variable. integer. if you set this parameter in the $options array, then this function will return only 1 row of the result set at a time. If there are no rows selected or left to iterate over, null is returned.
+	 *  						// THIS PARAMETER MUST BE PASSED BY REFERENCE - i.e. array( "return-next-row" => &$curCount ) - the incoming value of this parameter doesn't matter and will be overwritten)
+	 *  						// After this function is executed, this OUT variable will be set with the number of rows that have been returned thus far.
+	 *  						// Each consecutive call to this function with the 'return-next-row' option set will return the next row in the result set, and also increment the 'return-next-row' variable to the number of rows that have been returned thus far
 	 *  'limit'=>null, // With one argument (ie $limit="10"), the value specifies the number of rows to return from the beginning of the result set
 	 *				   // With two arguments (ie $limit="100,10"), the first argument specifies the offset of the first row to return, and the second specifies the maximum number of rows to return. The offset of the initial row is 0 (not 1):
 	 *  'return-count'=>null, //OUT variable only. integer. after this function is executed, this variable will be set with the number of rows being returned. Usage ex: array('return-count'=>&$count)
@@ -880,56 +958,7 @@ class SmartTable implements ArrayAccess, Countable{
 	 * @todo Make all tables work with this function
 	 */
 	public function GetAllRows(array $options=null){
-		if(!$this->PrimaryKeyExists()) throw new Exception("Function '".__FUNCTION__."' only works on Tables that contain a primary key, but could probably be changed to work for any table structure");
-
-		//table must have a single primary key column
-		if($this->PrimaryKeyIsComposite()) throw new Exception("Function '".__FUNCTION__."' not yet implemented for composite keys.");
-		$keyColumnNames = array_keys($this->GetKeyColumns());
-		$keyColumnName = $keyColumnNames[0];
-
-		$limit = trim($options['limit']);
-		$sortByFinal = $this->BuildSortArray($options['sort-by']);
-		$dbManager = $this->Database->DbManager;
-		if(!$dbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
-		$numRowsSelected = $dbManager->Select(array($keyColumnName), $this, '', $sortByFinal, $limit, array('add-column-quotes'=>true, 'add-dot-notation'=>true));
-		$options['return-count'] = $numRowsSelected;
-
-		//check the 'return-count-only' option
-		if($options['return-count-only']) return $numRowsSelected;
-		
-		//get an array of all of the rows
-		$results = $dbManager->FetchAssocList();
-
-		$returnVals = array();
-		if($this->ExtendedByClassName && class_exists($this->ExtendedByClassName,true)){
-			if($options['return-assoc']){ //return an assoc array
-				foreach ($results as $row) {
-					$returnVals[$row[$keyColumnName]] = new $this->ExtendedByClassName($this->Database, $row[$keyColumnName]);
-				}
-			}
-			else{ //return a regular array
-				foreach ($results as $row) {
-					$returnVals[] = new $this->ExtendedByClassName($this->Database, $row[$keyColumnName]);
-				}
-			}
-		}
-		else {
-			if($this->ExtendedByClassName && $this->Database->DEV_MODE_WARNINGS)
-				trigger_error("Warning: no class reference found for Table '{$this->TableName}'. ExtendedByClassName = '{$this->ExtendedByClassName}'. Make sure this value is not empty and that the file containing that class is included.", E_USER_WARNING);
-
-			if($options['return-assoc']){ //return an assoc array
-				foreach ($results as $row) {
-					$returnVals[$row[$keyColumnName]] = new SmartRow($this->TableName, $this->Database,$row[$keyColumnName]);
-				}
-			}
-			else{
-				foreach ($results as $row) {
-					$returnVals[] = new SmartRow($this->TableName, $this->Database,$row[$keyColumnName]);
-				}
-			}
-		}
-
-		return $returnVals;
+		return $this->LookupRows(null, $options);
 	}
 
 	/**
