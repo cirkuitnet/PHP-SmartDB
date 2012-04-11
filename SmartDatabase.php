@@ -25,7 +25,7 @@ require_once(dirname(__FILE__).'/SmartRow.php');
  * @package SmartDatabase
  */
 class SmartDatabase implements ArrayAccess, Countable{
-	const Version = "1.33"; //should update this for ANY change to structure at least. used for determining if a serialized SmartDatabase object is invalid/out of date
+	const Version = "1.34"; //should update this for ANY change to structure at least. used for determining if a serialized SmartDatabase object is invalid/out of date
 	
 	/////////////////////////////// SERIALIZATION - At top so we don't forget to update these when we add new vars //////////////////////////
 		/**
@@ -343,6 +343,9 @@ class SmartDatabase implements ArrayAccess, Countable{
 				if($Column->FulltextIndex){
 					$xml .= ' FulltextIndex="'.bs($Column->FulltextIndex).'"';
 				}
+				if($Column->NonuniqueIndex){
+					$xml .= ' NonuniqueIndex="'.bs($Column->NonuniqueIndex).'"';
+				}
 				if($Column->SortOrder){
 					//SortOrder not yet implemented
 					//$xml .= ' SortOrder="'.$Column->SortOrder.'"';
@@ -467,6 +470,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 					$column->DefaultValue = $xmlColumn['a']['DefaultValue'];
 					$column->IsUnique = (strtolower($xmlColumn['a']['IsUnique']) === 'true' ? true : false);
 					$column->FulltextIndex = (strtolower($xmlColumn['a']['FulltextIndex']) === 'true' ? true : false);
+					$column->NonuniqueIndex = (strtolower($xmlColumn['a']['NonuniqueIndex']) === 'true' ? true : false);
 					$column->IsPrimaryKey = (strtolower($xmlColumn['a']['PrimaryKey']) === 'true' ? true : false);
 					$column->IsAutoIncrement = (strtolower($xmlColumn['a']['AutoIncrement']) === 'true' ? true : false);
 					$column->DefaultFormType = ($xmlColumn['a']['FormType'] ? $xmlColumn['a']['FormType'] : "text"); //"text" is default value
@@ -733,6 +737,10 @@ class SmartDatabase implements ArrayAccess, Countable{
 					$structure[$tableName][$columnName]["Key"] = "MUL";
 					$structure[$tableName][$columnName]["IndexType"] = "FULLTEXT";
 				}
+				else if($Column->NonuniqueIndex){ //Nonunique index
+					$structure[$tableName][$columnName]["Key"] = "MUL";
+					$structure[$tableName][$columnName]["IndexType"] = "NONUNIQUE";
+				}
 				else{
 					$structure[$tableName][$columnName]["Key"] = "";
 					$structure[$tableName][$columnName]["IndexType"] = "";
@@ -758,6 +766,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 			//all columns
 			$primaryKeyColumnNames = array();
 			$fulltextColumnNames = array();
+			$nonuniqueIndexColumnNames = array();
 			$first = true;
 			foreach($columns as $columnName=>$columnProps){
 				if(!$first) $sqlCreateTable .= ", ";
@@ -812,6 +821,12 @@ class SmartDatabase implements ArrayAccess, Countable{
 				if($structure[$tableName][$columnName]["IndexType"] === "FULLTEXT"){
 					$fulltextColumnNames[] = $columnName;
 				}
+				
+				//nonunique index
+				if($structure[$tableName][$columnName]["IndexType"] === "NONUNIQUE"){
+					$nonuniqueIndexColumnNames[] = $columnName;
+				}
+				
 				$first = false;
 			}
 
@@ -825,6 +840,11 @@ class SmartDatabase implements ArrayAccess, Countable{
 			//fulltext columns
 			foreach($fulltextColumnNames as $ftColumnName){
 				$sqlCreateTable .= ",FULLTEXT KEY `".$ftColumnName."` (`".$ftColumnName."`)";
+			}
+			
+			//nonunique columns
+			foreach($nonuniqueIndexColumnNames as $nuiColumnName){
+				$sqlCreateTable .= ",KEY `".$nuiColumnName."` (`".$nuiColumnName."`)";
 			}
 			
 			$sqlCreateTable .= ");";
@@ -962,6 +982,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 				$column->IsPrimaryKey = ( ($columnProps['Key']==="PRI") ? true : false);
 				$column->IsAutoIncrement = ( (strpos($columnProps['Extra'], "auto_increment") !== false) ? true : false);
 				$column->FulltextIndex = ( ($columnProps['IndexType'] === "FULLTEXT") ? true : false);
+				$column->NonuniqueIndex = (!$column->IsUnique && ($columnProps['IndexType'] === "NONUNIQUE") ? true : false);
 				$column->IsRequired = ( !$column->IsAutoIncrement && ($columnProps['Null']==="NO" || $column->IsPrimaryKey) ? true : false); //auto-increment shouldnt be required, otherwise we dont get the autoincrement value
 				$column->SortOrder = $colNum++;
 				

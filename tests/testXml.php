@@ -109,7 +109,7 @@ $database = $t['database'] = new SmartDatabase($dbManager, dirname(__FILE__).'/t
 
 $database->DEV_MODE_WARNINGS = false; //turn off warnings for now
 //print_nice($database);
-//$database->WriteXmlSchema('/home/adam/public_html/test.xml');
+//echo $database->WriteXmlSchema();
 //die;
 
 $t['database']['Setting']->TableName = "Settings"; //change name of database table "Settings"
@@ -198,6 +198,7 @@ function SyncDbTables($t){
 	if(strstr($results, "Fatal error") !== false || strstr($results, "exception") !== false){
 		throw new Exception("SyncDbTablesFailed");
 	}
+	return $results;
 }
 
 function AssertIsDirty($i){

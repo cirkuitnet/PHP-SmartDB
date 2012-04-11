@@ -25,7 +25,7 @@
  * 			"Default"=>"<default value|empty>",
  * 			"Extra"=>"<auto_increment|empty>",
  * 			"Collation"=>"<utf8_general_ci|latin1_swedish_ci|empty>", //other collations can easily be added if needed
- * 			"IndexType"=>"<UNIQUE|FULLTEXT|empty>", //UNIQUE when Key=PRI,UNI, or MUL. FULLTEXT for fulltext index
+ * 			"IndexType"=>"<UNIQUE|NONUNIQUE|FULLTEXT|empty>", //UNIQUE when Key=PRI,UNI, or MUL. FULLTEXT for fulltext index
  * 		),
  * 		...(more columns)...
  * 	),
@@ -111,7 +111,7 @@ class ReadDb_MySQL{
  	 * 			"Default"=>"<default value|empty>",
 	 * 			"Extra"=>"<auto_increment|empty>",
  	 * 			"Collation"=>"<utf8_general_ci|latin1_swedish_ci|empty>", //other collations can easily be added if needed
- 	 * 			"IndexType"=>"UNIQUE|FULLTEXT|empty",
+ 	 * 			"IndexType"=>"UNIQUE|NONUNIQUE|FULLTEXT|empty",
 	 *		),
 	 *		"COLUMN NAME 2" => array(
 	 *		...etc...
@@ -186,10 +186,15 @@ class ReadDb_MySQL{
         			$results[$tableName][$colName]['IndexType'] = "FULLTEXT";
         		}
         		else{ //i.e. $row['Index_type']=="BTREE"
-        			if(!$results[$tableName][$colName]['Key']){ //if key is not yet set, we need it
-       					$results[$tableName][$colName]['Key'] = "UNI";
+        			if($row['Non_unique']){ //non-unique index
+        				$results[$tableName][$colName]['IndexType'] = "NONUNIQUE";
         			}
-        			$results[$tableName][$colName]['IndexType'] = "UNIQUE";
+        			else{ //unique index
+	        			if(!$results[$tableName][$colName]['Key']){ //if key is not yet set, we need it
+	       					$results[$tableName][$colName]['Key'] = "UNI";
+	        			}
+	        			$results[$tableName][$colName]['IndexType'] = "UNIQUE";
+        			}
         		}
         	}
         }

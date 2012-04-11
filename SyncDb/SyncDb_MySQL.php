@@ -24,8 +24,8 @@
  * 			"Key"=>"<PRI|UNI|MUL|empty>", //note: PRI=Primary Key, UNI=Unique index, MUL=multiple... seems to mean the same as UNI though
  * 			"Default"=>"<default value|empty>",
  * 			"Extra"=>"<auto_increment|empty>",
- * 			"Collation"=>"<utf8_general_ci|latin1_swedish_ci|empty>" //other collations can easily be added if needed
- * 			"IndexType"=>"<UNIQUE|FULLTEXT|empty>", //UNIQUE when Key=PRI,UNI, or MUL. FULLTEXT for fulltext index
+ * 			"Collation"=>"<utf8_general_ci|latin1_swedish_ci|empty>", //other collations can easily be added if needed
+ * 			"IndexType"=>"<UNIQUE|NONUNIQUE|FULLTEXT|empty>", //UNIQUE when Key=PRI,UNI, or MUL. MUL could also mean NONUNIQUE. FULLTEXT for fulltext index
  * 		),
  * 		...(more columns)...
  * 	),
@@ -164,7 +164,13 @@ class SyncDb_MySQL{
 	        		
 	        		//force index type to FULLTEXT or UNIQUE. if not fulltext, assume it's a unique
 	        		if($indexRow['Index_type'] !== "FULLTEXT"){
-	        			$indexRow['Index_type'] = "UNIQUE";
+	        			//Index_type == BTREE
+	        			if($indexRow['Non_unique']){
+	        				$indexRow['Index_type'] = "NONUNIQUE";
+	        			}
+	        			else{
+	        				$indexRow['Index_type'] = "UNIQUE";
+	        			}
 	        		}
 	        		
 	        		//if an index exists for this column already, remove it
@@ -187,7 +193,7 @@ class SyncDb_MySQL{
 	        		
 	        		if($setIndex){
 	        			$indexesFinal[$fieldName]['IndexName'] = $indexRow['Key_name']; //ie PRIMARY, 'id', whatever. references the index
-	        			$indexesFinal[$fieldName]['IndexType'] = $indexRow['Index_type']; //ie FULLTEXT or UNIQUE
+	        			$indexesFinal[$fieldName]['IndexType'] = $indexRow['Index_type']; //ie FULLTEXT, UNIQUE, or NONUNIQUE
 	        		}
 	        	}
 
@@ -208,7 +214,8 @@ class SyncDb_MySQL{
 						
 						//if key is not yet set, we need it for non-fulltext indexes.
 		        		if(!$currentField['Key'] && $indexType !== "FULLTEXT"){
-	       					$currentField['Key'] = "UNI";
+		        			if($indexType == 'UNIQUE') $currentField['Key'] = "UNI"; //unique
+		        			else $currentField['Key'] = "MUL"; //nonunique
 	        			}
 					}
 					else{
@@ -255,8 +262,9 @@ class SyncDb_MySQL{
 
 				//then add indexes on fields that already exist
 				if(is_array($this->_indexesToAdd[$tableName])){
-					foreach($this->_indexesToAdd[$tableName] as $indexName){
-						$this->AddIndex($tableName, $indexName);
+					foreach($this->_indexesToAdd[$tableName] as $indexName=>$indexType){
+						$unique = ($indexType == "UNIQUE"); //indexType can be UNIQUE or NONUNIQUE
+						$this->AddIndex($tableName, $indexName, $unique);
 					}
 				}
 				
@@ -330,6 +338,7 @@ class SyncDb_MySQL{
 		$dropIndex = false;
 		$dropPrimaryKey = false;
 		$addIndex = false;
+		$indexType = null;
 		$addFulltextIndex = false;
 		$addPrimaryKey = false;
 
@@ -364,7 +373,12 @@ class SyncDb_MySQL{
 						if($currentField["IndexType"]==="UNIQUE" && $newField["IndexType"]!=="UNIQUE")
 							$dropIndex = true;
 						else if($currentField["IndexType"]!=="UNIQUE" && $newField["IndexType"]==="UNIQUE")
-							$addIndex = true;
+						{ $addIndex = true; $indexType = "UNIQUE"; }
+						
+						if($currentField["IndexType"]==="NONUNIQUE" && $newField["IndexType"]!=="NONUNIQUE")
+							$dropIndex = true;
+						else if($currentField["IndexType"]!=="NONUNIQUE" && $newField["IndexType"]==="NONUNIQUE")
+	    				{ $addIndex = true; $indexType = "NONUNIQUE"; }
 	    			}
 					continue;
 
@@ -384,7 +398,9 @@ class SyncDb_MySQL{
 							if($currentField[$property]!="PRI" && $newField[$property]=="PRI")
 								$addPrimaryKey = true;
 							if(($currentField[$property]!="UNI" && $currentField[$property]!="MUL") && $newField[$property]=="UNI" && $newField["IndexType"]!=="FULLTEXT")
-								$addIndex = true;
+							{ $addIndex = true; $indexType = "UNIQUE"; }
+							if(($currentField[$property]!="UNI" && $currentField[$property]!="MUL") && $newField[$property]=="MUL" && $newField["IndexType"]!=="FULLTEXT")
+							{ $addIndex = true; $indexType = "NONUNIQUE"; }
 						}
 						
 						
@@ -403,7 +419,7 @@ class SyncDb_MySQL{
 			$this->_keysToDrop[$tableName][] = $fieldName;
 		}
 		if($addIndex){ //add unique index
-			$this->_indexesToAdd[$tableName][] = $fieldName;
+			$this->_indexesToAdd[$tableName][$fieldName] = $indexType;
 		}
 		if($addFulltextIndex){ //add fulltext index
 			$this->_fulltextToAdd[$tableName][] = $fieldName;
@@ -439,14 +455,18 @@ class SyncDb_MySQL{
 		return 1;
 	}
 
-	private function AddIndex($tableName, $fieldName){
+	private function AddIndex($tableName, $fieldName, $unique){
 		if($this->_doInsert == false ) {
 			$this->Message(" -------- <i>Skipping adding index</i>");
 			return 0;
 		}
 		$this->BackupTableIfNeeded($tableName);
 		$this->Message(" -------- <i>Adding Index '$fieldName' on Table '$tableName'</i>");
-		$this->Query("ALTER TABLE `$tableName` ADD UNIQUE (`$fieldName`)");
+		
+		if($unique) $indexType = "UNIQUE";
+		else $indexType = "INDEX"; //non-unique index 
+		
+		$this->Query("ALTER TABLE `$tableName` ADD $indexType (`$fieldName`)");
 		return 1;
 	}
 	

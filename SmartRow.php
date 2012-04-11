@@ -779,7 +779,7 @@ class SmartRow implements ArrayAccess{
 			return $numRowsInserted;
 		}
 		else{ //row exists in database. Update it
-			if($this->_isDirty == false) return -1; //nothing to commit
+			if(!$this->IsDirty()) return -1; //nothing to commit
 
 			if($this->_onBeforeCommit) $this->FireCallback($this->_onBeforeCommit, $e=array('cancel-event'=>&$cancelEvent));
 			if($this->_onBeforeUpdate) $this->FireCallback($this->_onBeforeUpdate, $e=array('cancel-event'=>&$cancelEvent));

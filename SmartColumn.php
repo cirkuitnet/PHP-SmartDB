@@ -43,6 +43,7 @@ class SmartColumn{
 				'IsPrimaryKey',
 				'IsAutoIncrement',
 				'FulltextIndex',
+				'NonuniqueIndex',
 				'DefaultFormType',
 				'IsRequired',
 				'IsRequiredMessage',
@@ -161,6 +162,10 @@ class SmartColumn{
 	 * @var bool True if this column is specified as a fulltext index for searching
 	 */
 	public $FulltextIndex;
+	/**
+	 * @var bool True if this column is specified as a non-unique index for searching
+	 */
+	public $NonuniqueIndex;
 	/**
 	 * @var string Default it "text". See XmlSchema.xsd for possible values (Last I checked, it was: "text", "password", "checkbox", "radio", "select", "textarea", "hidden", "colorpicker", "datepicker", "slider" ... the last 3, are for use with jQuery UI)
 	 * @see SmartCell::GetFormObject()

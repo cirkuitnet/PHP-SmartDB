@@ -31,7 +31,7 @@
       <Field Name="Password" DataType="varchar" MaxSize="55" AllowSet="true" TrimAndStripTagsOnSet="false" AllowGet="true" AllowLookup="true" AllowGetAll="false" DefaultValue="" InputRequired="false" FormType="password" IsUnique="false" />
       <Field Name="Sex" DataType="varchar" PossibleValues="M,F" MaxSize="55" AllowSet="true" TrimAndStripTagsOnSet="true" AllowGet="true" AllowLookup="true" AllowGetAll="false" DefaultValue="" InputRequired="false" FormType="radio" IsUnique="false" />
       <Field Name="AgeGroup" DisplayName="Age Group" DataType="varchar" MaxSize="55" AllowSet="true" TrimAndStripTagsOnSet="true" AllowGet="true" AllowLookup="true" AllowGetAll="false" DefaultValue="" InputRequired="false" FormType="select" IsUnique="false" />
-      <Field Name="Notes" DataType="text" AllowSet="true" TrimAndStripTagsOnSet="true" MinSize="5" MaxSize="10" AllowGet="true" AllowLookup="true" AllowGetAll="false" DefaultValue="default" InputRequired="false" FormType="textarea" IsUnique="false" />
+      <Field Name="Notes" DataType="text" AllowSet="true" TrimAndStripTagsOnSet="true" MinSize="5" MaxSize="10" AllowGet="true" AllowLookup="true" AllowGetAll="false" InputRequired="false" FormType="textarea" IsUnique="false" />
 	  <Field Name="Email" DisplayName="Your Email Address" DataType="varchar" MaxSize="55" AllowSet="true" TrimAndStripTagsOnSet="true" AllowGet="true" AllowLookup="true" AllowGetAll="true" DefaultValue="" InputRequired="true" InputEmptyError="Put in an email address, damnit!" InputRegexCheck="^[A-Z0-9._%-]+@[A-Z0-9.-]+\.[A-Z]{2,4}$" InputRegexFailError="Invalid email format" FormType="text" IsUnique="false" />
     </Database>
   </Class>
@@ -47,6 +47,7 @@
   		<Field Name="Id" DataType="int" IsUnique="true" PrimaryKey="true" AutoIncrement="true" />
 		<Field Name="char" DataType="char" MaxSize="20" InputRequired="true" />
 		<Field Name="varchar" DataType="varchar" MaxSize="40" FulltextIndex="true" />
+		<Field Name="varcharKey" DataType="varchar" MaxSize="40" NonuniqueIndex="true" />
 		<Field Name="text" DataType="text" Collation="utf8_general_ci" />
 		<Field Name="mediumtext" DataType="mediumtext" Collation="latin1_swedish_ci" />
 		<Field Name="longtext" DataType="longtext"  />

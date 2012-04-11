@@ -79,6 +79,7 @@
                         </xs:attribute>
                         <xs:attribute name="IsUnique" type="xs:boolean" default="false" />
 						<xs:attribute name="FulltextIndex" type="xs:boolean" default="false" />
+						<xs:attribute name="NonuniqueIndex" type="xs:boolean" default="false" />
                         <xs:attribute name="SortOrder" type="xs:integer" use="optional" />
                         <xs:attribute name="PrimaryKey" type="xs:boolean" use="optional" />
                         <xs:attribute name="AutoIncrement" type="xs:boolean" use="optional" />
