@@ -8,13 +8,13 @@
  * http://www.phpsmartdb.com/license
  */
 /**
- * @package SmartDatabase
+ * This class will update a database to match a given db structure schema (described below)
  */
 /**
  * This class will update a database to match a given db structure schema (described below)
  * 
  * -- db structure layout guide --
- * <code>
+ * ``` php
  * array(
  * 	"<table name>"=>array(
  * 		"<column name>"=>array(
@@ -24,17 +24,17 @@
  * 			"Key"=>"<PRI|UNI|MUL|empty>", //note: PRI=Primary Key, UNI=Unique index, MUL=multiple... seems to mean the same as UNI though
  * 			"Default"=>"<default value|empty>",
  * 			"Extra"=>"<auto_increment|empty>",
- * 			"Collation"=>"<utf8_general_ci|latin1_swedish_ci|empty>", //other collations can easily be added if needed
+ * 			"Collation"=>"<utf8_general_ci|utf8mb4_unicode_ci|latin1_swedish_ci|empty>", //other collations can easily be added if needed
  * 			"IndexType"=>"<UNIQUE|NONUNIQUE|FULLTEXT|empty>", //UNIQUE when Key=PRI,UNI, or MUL. MUL could also mean NONUNIQUE. FULLTEXT for fulltext index
  * 		),
  * 		...(more columns)...
  * 	),
  * 	...(more tables)...
  * )
- * </code>
+ * ```
  * 
  * --- EXAMPLE ---
- * <code>
+ * ``` php
  * function getDbStructure(){
  * 	return array(
  * 		"Template"=>array(
@@ -78,7 +78,7 @@
  * 			"
  * 		)
  * );
- * </code>
+ * ```
  * @package SmartDatabase
  */
 class SyncDb_MySQL{
@@ -355,7 +355,16 @@ class SyncDb_MySQL{
 	    		case "Collation":
 	    			if($newField["Collation"] && strcmp($currentField["Collation"], $newField["Collation"])!=0) {
 	    				$this->Message(" ---- Field '<b>$fieldName</b>' :: Property '<b>$property</b>' difference. Current: '<b>".($currentField[$property]!==""?$currentField[$property]:"(not set)")."</b>', New: '<b>".($newField[$property]!==""?$newField[$property]:"(not set)")."</b>'");
-						$updateField=true;
+
+	    				//Collation only applies to string types: "CHAR, VARCHAR, the TEXT types, ENUM, and SET data types"
+	    				if(!$this->IsValidCollation($newField['Type'])){
+	    					//data type does not suppport collations
+	    					$this->Message(" ------ <i><b>WARNING:</b> COLLATION is only valid for data types: CHAR, VARCHAR, TEXT, ENUM, and SET. <b>SKIPPING COLLATION!</b></i>");
+	    					continue;
+	    				}
+	    				else{ //valid collation
+							$updateField=true;
+	    				}
 	    			}
 	    			continue;
 	    		
@@ -529,8 +538,14 @@ class SyncDb_MySQL{
 		
 		//compile default value for CURRENT_TIMESTAMP
 		$default = "";
-		if($newDbField['Default']!="" && (strcasecmp($newDbField['Type'], 'text')!=0)){ // blob/text types cant have default values in mysql
-			if( strtolower($newDbField['Type']) == 'timestamp' && strtoupper($newDbField['Default']) == 'CURRENT_TIMESTAMP'){
+		if($newDbField['Default']!=""){ 
+			$dataTypeLower = strtolower($newDbField['Type']);
+			if( strpos($dataTypeLower,'enum')!==0 && (strpos($dataTypeLower,'text')!==false || strpos($dataTypeLower,'blob')!==false) ){
+				// blob/text types cant have default values in mysql. make sure it's not an enum though that may contain the text 'text' or 'blob'
+				$this->Message(" ---------- <i><b>WARNING:</b> '".$newDbField['Field']."' is type '".$newDbField['Type']." which does not support default values. <b>Default value '".$newDbField['Default']."' ignored.</b></i>");
+				$default = "";
+			}
+			else if( $dataTypeLower == 'timestamp' && strtoupper($newDbField['Default']) == 'CURRENT_TIMESTAMP'){
 				//no quotes around default value
 				$default = "DEFAULT {$newDbField['Default']}";
 			}
@@ -571,8 +586,14 @@ class SyncDb_MySQL{
 		
 		//compile default value
 		$default = "";
-		if($newDbField['Default']!="" && (strcasecmp($newDbField['Type'], 'text')!=0)){ // blob/text types cant have default values in mysql
-			if( strtolower($newDbField['Type']) == 'timestamp' && strtoupper($newDbField['Default']) == 'CURRENT_TIMESTAMP'){
+		if($newDbField['Default']!=""){
+			$dataTypeLower = strtolower($newDbField['Type']);
+			if( strpos($dataTypeLower,'enum')!==0 && (strpos($dataTypeLower,'text')!==false || strpos($dataTypeLower,'blob')!==false) ){
+				// blob/text types cant have default values in mysql
+				$this->Message(" ---------- <i><b>WARNING:</b> '".$newDbField['Field']."' is type '".$newDbField['Type']." which does not support default values. <b>Default value ignored!</b></i>");
+				$default = "";
+			}
+			else if( strtolower($newDbField['Type']) == 'timestamp' && strtoupper($newDbField['Default']) == 'CURRENT_TIMESTAMP'){
 				//no quotes around default value for CURRENT_TIMESTAMP
 				$default = "DEFAULT {$newDbField['Default']}";
 			}
@@ -588,15 +609,33 @@ class SyncDb_MySQL{
 		$this->Query("ALTER TABLE `$tableName` CHANGE `{$newDbField['Field']}` `{$newDbField['Field']}` {$newDbField['Type']} $collation $null $default $auto_increment");
 		return 1;
 	}
+
+	//Collation only applies to string types: "CHAR, VARCHAR, the TEXT types, ENUM, and SET data types"
+	//returns TRUE if collation is valid for the given data type, false if not
+	//reference: http://dev.mysql.com/doc/refman/5.0/en/string-type-overview.html	
+	private function IsValidCollation($dataType){
+		$dataTypeLower = strtolower($dataType);
+		if( strpos($dataTypeLower,"char")!==false		//char and varchar
+			|| strpos($dataTypeLower,"text")!==false	//tinytext, text, mediumtext, and longtext
+			|| strpos($dataTypeLower,"enum")!==false	//enum
+			|| strpos($dataTypeLower,"set")!==false ){	//enum
+				return true; //valid
+		}
+		return false; //not valid
+	}
 	
 	private function GetCollationSql($dbField){
 		if(!$dbField["Collation"]) return '';
+		if(!$this->IsValidCollation($dbField['Type'])) return ''; //Collation only applies to string types: "CHAR, VARCHAR, the TEXT types, ENUM, and SET data types"
 		
 		//forced character set
 		//reference: http://dev.mysql.com/doc/refman/5.0/en/charset-charsets.html
 		switch($dbField["Collation"]){
 			case "utf8_general_ci":
 				return "CHARACTER SET utf8 COLLATE utf8_general_ci";
+
+			case "utf8mb4_unicode_ci":
+				return "CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci";
 
 			case "latin1_swedish_ci":
 				return "CHARACTER SET latin1 COLLATE latin1_swedish_ci";
