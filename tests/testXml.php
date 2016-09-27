@@ -15,6 +15,19 @@ require_once(dirname(__FILE__).'/../SmartDatabase.php');
 class Setting extends SmartRow{
 	public function __construct($Database, $id=null ,$opts=null){
 		parent::__construct('Setting', $Database, $id);
+
+		//inline callback in constructor
+		$this->OnBeforeDelete(function($eventObject, $eventArgs){
+			if($GLOBALS['cancel-setting-delete']){ //just a manual global trigger
+				$eventArgs['cancel-event'] = true; //should not continue with delete
+			}
+		});
+		
+		$this->OnBeforeColumnValueChanged(function($eventObject, $eventArgs){
+			if($GLOBALS['cancel-setting-change-val']){ //just a manual global trigger
+				$eventArgs['cancel-event'] = true; //should not continue with delete
+			}
+		});
 	}
 }
 /**
@@ -116,19 +129,23 @@ $t['database']['Setting']->TableName = "Settings"; //change name of database tab
 
 $GLOBALS['SQL_DEBUG_MODE'] = false; //set to true to see all SQL commands run through the db manager
 
-if(!$t['dbManager']->TableExists("smartdb_test", "AllDataTypes")){
+//if(!$t['dbManager']->TableExists("smartdb_test", "AllDataTypes")){
 	SyncDbTables($t);
-}
+//}
 
 //////////////////////////////////////
 ?>
-<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<!DOCTYPE HTML>
 <html>
 	<head>
-		<script type="text/javascript" src="/cirkuit/includes/js/jquery/core/1.3.2/jquery.min.js"></script>
-		<script type="text/javascript" src="/cirkuit/includes/js/jquery/plugins/validate/1.5.5/jquery.validate.min.js"></script>
-		<script type="text/javascript" src="/cirkuit/includes/js/jquery/plugins/validate/1.5.5/additional-methods.js"></script>
+		<script type="text/javascript" src="/cirkuit/includes/js/jquery/core/1.9.1/jquery.min.js"></script>
+		<script type="text/javascript" src="/cirkuit/includes/js/jquery/plugins/validate/1.11.1/jquery.validate.js"></script>
 		<script type="text/javascript">
+			jQuery.validator.addMethod("regex", function(value, element, param) {
+				var regex = new RegExp(param, "i");
+			    return this.optional(element) || (regex.test(value) !== false);
+			}, "Invalid value.");
+			
 			$(function(){
 				//validate page properties form
 				$("form[name=test7]").validate({
@@ -160,6 +177,8 @@ if(!$t['dbManager']->TableExists("smartdb_test", "AllDataTypes")){
 	</head>
 	<body>
 <?
+		$database['FastSetting']->DeleteAllRows();
+		$database['Setting']->DeleteAllRows();
 		Test1($t);
 		Test2($t);
 		Test3($t);
@@ -178,6 +197,9 @@ if(!$t['dbManager']->TableExists("smartdb_test", "AllDataTypes")){
 		Test16($t); //min, max, sum
 		Test17($t); //data types
 		Test18($t); //serialization
+		Test19($t); //smart-cell array access
+		Test20($t); //JsonSerializable
+		Test21($t); //lookup-row inline callbacks
 		TestForm($t,true);
 
 		Msg(true,'Tests passed on '.date('r'),null);
@@ -630,7 +652,13 @@ function Test8($t, $debug=false){
 	if($debug) echo '$allvalues='.print_r($allvalues, true);
 	if(count($allvalues)!=2) Ex("invalid count of values returned");
 	
-	//LookupColumnValues() with empty array or null as first parameter should work the same as GetAllValues()
+	//LookupColumnValues() with empty array or null as second parameter should work the same as GetAllValues()
+	$allvalues = $db['Setting']->LookupColumnValues('Name', null, array('sort-by'=>'Id','get-unique'=>true,'return-count'=>&$count));
+	if($count!=2) Ex("invalid count returned");
+	if($debug) echo '$allvalues='.print_r($allvalues, true);
+	if(count($allvalues)!=2) Ex("invalid count of values returned");
+	
+	//LookupColumnValues() with first and second parameters switched
 	$allvalues = $db['Setting']->LookupColumnValues(null, 'Name', array('sort-by'=>'Id','get-unique'=>true,'return-count'=>&$count));
 	if($count!=2) Ex("invalid count returned");
 	if($debug) echo '$allvalues='.print_r($allvalues, true);
@@ -682,9 +710,56 @@ function Test8($t, $debug=false){
 	AssertCellVal($row['Name'],'testname@numero.dos');
 	Commit($row, $debug);
 
- 	$db['FastSetting']['Name']->DeleteRowsWithValue('testname@numero.dos');
+	//column level delete
+ 	$db['FastSetting']['Name']->DeleteRows('testname@numero.dos');
 	$row = $db['FastSetting']['Name']->LookupRow('testname@numero.dos');
 	AssertNotExists($row, $debug);
+	
+	
+	//insert some setting rows to delete
+	$Setting = $db['Setting']->GetNewRow();
+	$Setting['Id'] = 840;
+	$Setting['Name'] = "Double up.";
+	Commit($Setting, $debug);
+	$Setting = $db['Setting']->GetNewRow();
+	$Setting['Id'] = 1260;
+	$Setting['Name'] = "Triple down.";
+	Commit($Setting, $debug);
+	
+	$GLOBALS['cancel-setting-delete'] = true;
+	$rowsDeleted = $db['Setting']['Name']->DeleteRows('Double up.', ['skip-callbacks'=>false]); //SHOULD NOT be deleted
+	if($rowsDeleted !== 0) Ex("Wrong number of Setting rows deleted");
+	
+	$GLOBALS['cancel-setting-delete'] = false;
+	$rowsDeleted = $db['Setting']['Name']->DeleteRows('Double up.', ['skip-callbacks'=>false]); //SHOULD be deleted
+	if($rowsDeleted !== 1) Ex("Wrong number of Setting rows deleted");
+	
+	$GLOBALS['cancel-setting-delete'] = true;
+	$rowsDeleted = $db['Setting']['Name']->DeleteRows('Triple down.', ['skip-callbacks'=>true]); //SHOULD be deleted because we're skipping callbacks
+	if($rowsDeleted !== 1) Ex("Wrong number of Setting rows deleted");
+	$GLOBALS['cancel-setting-delete'] = false;
+	
+
+	//SetAllValues()
+	//should have 2 Setting rows at this point:
+	
+	$GLOBALS['cancel-setting-change-val'] = true;
+	$rowsUpdated = $db['Setting']['Enabled']->SetAllValues(true, ['skip-callbacks'=>false]); //SHOULD NOT be updated
+	if($rowsUpdated !== 0) Ex("Wrong number of Setting rows updated - $rowsUpdated");
+	
+	$GLOBALS['cancel-setting-change-val'] = false;
+	$rowsUpdated = $db['Setting']['Enabled']->SetAllValues(true, ['skip-callbacks'=>false]); //SHOULD be updated
+	if($rowsUpdated !== 2) Ex("Wrong number of Setting rows updated - $rowsUpdated");
+	$rowsMatchingCount = $db['Setting']['Enabled']->LookupRows(true, ['return-count-only'=>true]); //verify values have been updated
+	if($rowsMatchingCount !== 2) Ex("set all values, but wrong rowcount returned for values changed.");
+	
+	$GLOBALS['cancel-setting-change-val'] = true;
+	$rowsUpdated = $db['Setting']['Enabled']->SetAllValues(false, ['skip-callbacks'=>true]); //SHOULD be updated because we're skipping callbacks
+	if($rowsUpdated !== 2) Ex("Wrong number of Setting rows updated - $rowsUpdated");
+	$GLOBALS['cancel-setting-change-val'] = false;
+	
+	$rows = $db['Setting']['Enabled']->LookupRows(false);
+	if(count($rows) != 2)  Ex("Wrong number of Setting rows updated - $rowsUpdated");
 }
 
 
@@ -735,9 +810,13 @@ function Test9($t, $debug=false){
 	//GetAllRows() with 'return-next-row' option set
 	$lastRow = null;
 	$totalIterations = 0;
+	$totalCallbackIterations = 0;
 	while( $row = $db['Setting']->GetAllRows(array(
 		'return-next-row'=>&$curCount,
-		'return-count'=>&$totalCount
+		'return-count'=>&$totalCount,
+		'callback'=>function($row,$i) use(&$totalCallbackIterations){ //test inline callbacks here too
+			$totalCallbackIterations++;
+		}
 	))){
 		//echo "$curCount - $totalCount - $row<br>";
 		$totalIterations++;
@@ -745,12 +824,13 @@ function Test9($t, $debug=false){
 	}
 	if($debug) echo "Get all rows, count: $totalCount<br>\n";
 	if($totalCount !== 2) Ex("Wrong number of rows returned");
+	if($totalCallbackIterations !== 2) Ex("Wrong number of callback iterations");
 	if($totalCount != $totalIterations) Ex("Wrong number of iterations: $totalCount");
 
 	AssertCellVal($lastRow['Id'], 70);
 	
 	//LookupRows() with empty array, should be idential to GetAllRows() (as above)
-	$allRows = $db['Setting']->LookupRows(array(), array('sort-by'=>array("Id"=>"desc")));
+	$allRows = $db['Setting']->LookupRows(array(), array('sort-by'=>array("AliasName"=>"desc"))); //sort-by with alias name
 	$count=count($allRows);
 	if($debug) echo "Get all rows, count: $count<br>\n";
 	if($count !== 2) Ex("Wrong number of rows returned");
@@ -767,9 +847,13 @@ function Test9($t, $debug=false){
 	//LookupRows() with 'return-next-row' option set, should be idential to GetAllRows() (as above)
 	$lastRow = null;
 	$totalIterations = 0;
+	$totalCallbackIterations = 0;
 	while( $row = $db['Setting']->LookupRows(array(), array(
 		'return-next-row'=>&$curCount,
-		'return-count'=>&$totalCount
+		'return-count'=>&$totalCount,
+		'callback'=>function($row,$i) use(&$totalCallbackIterations){ //test inline callbacks here too
+			$totalCallbackIterations++;
+		}
 	))){
 		//echo "$curCount - $totalCount - $row<br>";
 		$totalIterations++;
@@ -777,6 +861,7 @@ function Test9($t, $debug=false){
 	}
 	if($debug) echo "Get all rows, count: $totalCount<br>\n";
 	if($totalCount !== 2) Ex("Wrong number of rows returned");
+	if($totalCallbackIterations !== 2) Ex("Wrong number of callback iterations");
 	if($totalCount != $totalIterations) Ex("Wrong number of iterations: $totalCount");
 
 	AssertCellVal($lastRow['Id'], 70);
@@ -860,6 +945,92 @@ function Test9($t, $debug=false){
 	$rowsDeleted = $db['FastSetting']->DeleteRows(array("ShortName"=>"short name", "Name"=>"my@name.com"));
 	if($debug) echo("FastSetting rows deleted: $rowsDeleted<br>\n");
 	if($rowsDeleted !== 1) Ex("Wrong number of FastSetting rows deleted");
+	
+	
+	//insert a setting row to delete
+	$Setting = $db['Setting']->GetNewRow();
+	$Setting['Id'] = 840;
+	$Setting['Name'] = "Double up.";
+	Commit($Setting, $debug);
+	
+	$GLOBALS['cancel-setting-delete'] = true;
+	$rowsDeleted = $db['Setting']->DeleteRow(840, ['skip-callbacks'=>false]); //SHOULD NOT be deleted
+	if($rowsDeleted !== 0) Ex("Wrong number of Setting rows deleted");
+	
+	$GLOBALS['cancel-setting-delete'] = false;
+	$rowsDeleted = $db['Setting']->DeleteRow(840, ['skip-callbacks'=>false]); //SHOULD be deleted
+	if($rowsDeleted !== 1) Ex("Wrong number of Setting rows deleted");
+	
+	
+	//insert a setting row to delete
+	$Setting = $db['Setting']->GetNewRow();
+	$Setting['Id'] = 840;
+	$Setting['Name'] = "Double up.";
+	Commit($Setting, $debug);
+
+	$GLOBALS['cancel-setting-delete'] = true;
+	$rowsDeleted = $db['Setting']->DeleteRow(840, ['skip-callbacks'=>true]); //SHOULD be deleted because we're skipping callbacks
+	if($rowsDeleted !== 1) Ex("Wrong number of Setting rows deleted");
+	$GLOBALS['cancel-setting-delete'] = false;
+	
+	
+	//insert some setting rows to delete
+	$Setting = $db['Setting']->GetNewRow();
+	$Setting['Id'] = 840;
+	$Setting['Name'] = "Double up.";
+	Commit($Setting, $debug);
+	$Setting = $db['Setting']->GetNewRow();
+	$Setting['Id'] = 1260;
+	$Setting['Name'] = "Triple down.";
+	Commit($Setting, $debug);
+	
+	$GLOBALS['cancel-setting-delete'] = true;
+	$rowsDeleted = $db['Setting']->DeleteRows(['Name'=>'Double up.'], ['skip-callbacks'=>false]); //SHOULD NOT be deleted
+	if($rowsDeleted !== 0) Ex("Wrong number of Setting rows deleted");
+	
+	$GLOBALS['cancel-setting-delete'] = false;
+	$rowsDeleted = $db['Setting']->DeleteRows(['Name'=>'Double up.'], ['skip-callbacks'=>false]); //SHOULD be deleted
+	if($rowsDeleted !== 1) Ex("Wrong number of Setting rows deleted");
+	
+	$GLOBALS['cancel-setting-delete'] = true;
+	$rowsDeleted = $db['Setting']->DeleteRow(1260, ['skip-callbacks'=>true]); //SHOULD be deleted because we're skipping callbacks
+	if($rowsDeleted !== 1) Ex("Wrong number of Setting rows deleted");
+	$GLOBALS['cancel-setting-delete'] = false;
+	
+	
+	//insert some setting rows to delete
+	$Setting = $db['Setting']->GetNewRow();
+	$Setting['Id'] = 840;
+	$Setting['Name'] = "Double up.";
+	Commit($Setting, $debug);
+	$Setting = $db['Setting']->GetNewRow();
+	$Setting['Id'] = 1260;
+	$Setting['Name'] = "Triple down.";
+	Commit($Setting, $debug);
+	
+	$GLOBALS['cancel-setting-delete'] = true;
+	$rowsDeleted = $db['Setting']->DeleteAllRows(['skip-callbacks'=>false]); //SHOULD NOT be deleted
+	if($rowsDeleted !== 0) Ex("Wrong number of Setting rows deleted");
+	
+	$GLOBALS['cancel-setting-delete'] = false;
+	$rowsDeleted = $db['Setting']->DeleteAllRows(['skip-callbacks'=>false]); //SHOULD be deleted
+	if($rowsDeleted !== 2) Ex("Wrong number of Setting rows deleted");
+	
+	
+	//insert some setting rows to delete
+	$Setting = $db['Setting']->GetNewRow();
+	$Setting['Id'] = 840;
+	$Setting['Name'] = "Double up.";
+	Commit($Setting, $debug);
+	$Setting = $db['Setting']->GetNewRow();
+	$Setting['Id'] = 1260;
+	$Setting['Name'] = "Triple down.";
+	Commit($Setting, $debug);
+	
+	$GLOBALS['cancel-setting-delete'] = true;
+	$rowsDeleted = $db['Setting']->DeleteAllRows(['skip-callbacks'=>true]); //SHOULD be deleted because we're skipping callbacks
+	if($rowsDeleted !== 2) Ex("Wrong number of Setting rows deleted");
+	$GLOBALS['cancel-setting-delete'] = false;
 }
 
 /**
@@ -870,16 +1041,16 @@ function Test10($t, $debug=false){
 	$db = $t['database'];
 	InsretSomeFastSettingRows($db);
 
-	//LookupColumnValues
+	//LookupColumnValues. first and second parameter switched
 	$values = $db['FastSetting']->LookupColumnValues(array("ShortName"=>"short name"),"Name",array('sort-by'=>'Id'));
 	if(count($values) !== 2) Ex("Wrong return count");
 	if($values[0] !== "my@name.com") Ex("Row ShortName value not correct");
 
-	$values = $db['FastSetting']->LookupColumnValues(array("ShortName"=>"short name"),"Name",array('sort-by'=>array('Id'=>'DEsC'),'return-assoc'=>true));
+	$values = $db['FastSetting']->LookupColumnValues("Name",array("ShortName"=>"short name"),array('sort-by'=>array('Id'=>'DEsC'),'return-assoc'=>true));
 	if(count($values) !== 2) Ex("Wrong return count");
 	if($values[35] !== "my@name2.com") Ex("Row ShortName value not correct");
 	
-	$values = $db['FastSetting']->LookupColumnValues(array("Name"=>array('or'=>array('my@name2.com','my@name.com'))),"ShortName",array('sort-by'=>array('Id'=>'DEsC'),'get-unique'=>true));
+	$values = $db['FastSetting']->LookupColumnValues("ShortName",array("Name"=>array('or'=>array('my@name2.com','my@name.com'))),array('sort-by'=>array('Id'=>'DEsC'),'get-unique'=>true));
 	if(count($values) !== 1) Ex("Wrong return count");
 	if($values[0] !== "short name") Ex("Row ShortName value not correct");
 
@@ -968,15 +1139,20 @@ function Test10($t, $debug=false){
 	//Lookup Rows in loop with 'return-next-row' option set
 	$lastRow = null;
 	$totalIterations = 0;
+	$totalCallbackIterations = 0;
 	while( $row = $db['FastSetting']->LookupRows(array("ShortName"=>"short name"), array(
 		'return-next-row'=>&$curCount,
-		'return-count'=>&$totalCount
+		'return-count'=>&$totalCount,
+		'callback'=>function($row,$i) use(&$totalCallbackIterations){ //test inline callbacks here too
+			$totalCallbackIterations++;
+		}
 	))){
 		//echo "$curCount - $totalCount - $row<br>";
 		$totalIterations++;
 		$lastRow = $row;
 	}
 	if($totalCount !== 2) Ex("Wrong number of rows returned");
+	if($totalCallbackIterations !== 2) Ex("Wrong number of callback iterations");
 	if($totalCount != $totalIterations) Ex("Wrong number of iterations: $totalCount");
 	AssertCellVal($lastRow['Id'], 34);
 }
@@ -1010,15 +1186,20 @@ function Test11($t, $debug=false){
 	$setting = new SmartRow('FastSetting', $db, 34);
 	$lastRow = null;
 	$totalIterations = 0;
+	$totalCallbackIterations = 0;
 	while( $row = $setting['Id']->GetRelatedRows('Log', 'Id', array(
 		'return-next-row'=>&$curCount,
-		'return-count'=>&$totalCount
+		'return-count'=>&$totalCount,
+		'callback'=>function($row,$i) use(&$totalCallbackIterations){ //test inline callbacks here too
+			$totalCallbackIterations++;
+		}
 	))){
 		//echo "$curCount - $totalCount - $row<br>";
 		$totalIterations++;
 		$lastRow = $row;
 	}
 	if($totalCount !== 1) Ex("Wrong number of rows returned");
+	if($totalCallbackIterations !== 1) Ex("Wrong number of callback iterations");
 	if($totalCount != $totalIterations) Ex("Wrong number of iterations: $totalCount");
 
 	//more GetRelatedRows
@@ -1355,9 +1536,9 @@ function Test17($t, $debug=false){
 		$row['tinyint'] = '02';
 		$row['smallint'] = '08';
 		$row['mediumint'] = '099.0000';
-		$row['int'] = '00399.0';
+		$row['int'] = '$ 	00399.0$'; //leading whitespace and dollar signs. should be valid
 		$row['bigint'] = '00006999';
-		$row['float'] = '04.20240';
+		$row['float'] = '	 $04.20240'; //leading whitespace and dollar signs. should be valid
 		$row['double'] = '056.780';
 		$row['decimal'] = '0100.0010';
 		$row['binary'] = true;
@@ -1600,7 +1781,7 @@ function Test17($t, $debug=false){
 		$row['binary'] = true;
 		$row['date'] = '2020-12-25';
 		$row['datetime'] = '1999-12-31 23:59:59';
-		$row['timestamp'] = '2000-01-01 00:00:00';
+		$row['timestamp'] = strtotime('2000-01-01 00:00:00'); //using an integer timestamp directly
 		$row['time'] = '16:20:01';
 		$row['binary8'] = null;
 		$row['enum'] = 'Option 2';
@@ -1726,6 +1907,320 @@ function Test18($t, $debug=false){
 	}
 }
 
+//smart cells accessible via ArrayAccess, Countable, IteratorAggregate (if the cell's datatype is 'array')
+function Test19($t, $debug=false){
+	$db = $t['database'];
+	$row = $db['AllDataTypes']();
+
+	if( !is_array( $row['array-notnull']() ) ){
+		Ex('Column is not array type, as expected');
+	}
+	
+	//get array value
+	$arrayVal = $row['array-notnull'][0];
+	if($arrayVal !== null){
+		Ex('Invalid empty array smartcell value');
+	}
+	AssertIsNotDirty($row);
+	
+	//check array count
+	$count = count($row['array-notnull']);
+	if($count !== 0){
+		Ex('Invalid array count from smartcell');
+	}
+	
+	//isset
+	if( isset($row['array-notnull'][0]) ){
+		Ex('array value from smartcell should not be set');
+	}
+	
+	//foreach to test IteratorAggregate
+	$exceptionCaught = false;
+	try{
+		foreach($row['int'] as $key=>$val){
+		}
+	}
+	catch(Exception $e){
+		$exceptionCaught = true;
+	}
+	if(!$exceptionCaught) Ex('IteratorAggregate exception should have been thrown for non-array column.');
+	
+	//foreach to test IteratorAggregate
+	foreach($row['array-notnull'] as $key=>$val){
+		Ex('IteratorAggregate should not have any values.');
+	}
+	
+	//add some data to array
+	$row['array-notnull'][0] = 'smartcell array set';
+	$row['array-notnull'][2] = 'smartcell array set2';
+	
+	//isset
+	if( !isset($row['array-notnull'][0]) ){
+		Ex('array value from smartcell should be set');
+	}
+	
+	
+	//check array count
+	$count = count($row['array-notnull']);
+	if($count !== 2){
+		Ex('Invalid array count from smartcell');
+	}
+	
+	//check array data
+	if($row['array-notnull'][0] !== 'smartcell array set'){
+		Ex('Invalid smartcell array value');
+	}
+	if($row['array-notnull'][2] !== 'smartcell array set2'){
+		Ex('Invalid smartcell array value');
+	}
+	
+	if( !is_array( $row['array-notnull']() ) ){
+		Ex('Column is not array type, as expected');
+	}
+	
+	//foreach to test IteratorAggregate
+	$count = 0;
+	foreach($row['array-notnull'] as $key=>$val){
+		$count++;
+		if($key==0 && $val='smartcell array set') continue;
+		else if($key==2 && $val='smartcell array set2') continue;
+		else throw new Ex('IteratorAggregate failed.');
+	}
+	if($count!=2) Ex("IteratorAggregate didn't count all array values.");
+}
+
+//JsonSerializable
+function Test20($t, $debug=false){
+	$db = $t['database'];
+	
+	$row = $db['AllDataTypes']->GetNewRow();
+	$row['char'] = 'char';
+	$row['varchar'] = 'varchar';
+	$row['text'] = 'text';
+	$row['mediumtext'] = 'mediumtext';
+	$row['longtext'] = 'longtext';
+	$row['blob'] = 'blob';
+	$row['mediumblob'] = 'mediumblob';
+	$row['longblob'] = 'longblob';
+	$row['tinyint'] = 2;
+	$row['smallint'] = 8;
+	$row['mediumint'] = 99;
+	$row['int'] = 399;
+	$row['bigint'] = 6999;
+	$row['float'] = 4.2024;
+	$row['double'] = 56.78;
+	$row['decimal'] = 100.001;
+	$row['date'] = '2020-12-25';
+	$row['datetime'] = '1999-12-31 23:59:59';
+	$row['timestamp'] = '2000-01-01 00:00:00';
+	$row['time'] = '16:20:01';
+	$row['binary'] = '1';
+	$row['binary8'] = 'abcd1234'; //gets padded with null characters (\0) to the length of the column
+	$row['enum'] = 'Option 2';
+	$row['array'] = array();
+	$row['object'] = null;
+	$row['array-notnull'] = array(1,2,3);
+	$row['object-notnull'] = new TestClass();;
+	
+	$json = json_encode($row);
+	$decodedArr = json_decode($json, true);
+	if($decodedArr['AllDataTypes']['varchar'] != 'varchar' || $decodedArr['AllDataTypes']['decimal'] != 100.001){
+		Ex('JsonSerializable failed. Bad values decoded.');
+	}
+}
+
+
+//lookup-row inline callbacks
+function Test21($t, $debug=false){
+	$db = $t['database'];
+
+	//-------- table level callback -----------------------
+	//0-row table level LookupRow callback
+	$callbackRowsReturned = 0;
+	$finalRow = $db['Setting']->LookupRows(['Id'=>999111], [
+		'callback' => function($row, $i) use(&$callbackRowsReturned){
+			$callbackRowsReturned++;
+			Ex('Inline callback should not be called because 0 rows should be found.');
+		}
+	]);
+	
+	if($callbackRowsReturned!=0){
+		Ex('Inline callback called.');
+	}
+	if($finalRow){
+		Ex('Inline callback returned something when none should have been found.');
+	}
+	
+	//1-row table level LookupRow callback
+	$row = $db['Setting']->LookupRow(['Id'=>8811857]);
+	$row['Name'] = 'callback test val';
+	$row->Commit();
+	
+	$callbackRowsReturned = 0;
+	$finalRow = $db['Setting']->LookupRows(['Id'=>8811857], [
+		'callback' => function($row, $i) use(&$callbackRowsReturned){
+			$callbackRowsReturned++;
+			if($i != $callbackRowsReturned){
+				Ex('Inline callback received wrong row number.');
+			} 
+			Delete($row,$debug);
+		}
+	]);
+	
+	if($callbackRowsReturned!=1){
+		Ex('Inline callback was not called (or called more than once).');
+	}
+	if(!$finalRow){
+		Ex('Last row not returned by callback.');
+	}
+	if($finalRow->Exists()){
+		Ex('Last row was deleted, but reference still exists');
+	}
+	
+	//2-rows table level LookupRow callback
+	$row1 = $db['Setting']->LookupRow(['Id'=>777111]);
+	$row2 = $db['Setting']->LookupRow(['Id'=>777112]);
+	$row1['Name'] = '777111';
+	$row2['Name'] = '777112';
+	$row1->Commit();
+	$row2->Commit();
+	
+	$callbackRowsReturned = 0;
+	$finalRow = $db['Setting']->LookupRows(['Id'=>['OR'=>[777111,777112]]], [
+		'callback' => function($row, $i) use(&$callbackRowsReturned){
+			$callbackRowsReturned++;
+			if($i != $callbackRowsReturned){
+				Ex('Inline callback received wrong row number.');
+			}
+			Delete($row,$debug);
+		}
+	]);
+	
+	if($callbackRowsReturned!=2){
+		Ex('Inline callback was not called 2 times, once for each row.');
+	}
+	if(!$finalRow){
+		Ex('Last row not returned by callback.');
+	}
+	if($finalRow->Exists()){
+		if($finalRow['Name'] != '777112'){
+			Ex('Last row Name was not 777112 as it should be');
+		}
+		Ex('Last row was deleted, but reference still exists');
+	}
+	
+	//2-rows table level GetAllRows callback
+	$row1 = $db['Setting']->DeleteAllRows();
+	$row1 = $db['Setting']->LookupRow(['Id'=>666111]);
+	$row2 = $db['Setting']->LookupRow(['Id'=>666112]);
+	$row1['Name'] = '666111';
+	$row2['Name'] = '666112';
+	$row1->Commit();
+	$row2->Commit();
+	
+	$callbackRowsReturned = 0;
+	$finalRow = $db['Setting']->GetAllRows([
+		'callback' => function($row, $i) use(&$callbackRowsReturned){
+			$callbackRowsReturned++;
+			if($i != $callbackRowsReturned){
+				Ex('Inline callback received wrong row number.');
+			}
+			Delete($row,$debug);
+		}
+	]);
+	
+	if($callbackRowsReturned!=2){
+		Ex('Inline callback was not called 2 times, once for each row.');
+	}
+	if(!$finalRow){
+		Ex('Last row not returned by callback.');
+	}
+	if($finalRow->Exists()){
+		if($finalRow['Name'] != '777112'){
+			Ex('Last row Name was not 777112 as it should be');
+		}
+		Ex('Last row was deleted, but reference still exists');
+	}
+	//-------- end table level callback -----------------------
+	
+	
+	//-------- table level callback -----------------------
+	//0-column table level LookupRow callback
+	$callbackRowsReturned = 0;
+	$finalRow = $db['Setting']['Id']->LookupRows(999111, [
+		'callback' => function($row, $i) use(&$callbackRowsReturned){
+			$callbackRowsReturned++;
+			Ex('Inline callback should not be called because 0 rows should be found.');
+		}
+	]);
+	
+	if($callbackRowsReturned!=0){
+		Ex('Inline callback called.');
+	}
+	if($finalRow){
+		Ex('Inline callback returned something when none should have been found.');
+	}
+	
+	//1-row table level LookupRow callback
+	$row = $db['Setting']->LookupRow(['Id'=>8811857]);
+	$row['Name'] = 'callback test val';
+	$row->Commit();
+	
+	$callbackRowsReturned = 0;
+	$finalRow = $db['Setting']['Id']->LookupRows(8811857, [
+			'callback' => function($row, $i) use(&$callbackRowsReturned){
+				$callbackRowsReturned++;
+				if($i != $callbackRowsReturned){
+					Ex('Inline callback received wrong row number.');
+				}
+				Delete($row,$debug);
+			}
+	]);
+	
+	if($callbackRowsReturned!=1){
+		Ex('Inline callback was not called (or called more than once).');
+	}
+	if(!$finalRow){
+		Ex('Last row not returned by callback.');
+	}
+	if($finalRow->Exists()){
+		Ex('Last row was deleted, but reference still exists');
+	}
+	
+	//2-rows table level LookupRow callback
+	$row1 = $db['Setting']->LookupRow(['Id'=>777111]);
+	$row2 = $db['Setting']->LookupRow(['Id'=>777112]);
+	$row1['Name'] = 'TEST-NAME';
+	$row2['Name'] = 'TEST-NAME';
+	$row1->Commit();
+	$row2->Commit();
+	
+	$callbackRowsReturned = 0;
+	$finalRow = $db['Setting']['Name']->LookupRows('TEST-NAME', [
+		'callback' => function($row, $i) use(&$callbackRowsReturned){
+			$callbackRowsReturned++;
+			if($i != $callbackRowsReturned){
+				Ex('Inline callback received wrong row number.');
+			}
+			Delete($row,$debug);
+		}
+	]);
+	
+	if($callbackRowsReturned!=2){
+		Ex('Inline callback was not called 2 times, once for each row.');
+	}
+	if(!$finalRow){
+		Ex('Last row not returned by callback.');
+	}
+	if($finalRow->Exists()){
+		if($finalRow['Name'] != '777112'){
+			Ex('Last row Name was not 777112 as it should be');
+		}
+		Ex('Last row was deleted, but reference still exists');
+	}
+
+}
+
 /**
  * forms
  * @ignore
@@ -1791,8 +2286,9 @@ function TestForm($t, $debug=false){
 			}
 			else if(strtolower($Cell->DefaultFormType) === "radio"){
 				echo $Cell->GetFormObjectLabel().' ';
+				echo $Cell->GetRadioFormObject("None","")."<br>\n";
 				echo $Cell->GetRadioFormObject("Male","M")."<br>\n";
-				echo $Cell->GetRadioFormObject("Female","F")."<br>\n";
+				echo $Cell->GetRadioFormObject("Female","F", null, ['checked-if-null'=>true])."<br>\n";
 				echo $Cell->GetRadioFormObject("Invalid","I")."<br>\n";
 			}
 			else if(strtolower($Cell->DefaultFormType) === "password"){

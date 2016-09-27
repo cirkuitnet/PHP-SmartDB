@@ -3,7 +3,7 @@
   <Class Name="Setting">
     <Database CommitChangesAutomatically="false" TableName="Setting">
       <Field Name="Id" DataType="int" AllowSet="true" TrimAndStripTagsOnSet="false" AllowGet="true" AllowLookup="true" AllowGetAll="true" InputRequired="false" FormType="hidden" IsUnique="true" PrimaryKey="true" AutoIncrement="false" />
-      <Field Name="Name" DataType="varchar" MaxSize="255" AllowSet="true" TrimAndStripTagsOnSet="false" AllowGet="true" AllowLookup="true" AllowGetAll="true" InputRequired="true" FormType="text" IsUnique="false" AutoIncrement="false" />
+      <Field Name="Name" Aliases="AliasName,AnotherAlias" DataType="varchar" MaxSize="255" AllowSet="true" TrimAndStripTagsOnSet="false" AllowGet="true" AllowLookup="true" AllowGetAll="true" InputRequired="true" FormType="text" IsUnique="false" AutoIncrement="false" />
 	  <Field Name="Enabled" DataType="binary" MaxSize="1" AllowSet="true" TrimAndStripTagsOnSet="false" AllowGet="true" AllowLookup="true" AllowGetAll="false" InputRequired="false" FormType="checkbox" IsUnique="false" />
     </Database>
   </Class>
@@ -26,19 +26,21 @@
   <Class Name="Questionare">
     <Database CommitChangesAutomatically="false" TableName="Questionare">
       <Field Name="QuestionareId" DataType="int" AllowSet="true" TrimAndStripTagsOnSet="false" AllowGet="true" AllowLookup="true" AllowGetAll="true" DefaultValue="" InputRequired="false" FormType="hidden" IsUnique="false" PrimaryKey="true" AutoIncrement="true" />
-      <Field Name="Name" DisplayName="Your Name" DataType="varchar" MaxSize="55" AllowSet="true" TrimAndStripTagsOnSet="true" AllowGet="true" AllowLookup="true" AllowGetAll="true" DefaultValue="" InputRequired="true" FormType="text" IsUnique="false" />
+      <Field Name="Name" DisplayName="Your Name" Example="&quot;John @ Doe'" DataType="varchar" MaxSize="55" AllowSet="true" TrimAndStripTagsOnSet="true" AllowGet="true" AllowLookup="true" AllowGetAll="true" DefaultValue="" InputRequired="true" FormType="text" IsUnique="false" />
       <Field Name="Agree" DisplayName="I Agree" DataType="binary" MaxSize="1" AllowSet="true" TrimAndStripTagsOnSet="false" AllowGet="true" AllowLookup="true" AllowGetAll="false" DefaultValue="" InputRequired="false" FormType="checkbox" IsUnique="false" />
+      <Field Name="AgreeReq" DisplayName="I MUST Agree" DataType="binary" MaxSize="1" InputRequired="true" FormType="checkbox" IsUnique="false" />
       <Field Name="Password" DataType="varchar" MaxSize="55" AllowSet="true" TrimAndStripTagsOnSet="false" AllowGet="true" AllowLookup="true" AllowGetAll="false" DefaultValue="" InputRequired="false" FormType="password" IsUnique="false" />
       <Field Name="Sex" DataType="varchar" PossibleValues="M,F" MaxSize="55" AllowSet="true" TrimAndStripTagsOnSet="true" AllowGet="true" AllowLookup="true" AllowGetAll="false" DefaultValue="" InputRequired="false" FormType="radio" IsUnique="false" />
       <Field Name="AgeGroup" DisplayName="Age Group" DataType="varchar" MaxSize="55" AllowSet="true" TrimAndStripTagsOnSet="true" AllowGet="true" AllowLookup="true" AllowGetAll="false" DefaultValue="" InputRequired="false" FormType="select" IsUnique="false" />
-      <Field Name="Notes" DataType="text" AllowSet="true" TrimAndStripTagsOnSet="true" MinSize="5" MaxSize="10" AllowGet="true" AllowLookup="true" AllowGetAll="false" InputRequired="false" FormType="textarea" IsUnique="false" />
-	  <Field Name="Email" DisplayName="Your Email Address" DataType="varchar" MaxSize="55" AllowSet="true" TrimAndStripTagsOnSet="true" AllowGet="true" AllowLookup="true" AllowGetAll="true" DefaultValue="" InputRequired="true" InputEmptyError="Put in an email address, damnit!" InputRegexCheck="^[A-Z0-9._%-]+@[A-Z0-9.-]+\.[A-Z]{2,4}$" InputRegexFailError="Invalid email format" FormType="text" IsUnique="false" />
+      <Field Name="Notes" DataType="text" Example="Write something about yourself." AllowSet="true" TrimAndStripTagsOnSet="true" MinSize="5" MaxSize="10" AllowGet="true" AllowLookup="true" AllowGetAll="false" InputRequired="false" FormType="textarea" IsUnique="false" />
+	  <Field Name="Email" DisplayName="Your Email Address" Example="your@email.com" DataType="varchar" MaxSize="55" AllowSet="true" TrimAndStripTagsOnSet="true" AllowGet="true" AllowLookup="true" AllowGetAll="true" DefaultValue="" InputRequired="true" InputEmptyError="Put in an email address, damnit!" InputRegexCheck="^[_a-zA-Z0-9-\+]+(\.[_a-zA-Z0-9-\+]+)*@[a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)*(\.[a-zA-Z]{2,4})$" InputRegexFailError="Invalid email address format." FormType="text" IsUnique="false" />
+	  <Field Name="Date" DisplayName="Pick your date" DataType="timestamp" />
     </Database>
   </Class>
   <Class Name="FastSetting">
     <Database CommitChangesAutomatically="true" TableName="FastSetting">
       <Field Name="Id" DataType="int" AllowSet="true" TrimAndStripTagsOnSet="false" AllowGet="true" AllowLookup="true" AllowGetAll="true" InputRequired="true" FormType="text" IsUnique="true" PrimaryKey="true" AutoIncrement="false"  ForeignKeyID="1" />
-      <Field Name="Name" DataType="varchar" MaxSize="255" AllowSet="true" TrimAndStripTagsOnSet="false" AllowGet="true" AllowLookup="true" AllowGetAll="true" InputRequired="true" InputEmptyError="Put in a name, damnit!" InputRegexCheck="^[A-Z0-9._%-]+@[A-Z0-9.-]+\.[A-Z]{2,4}$" InputRegexFailError="Regex failed!" FormType="text" IsUnique="true" AutoIncrement="false" />
+      <Field Name="Name" DataType="varchar" MaxSize="255" AllowSet="true" TrimAndStripTagsOnSet="false" AllowGet="true" AllowLookup="true" AllowGetAll="true" InputRequired="true" InputEmptyError="Put in a name, damnit!" InputRegexCheck="^[a-zA-Z0-9._%-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,4}$" InputRegexFailError="Regex failed!" FormType="text" IsUnique="true" AutoIncrement="false" />
 	  <Field Name="ShortName" Aliases="NotLongName" DataType="varchar" MaxSize="10" MinSize="5" AllowSet="true" TrimAndStripTagsOnSet="false" AllowGet="true" AllowLookup="true" AllowGetAll="true" InputRequired="false" FormType="text" IsUnique="false" AutoIncrement="false" />
     </Database>
   </Class>
@@ -87,6 +89,22 @@
     <Database TableName="Junk" InheritsTableName="_CommonFields">
       <Field Name="JunkName" Aliases="JunkName2, Junk3" DataType="varchar" MaxSize="255" AllowSet="true" TrimAndStripTagsOnSet="false" AllowGet="true" AllowLookup="true" AllowGetAll="true" InputRequired="false" FormType="text" IsUnique="false" AutoIncrement="false" />
 	  <Field Name="ShortName" Aliases="ShortName2" DataType="varchar" MaxSize="10" AllowSet="true" TrimAndStripTagsOnSet="false" AllowGet="true" AllowLookup="true" AllowGetAll="true" InputRequired="false" FormType="text" IsUnique="false" AutoIncrement="false" />
+    </Database>
+  </Class>
+  
+  <Class Name="MultiInheritance">
+    <Database TableName="MultiInheritance" InheritsTableNames="_CommonFields, MultiInheritance2, MultiInheritance3">
+      <Field Name="MultiInheritanceId" DataType="int" IsUnique="true" />
+    </Database>
+  </Class>
+  <Class Name="MultiInheritance2">
+    <Database TableName="MultiInheritance2" IsAbstract="true">
+      <Field Name="MultiInheritance2Id" DataType="int" IsUnique="true" />
+    </Database>
+  </Class>
+  <Class Name="MultiInheritance3">
+    <Database TableName="MultiInheritance3" IsAbstract="true" InheritsTableName="_CommonFields">
+      <Field Name="MultiInheritance3Id" DataType="int" IsUnique="true" />
     </Database>
   </Class>
 
