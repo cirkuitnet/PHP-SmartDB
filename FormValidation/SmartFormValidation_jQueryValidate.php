@@ -8,15 +8,16 @@
  * http://www.phpsmartdb.com/license
  */
 /**
- * @package SmartDatabase
+ * Provides javascript form validation rules for jQuery's Validation Plugin
  */
 /**
  * Provides javascript form validation rules for jQuery's Validation Plugin
+ * 
  * A basic example (taken from testXml.php that comes with SmartDatabase):
- * <code>
+ * ``` php
  * <script type="text/javascript" src="/cirkuit/includes/js/jquery/core/1.3.2/jquery.min.js"></script>
- * <script type="text/javascript" src="/cirkuit/includes/js/jquery/plugins/validate/1.5.5/jquery.validate.min.js"></script>
- * <script type="text/javascript" src="/cirkuit/includes/js/jquery/plugins/validate/1.5.5/additional-methods.js"></script>
+ * <script type="text/javascript" src="/cirkuit/includes/js/jquery/plugins/validate/1.9.0/jquery.validate.min.js"></script>
+ * <script type="text/javascript" src="/cirkuit/includes/js/jquery/plugins/validate/1.9.0/additional-methods.min.js"></script>
  * <script type="text/javascript">
  * $(function(){
  * 	//validate page properties form
@@ -45,7 +46,7 @@
  * 		margin-left: 1em;
  * 	}
  * </style>
- * </code>
+ * ```
  * @package SmartDatabase
  */
 class SmartFormValidation_jQuery{
@@ -56,6 +57,7 @@ class SmartFormValidation_jQuery{
 	public $Database;
 
 	/**
+	 * Constructor
 	 * @param SmartDatabase $Database The Database that the validation rules will be created for
 	 * @return SmartTable
 	 */
@@ -69,7 +71,7 @@ class SmartFormValidation_jQuery{
 	 * Returns the jQuery Validation Plugin's options for the given scope as an assoc array of formObjectName=>array(pluginOption=>value)
 	 * @param string $tableName [optional] If set, returns ALL rules for the given $tableName OR optionally only the rule for the given $columnName
 	 * @param string $columnName [optional] If set, returns the rule for the given $columnName within the given $Table
-	 * @return assoc All rules in the database OR optionally all rules for the given $tableName OR optionally only the rule for the given $columnName within the given $tableName
+	 * @return array All rules in the database OR optionally all rules for the given $tableName OR optionally only the rule for the given $columnName within the given $tableName
 	 */
 	public function GetPluginOptions($tableName=null, $columnName=null){
 		if($tableName) $Table = $this->Database->GetTable($tableName);
@@ -105,7 +107,7 @@ class SmartFormValidation_jQuery{
 	/**
 	 * Returns the 'rules' for the given column
 	 * @param object $Column
-	 * @return Javascript for the 'rules' options of the jquery validation plugin
+	 * @return string Javascript for the 'rules' options of the jquery validation plugin
 	 */
 	private function GetRulesForColumn($Column){
 		$js = null;
