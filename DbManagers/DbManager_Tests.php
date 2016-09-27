@@ -1,9 +1,5 @@
 <?
 /**
- * @package SmartDatabase
- * @ignore
- */
-/**
  */
 require_once(dirname(__FILE__).'/DbManager_MySQL.php');
 

@@ -8,13 +8,13 @@
  * http://www.phpsmartdb.com/license
  */
 /**
- * @package SmartDatabase
+ * Handles the actual database communication. This DbManager is for MySQL. (Set $GLOBALS['SQL_DEBUG_MODE'] to true to error_log() all SQL requests.)
  */
 /**
  */
 require_once(dirname(__FILE__)."/DbManager.php");
 /**
- * Handles the actual database communication. This DbManager is for MySQL. (Set $GLOBALS['SQL_DEBUG_MODE'] to true to print all SQL requests.)
+ * Handles the actual database communication. This DbManager is for MySQL. (Set $GLOBALS['SQL_DEBUG_MODE'] to true to error_log() all SQL requests.)
  * @package SmartDatabase
  */
 class DbManager_MySQL implements DbManager {
@@ -31,8 +31,8 @@ class DbManager_MySQL implements DbManager {
 	protected $_password; //encrypted. use $this->GetPassword();
 	protected $_connectParams;
 
-	protected $_driver = 1; //default. see consts below
-	const MYSQL_DRIVER = 1;
+	protected $_driver = 2; //default. see consts below
+	const MYSQL_DRIVER = 1; //deprecated in PHP v5.5. not recommended
 	const MYSQLI_DRIVER = 2;
 	
 	private $PHP_INT_MAX; //the PHP_INT_MAX constant doesnt work in some encrypters
@@ -42,20 +42,47 @@ class DbManager_MySQL implements DbManager {
 	 * First Dimension Where Operator - You'll probably want to ignore this option. It's for reverse compatibility reasons only.
 	 * Used for joining multiple elements within the first dimension of a WHERE clause array. Can be 'AND' or 'OR'.
 	 * @var string Can be "AND" or "OR"
-	 * @ignore
 	 */
 	public static $FirstDimWhereOp = "AND"; //should be "AND" or "OR" only
+	
+	/**
+	 * Default options for connecting. Can be overwritten at a global scope by changing this variable in your code
+	 * 
+	 * Currently, these are:
+	 * ``` php
+	 * public static $DefaultOptions = array(
+	 * 	'new_link'=>false,		//for mysqli driver, when false, persistent connections are used (recommended). for mysql driver, this is the 4th parameters for mysql_connect. see mysql_connect documentation
+	 * 	'client_flags'=>null,	//for mysql driver only- this is the 5th parameters for mysql_connect. see mysql_connect documentation
+	 * 	'charset'=>'utf8mb4',	//if set, OpenConnection does a mysql_set_charset() with the given option (ie 'utf8mb4'). ref: http://dev.mysql.com/doc/refman/5.7/en/charset-connection.html
+	 * 	'collation'=>'utf8mb4_unicode_ci',	//if set with charset, OpenConnection does a "SET NAMES..." with the given option (ie 'utf8mb4_unicode_ci'). ref: http://dev.mysql.com/doc/refman/5.7/en/charset-connection.html
+	 * 	'driver'=>'mysqli'		//can be 'mysql' or 'mysqli' - the PHP extension to use for sql interaction. note- PHP v5.5+ deprecates 'mysql' driver
+	 * );
+	 * ```	
+	 * @var array
+	 * @see DbManager_MySQL::__construct() DbManager_MySQL::__construct()
+	 */
+	public static $DefaultOptions = array(
+		'new_link'=>false,		//for mysqli driver, when false, persistent connections are used (recommended). for mysql driver, this is the 4th parameters for mysql_connect. see mysql_connect documentation
+		'client_flags'=>null,	//for mysql driver only- this is the 5th parameters for mysql_connect. see mysql_connect documentation
+		'charset'=>'utf8mb4',	//if set, OpenConnection does a mysqli_set_charset() with the given option (ie 'utf8mb4'). ref: http://dev.mysql.com/doc/refman/5.7/en/charset-connection.html
+		'collation'=>'utf8mb4_unicode_ci',	//if set with charset, OpenConnection does a "SET NAMES..." with the given option (ie 'utf8mb4_unicode_ci'). ref: http://dev.mysql.com/doc/refman/5.7/en/charset-connection.html
+		'driver'=>'mysqli'		//can be 'mysql' or 'mysqli' - the PHP extension to use for sql interaction. note- PHP v5.5+ deprecates 'mysql' driver
+	);
 
 	/**
-	 * Constructor: pass connection values, set the db settings. note: $options is an ARRAY
-	 * <code>
-	 * $options = array(
-	 * 	'new_link'=>false,	//this is the 4th parameters for mysql_connect. see mysql_connect documentation
-	 * 	'client_flags'=>'',	//this is the 5th parameters for mysql_connect. see mysql_connect documentation
-	 * 	'charset'=>'',		//if set, OpenConnection does a mysql_set_charset() with the given option (ie 'utf8')
-	 * 	'driver'=>'mysql',	//can be 'mysql' or 'mysqli' - the PHP extension to use for sql interaction
+	 * Constructor: pass connection values, set the db settings.
+	 * 
+	 * $options is an ARRAY as follows:
+	 * ``` php
+	 * $options = array( //SEE self::$DefaultOptions
+	 * 	'new_link'=>false,		//this is the 4th parameters for mysql_connect. see mysql_connect documentation
+	 * 	'client_flags'=>null,	//this is the 5th parameters for mysql_connect. see mysql_connect documentation
+	 * 	'charset'=>'utf8mb4',	//if set, OpenConnection does a mysql_set_charset() with the given option (ie 'utf8mb4'). ref: http://dev.mysql.com/doc/refman/5.7/en/charset-connection.html
+	 * 	'collation'=>'utf8mb4_unicode_ci',	//if set with charset, OpenConnection does a "SET NAMES..." with the given option (ie 'utf8mb4_unicode_ci'). ref: http://dev.mysql.com/doc/refman/5.7/en/charset-connection.html
+	 * 	'driver'=>'mysqli',		//can be 'mysql' or 'mysqli' - the PHP extension to use for sql interaction
 	 * );
-	 * </code>
+	 * ```
+	 * @see DbManager_MySQL::$DefaultOptions DbManager_MySQL::$DefaultOptions
 	 * @param string $server The server to connect to. Ex: "localhost"
 	 * @param string $user The username to connect with. Ex: "smartdb"
 	 * @param string $password The password to connect with. Ex: "smartdb123"
@@ -67,6 +94,12 @@ class DbManager_MySQL implements DbManager {
 		$this->_server = $server;
 		$this->_user = $user;
 		$this->_databaseName = $databaseName;
+		
+		//merge in options
+		if(is_array($options)){ //merge passed options with DefaultOptions
+			$options = array_merge(self::$DefaultOptions, $options);
+		}
+		else $options = self::$DefaultOptions;
 		
 		//set the db driver from options (mysql or mysqli)
 		$this->SetDriver($options['driver']);
@@ -81,6 +114,11 @@ class DbManager_MySQL implements DbManager {
 		$this->PHP_INT_MAX_HALF = $this->PHP_INT_MAX/2;
 	}
 	
+	/**
+	 * Sets the driver that should be used for communicating with the db
+	 * @param string $driver 'mysqli' or 'mysql' ('mysql' is deprecated)
+	 * @throws Exception if invalid $driver is given
+	 */
 	private function SetDriver($driver){
 		switch ($driver){
 			case '': //default
@@ -109,20 +147,21 @@ class DbManager_MySQL implements DbManager {
 	 * @return string The decrypted password for this database connection
 	 */
 	private function GetPassword(){
-		return $this->Decrypt($this->_password, $this->_server.$this->_user); //$this->_server.$this->_user will be our encrypt key
+		return $this->Decrypt($this->_password, $this->_server.$this->_user); //$this->_server.$this->_user will be our encrypt key 
 	}
 
 	/**
 	 * Establishes the connection with the MySql database based off credentials and options passed to the DbManager constructor
+	 * 
 	 * This function is AUTOMATICALLY invoked when the first query is made. You likely won't need to call it.
-	 * <code>
+	 * ``` php
 	 * $options = array(
 	 * 	'skip-select-db'=>false, //doesn't do a mysql_select_db. good for creating databases and etc management
 	 * );
-	 * </code>
+	 * ```
 	 * @param array $options See description above
 	 * @return bool true when connected (or already connected), throws exception if there is an error
-	 * @see DbManager_MySQL::CloseConnection()
+	 * @see DbManager_MySQL::CloseConnection() DbManager_MySQL::CloseConnection()
 	 */
 	public function OpenConnection($options = null){
 		if($this->_isConnected){
@@ -132,20 +171,53 @@ class DbManager_MySQL implements DbManager {
 		try {
 			if($this->_driver == self::MYSQL_DRIVER){ //-- mysql
 				$this->_connection = mysql_connect($this->_server, $this->_user, $this->GetPassword(), $this->_connectParams['new_link'], $this->_connectParams['client_flags']);
+				if(!$this->_connection) throw new Exception("Error opening connection. MySQL Error No: ".mysql_errno()." - ".mysql_error());
 			}
 			else{ //-- mysqli
-				$this->_connection = mysqli_connect($this->_server, $this->_user, $this->GetPassword());
+				//"new link" is created by default with mysqli
+				//persistent connections are special (to help avoid max_user_connections
+				//see http://php.net/manual/en/mysqli.persistconns.php - "To open a persistent connection you must prepend p: to the hostname when connecting."
+				if(!$this->_connectParams['new_link']){
+					//store active 'links' for each server/username combination for reuse
+					static $links;
+					$this->_connection = $links[$this->_server][$this->_user];
+					if(!$this->_connection) $this->_connection = $links[$this->_server][$this->_user] = mysqli_init(); //no connection yet, create one and cache in static links array
+					if(!$this->_connection) throw new Exception("Error opening cached connection. MySQLi Error No: ".mysqli_connect_errno()." - ".mysqli_connect_error());
+					
+					//connect to database using cached link
+					$connected = mysqli_real_connect($this->_connection, 'p:'.$this->_server, $this->_user, $this->GetPassword());
+					if(!$connected) throw new Exception("Error opening persistent connection. MySQLi Error No: ".mysqli_connect_errno()." - ".mysqli_connect_error());
+				}
+				else{
+					$this->_connection = mysqli_connect($this->_server, $this->_user, $this->GetPassword());
+					if(!$this->_connection) throw new Exception("Error opening new connection. MySQLi Error No: ".mysqli_connect_errno()." - ".mysqli_connect_error());
+				}
 			}
 			
-			if(!$this->_connection) throw new Exception("Couldn't connect to the server. Please check your settings.");
-			
-			//see if a charset is set (ie "utf8");
+			//see if a charset is set (ie "utf8mb4");
 			if($this->_connectParams['charset']){
+				
+				//get options
+				$charset = $this->_connectParams['charset'];
+				$collation = $this->_connectParams['collation'];
+				
 				if($this->_driver == self::MYSQL_DRIVER){ //-- mysql
-					mysql_set_charset($this->_connectParams['charset'], $this->_connection);
+					//set PHP driver charset
+					mysql_set_charset($charset, $this->_connection);
+					
+					//query MySQL to set client charset & collation. ref: http://dev.mysql.com/doc/refman/5.7/en/charset-connection.html
+					$query = "SET NAMES ".$charset;
+					if($collation) $query .= " COLLATE ".$collation;
+					mysql_query($query, $this->_connection);
 				}
 				else{ //-- mysqli
-					mysqli_set_charset($this->_connection, $this->_connectParams['charset']);
+					//set PHP driver charset
+					mysqli_set_charset($this->_connection, $charset);
+					
+					//query MySQL to set client charset & collation. ref: http://dev.mysql.com/doc/refman/5.7/en/charset-connection.html
+					$query = "SET NAMES ".$charset;
+					if($collation) $query .= " COLLATE ".$collation;
+					mysqli_query($this->_connection, $query);
 				}
 			}
 
@@ -159,7 +231,7 @@ class DbManager_MySQL implements DbManager {
 		catch (Exception $e){
 			$this->_isConnected = false;
 			//exception show's the password passed through the constructor. only use for debugging
-			throw new Exception("Bad arguments for DbManager constructor. Server: '".$this->_server."', User: '".$this->_user."'. Msg: ".$e->getMessage());
+			throw new Exception("DbManager could not connect. Server: '".$this->_server."', User: '".$this->_user."'. Msg: ".$e->getMessage());
 			//die("Bad arguments for DbManager constructor. Msg: ".$e->getMessage());
 		}
 	}
@@ -167,7 +239,7 @@ class DbManager_MySQL implements DbManager {
 	/**
 	 * Closes the MySQL connection if connected. Note that the connection is automatically closed when the PHP script has finished executing.
 	 * @return bool true if the connection is successfull closed, false if there is no connection to close
-	 * @see DbManager_MySQL::OpenConnection() 
+	 * @see DbManager_MySQL::OpenConnection() DbManager_MySQL::OpenConnection() 
 	 */
 	public function CloseConnection() {
 		if(!$this->_isConnected) return false;
@@ -186,11 +258,14 @@ class DbManager_MySQL implements DbManager {
 	/**
 	 * Sets the database to use for this connection
 	 * @param string $databaseName The database to use for this connection
-	 * @param array $options{
+	 * @param array $options as follows:
+	 * ``` php
+	 * $options = {
 	 * 	'force-select-db' => false, //if true, will immediately call mysql_select_db() with the database passed to this class
 	 * }
+	 * ```
 	 * @return null
-	 * @see DbManager_MySQL::GetDatabaseName()
+	 * @see DbManager_MySQL::GetDatabaseName() DbManager_MySQL::GetDatabaseName()
 	 */
 	public function SetDatabaseName($databaseName, $options=null){
 		$this->_databaseName = $databaseName;
@@ -202,7 +277,7 @@ class DbManager_MySQL implements DbManager {
 	/**
 	 * Gets the database name in use for this connection
 	 * @return string the database name currently set for this connection
-	 * @see DbManager_MySQL::SetDatabaseName()
+	 * @see DbManager_MySQL::SetDatabaseName() DbManager_MySQL::SetDatabaseName()
 	 */
 	public function GetDatabaseName(){
 		return $this->_databaseName;
@@ -229,24 +304,25 @@ class DbManager_MySQL implements DbManager {
 
 	/**
 	 * Executes a SELECT statement on the currently selected database
-	 * <code>
+	 * 
+	 * ``` php
 	 * $options = array(
 	 * 	'distinct' => false, //if true, does a SELECT DISTINCT for the select. Note: there must only be 1 select field, otherwise an exception is thrown
 	 * 
 	 * 	'add-column-quotes' => false, //if true, overwrites any other 'column-quotes' options (below) and will add column quotes to everything
-	 *  'add-select-fields-column-quotes' => false, //if true, automatically adds `quotes` around the `column names` in select fields
-	 *  'add-where-clause-column-quotes' => false, //if true, automatically adds `quotes` around the `column names` in the where clause
-	 *  'add-order-clause-column-quotes' => false, //if true, automatically adds `quotes` around the `column names` in the order clause
+	 * 	'add-select-fields-column-quotes' => false, //if true, automatically adds `quotes` around the `column names` in select fields
+	 * 	'add-where-clause-column-quotes' => false, //if true, automatically adds `quotes` around the `column names` in the where clause
+	 * 	'add-order-clause-column-quotes' => false, //if true, automatically adds `quotes` around the `column names` in the order clause
 	 *  
-	 *  'add-dot-notation' => false, //if true, overwrites any other 'dot-notation' options (below) and will add dot notation to everything
-	 *  'add-select-fields-dot-notation' => false, //if true, automatically adds dot.notation before column names in select fields
-	 *  'add-where-clause-dot-notation' => false, //if true, automatically adds dot.notation before column names in the where clause
-	 *  'add-order-clause-dot-notation' => false, //if true, automatically adds dot.notation before column names in the order clause
+	 * 	'add-dot-notation' => false, //if true, overwrites any other 'dot-notation' options (below) and will add dot notation to everything
+	 * 	'add-select-fields-dot-notation' => false, //if true, automatically adds dot.notation before column names in select fields
+	 * 	'add-where-clause-dot-notation' => false, //if true, automatically adds dot.notation before column names in the where clause
+	 * 	'add-order-clause-dot-notation' => false, //if true, automatically adds dot.notation before column names in the order clause
 	 *  
-	 *  'quote-numerics' => false, //if true, numerics will always be quoted in the where clause (ie "WHERE `price`='123'" instead of "WHERE `price`=123"). NOTE- this is for reverse compatibility. only used if $table is a string and not a SmartTable object
-	 *  'force-select-db' => false, //if true, will always call mysql_select_db() with the database passed to this class
+	 * 	'quote-numerics' => false, //if true, numerics will always be quoted in the where clause (ie "WHERE `price`='123'" instead of "WHERE `price`=123"). NOTE- this is for reverse compatibility. only used if $table is a string and not a SmartTable object
+	 * 	'force-select-db' => false, //if true, will always call mysql_select_db() with the database passed to this class
 	 * );
-	 * </code>
+	 * ```
 	 * @param array $array_select_fields The columns to select. Ex: array("CustomerId", "Name", "EmailAddress")
 	 * @param mixed $table The table name. Ex: "Customer". This can also be a SmartTable object- if so, data will be strongly typed and more accurate.
 	 * @param array $array_where The WHERE clause of the query. Ex: array( array("CustomerId"=>5, "CustomerName"=>"Jack"), array("CustomerName"=>"Cindy") ) - ...WHERE (CustomerId=5 AND CustomerName='Jack') OR (CustomerName='Cindy')
@@ -254,12 +330,12 @@ class DbManager_MySQL implements DbManager {
 	 * @param string $limit With one argument (ie $limit="10"), the value specifies the number of rows to return from the beginning of the result set. With two arguments (ie $limit="100,10"), the first argument specifies the offset of the first row to return, and the second specifies the maximum number of rows to return. The offset of the initial row is 0 (not 1).
 	 * @param array $options An array of key=>value pairs. See description above.
 	 * @return int Returns the number of selected rows
-	 * @see DbManager_MySQL::NumRows()
-	 * @see DbManager_MySQL::AffectedRows()
-	 * @see DbManager_MySQL::FetchAssocList()
-	 * @see DbManager_MySQL::FetchArrayList()
-	 * @see DbManager_MySQL::FetchAssoc()
-	 * @see DbManager_MySQL::FetchArray()
+	 * @see DbManager_MySQL::NumRows() DbManager_MySQL::NumRows()
+	 * @see DbManager_MySQL::AffectedRows() DbManager_MySQL::AffectedRows()
+	 * @see DbManager_MySQL::FetchAssocList() DbManager_MySQL::FetchAssocList()
+	 * @see DbManager_MySQL::FetchArrayList() DbManager_MySQL::FetchArrayList()
+	 * @see DbManager_MySQL::FetchAssoc() DbManager_MySQL::FetchAssoc()
+	 * @see DbManager_MySQL::FetchArray() DbManager_MySQL::FetchArray()
 	 */
 	public function Select($array_select_fields, $table, $array_where='', $array_order='', $limit = '', $options=null) {
 		if(!is_array($array_select_fields) || count($array_select_fields)==0){
@@ -298,23 +374,24 @@ class DbManager_MySQL implements DbManager {
 
 	/**
 	 * Executes an INSERT statement on the currently selected database
-	 * <code>
+	 * 
+	 * ``` php
 	 * $options = array(
 	 * 	'add-column-quotes' => false, //if true, overwrites any other 'column-quotes' options (below) and will add column quotes to everything
 	 * 	'add-dot-notation' => false, //if true, overwrites any other 'dot-notation' options (below) and will add dot notation to everything
 	 * 	'force-select-db' => false, //if true, will call mysql_select_db() with the database passed to this class
 	 * );
-	 * </code>
+	 * ```
 	 * @param mixed $table The table name. Ex: "Customer". This can also be a SmartTable object- if so, data will be strongly typed and more accurate.
 	 * @param array $field_val_array Assoc array of columnName=value of values to insert. Ex: array('Name'=>'Jack', 'EmailAddress'=>'jack@frost.com') ... INSERT INTO Customer (Name, EmailAddress) VALUES ('Jack', 'jack@frost.com')
 	 * @param array $options An array of key=>value pairs. See description above.
 	 * @return int Returns the number of inserted rows (1 or 0)
-	 * @see DbManager_MySQL::NumRows()
-	 * @see DbManager_MySQL::AffectedRows()
-	 * @see DbManager_MySQL::FetchAssocList()
-	 * @see DbManager_MySQL::FetchArrayList()
-	 * @see DbManager_MySQL::FetchAssoc()
-	 * @see DbManager_MySQL::FetchArray()
+	 * @see DbManager_MySQL::NumRows() DbManager_MySQL::NumRows()
+	 * @see DbManager_MySQL::AffectedRows() DbManager_MySQL::AffectedRows()
+	 * @see DbManager_MySQL::FetchAssocList() DbManager_MySQL::FetchAssocList()
+	 * @see DbManager_MySQL::FetchArrayList() DbManager_MySQL::FetchArrayList()
+	 * @see DbManager_MySQL::FetchAssoc() DbManager_MySQL::FetchAssoc()
+	 * @see DbManager_MySQL::FetchArray() DbManager_MySQL::FetchArray()
 	 */
 	public function Insert($table, $field_val_array, $options=null) {
 		$sql_fields = "";
@@ -350,26 +427,27 @@ class DbManager_MySQL implements DbManager {
 
 	/**
 	 * Executes an UPDATE statement on the currently selected database
-	 * <code>
+	 * 
+	 * ``` php
 	 * $options = array(
 	 * 	'add-column-quotes' => false, //if true, overwrites any other 'column-quotes' options (below) and will add column quotes to everything
 	 * 	'add-dot-notation' => false, //if true, overwrites any other 'dot-notation' options (below) and will add dot notation to everything
 	 * 	'force-select-db' => false, //if true, will call mysql_select_db() with the database passed to this class
 	 * 	'quote-numerics' => false, //if true, numerics will always be quoted in the where clause (ie ...WHERE `price`='123'... instead of ... WHERE `price`=123...). NOTE- this is for reverse compatibility. only used if $table is a string and not a SmartTable object
 	 * );
-	 * </code>
+	 * ```
 	 * @param mixed $table The table name. Ex: "Customer". This can also be a SmartTable object- if so, data will be strongly typed and more accurate.
 	 * @param array $field_val_array Assoc array of columnName=value of data to update. ex: array('col1'=>5, 'col2'=>'foo') ... UPDATE $table SET col1=5, col2='foo' ...
 	 * @param array $array_where The where clause. ex: array( array("id"=>5, "col1"=>"foo"), array("col2"=>"bar") ) - ...WHERE (id=5 AND col1='foo') OR (col2='bar')
 	 * @param string $limit The amount of rows to limit the update to (if any) from the beginning of the result set
 	 * @param array $options An array of key=>value pairs. See description above.
 	 * @return int Returns the number of updated rows
-	 * @see DbManager_MySQL::NumRows()
-	 * @see DbManager_MySQL::AffectedRows()
-	 * @see DbManager_MySQL::FetchAssocList()
-	 * @see DbManager_MySQL::FetchArrayList()
-	 * @see DbManager_MySQL::FetchAssoc()
-	 * @see DbManager_MySQL::FetchArray()
+	 * @see DbManager_MySQL::NumRows() DbManager_MySQL::NumRows()
+	 * @see DbManager_MySQL::AffectedRows() DbManager_MySQL::AffectedRows()
+	 * @see DbManager_MySQL::FetchAssocList() DbManager_MySQL::FetchAssocList()
+	 * @see DbManager_MySQL::FetchArrayList() DbManager_MySQL::FetchArrayList()
+	 * @see DbManager_MySQL::FetchAssoc() DbManager_MySQL::FetchAssoc()
+	 * @see DbManager_MySQL::FetchArray() DbManager_MySQL::FetchArray()
 	 */
 	public function Update($table, $field_val_array, $array_where='', $limit = '', $options=null) {
 		$arg = "";
@@ -412,25 +490,26 @@ class DbManager_MySQL implements DbManager {
 
 	/**
 	 * Executes a DELETE statement on the currently selected database
-	 * <code>
+	 * 
+	 * ``` php
 	 * $options = array(
 	 * 	'add-column-quotes' => false, //if true, overwrites any other 'column-quotes' options (below) and will add column quotes to everything
 	 * 	'add-dot-notation' => false, //if true, overwrites any other 'dot-notation' options (below) and will add dot notation to everything
 	 * 	'force-select-db' => false, //if true, will call mysql_select_db() with the database passed to this class
 	 * 	'quote-numerics' => false, //if true, numerics will always be quoted in the where clause (ie ...WHERE `price`='123'... instead of ... WHERE `price`=123...). NOTE- this is for reverse compatibility. only used if $table is a string and not a SmartTable object
 	 * );
-	 * </code>
+	 * ```
 	 * @param mixed $table The table name. Ex: "Customer". This can also be a SmartTable object- if so, data will be strongly typed and more accurate.
 	 * @param array $array_where The WHERE clause. Ex: array( array("id"=>5, "col1"=>"foo"), array("col2"=>"bar") ) - ...WHERE (id=5 AND col1='foo') OR (col2='bar')
 	 * @param string $limit The amount of rows to limit the delete to (if any) from the beginning of the result set
 	 * @param array $options An array of key=>value pairs. See description above.
 	 * @return int Returns the number of selected rows
-	 * @see DbManager_MySQL::NumRows()
-	 * @see DbManager_MySQL::AffectedRows()
-	 * @see DbManager_MySQL::FetchAssocList()
-	 * @see DbManager_MySQL::FetchArrayList()
-	 * @see DbManager_MySQL::FetchAssoc()
-	 * @see DbManager_MySQL::FetchArray()
+	 * @see DbManager_MySQL::NumRows() DbManager_MySQL::NumRows()
+	 * @see DbManager_MySQL::AffectedRows() DbManager_MySQL::AffectedRows()
+	 * @see DbManager_MySQL::FetchAssocList() DbManager_MySQL::FetchAssocList()
+	 * @see DbManager_MySQL::FetchArrayList() DbManager_MySQL::FetchArrayList()
+	 * @see DbManager_MySQL::FetchAssoc() DbManager_MySQL::FetchAssoc()
+	 * @see DbManager_MySQL::FetchArray() DbManager_MySQL::FetchArray()
 	 */
 	public function Delete($table, $array_where='', $limit='', $options=null) {
 		$where_clause = $this->GenerateWhereClause($table, $array_where, $options['add-dot-notation'], $options['add-column-quotes'], array(
@@ -451,26 +530,27 @@ class DbManager_MySQL implements DbManager {
 
 	/**
 	 * Executes a query against the selected database. IT IS NOT RECOMMENDED THAT YOU USE THIS FUNCTION DIRECTLY.
-	 * <code>
+	 * 
+	 * ``` php
 	 * $options = array(
 	 * 	'force-select-db' => false, //set to true if writing a query without dot notation (database.table.field) AND your app uses multiple databases with 1 connection (ie not using the 'new_link' flag on any database connection)
 	 * 	'skip-select-db' => false, //if true, will skip any call to mysql_select_db. good for creating databases and etc management
 	 * 	'multi-query' => false, //(NOT SUPPORTED WITH DRIVER 'mysql') - if true, will use mysqli_multi_query. use NextResult() to iterate through each query's result set. throws an exception on error
 	 * );
-	 * </code>
+	 * ```
 	 * @param string $query The query to execute. Ex: "SELECT * FROM Customers WHERE CustomerId=1"
 	 * @param array $options An array of key=>value pairs. See description above.
 	 * @return mixed Returns the result of mysql_query() - For SELECT, SHOW, DESCRIBE, EXPLAIN and other statements returning resultset, mysql_query() returns a resource. For other type of SQL statements, INSERT, UPDATE, DELETE, DROP, etc, mysql_query() returns TRUE  on success or FALSE on error.
-	 * @see DbManager_MySQL::NumRows()
-	 * @see DbManager_MySQL::AffectedRows()
-	 * @see DbManager_MySQL::FetchAssocList()
-	 * @see DbManager_MySQL::FetchArrayList()
-	 * @see DbManager_MySQL::FetchAssoc()
-	 * @see DbManager_MySQL::FetchArray()
+	 * @see DbManager_MySQL::NumRows() DbManager_MySQL::NumRows()
+	 * @see DbManager_MySQL::AffectedRows() DbManager_MySQL::AffectedRows()
+	 * @see DbManager_MySQL::FetchAssocList() DbManager_MySQL::FetchAssocList()
+	 * @see DbManager_MySQL::FetchArrayList() DbManager_MySQL::FetchArrayList()
+	 * @see DbManager_MySQL::FetchAssoc() DbManager_MySQL::FetchAssoc()
+	 * @see DbManager_MySQL::FetchArray() DbManager_MySQL::FetchArray()
 	 */
 	public function Query($query, $options=null) {
 		if($GLOBALS['SQL_DEBUG_MODE']){
-			echo "DbManager->Query - ".$query."<br>\n";	// Troubleshoot Query command
+			error_log( "DbManager->Query - ".$query );
 		}
 		
 		//reset vars
@@ -585,8 +665,9 @@ class DbManager_MySQL implements DbManager {
 	
 	/**
 	 * Places the last query results into an array of ASSOC arrays, and returns it. Each row is an index in the array. Returns an empty array if there are no results.
+	 * 
 	 * Example:
-	 * <code>
+	 * ``` php
 	 * Function returns an array similar to:
 	 * array(
 	 * 	0 => array(
@@ -594,27 +675,28 @@ class DbManager_MySQL implements DbManager {
 	 * 		"EmailAddress" => "jack@frost.com",
 	 * 		"Name" => "Jack",
 	 *  ),
-	 *  1 => array(
-	 *  	"CustomerId" => "6",
+	 * 	1 => array(
+	 * 		"CustomerId" => "6",
 	 * 		"EmailAddress" => "queen@muppets.com",
 	 * 		"Name" => "Miss Piggy",
-	 *  ),
-	 *  ...
+	 * 	),
+	 * 	...
 	 * )
-	 * </code> 
+	 * ```
 	 * @return array An array of ASSOC arrays, and returns it. Each row is an index in the array. Returns an empty array if there are no results.
-	 * @see DbManager_MySQL::FetchArrayList()
-	 * @see DbManager_MySQL::FetchAssoc()
-	 * @see DbManager_MySQL::FetchArray() 
-	 * @see DbManager_MySQL::Select()
-	 * @see DbManager_MySQL::Insert()
-	 * @see DbManager_MySQL::Update()
-	 * @see DbManager_MySQL::Delete()
-	 * @see DbManager_MySQL::NumRows()
+	 * @see DbManager_MySQL::FetchArrayList() DbManager_MySQL::FetchArrayList()
+	 * @see DbManager_MySQL::FetchAssoc() DbManager_MySQL::FetchAssoc()
+	 * @see DbManager_MySQL::FetchArray() DbManager_MySQL::FetchArray()
+	 * @see DbManager_MySQL::Select() DbManager_MySQL::Select()
+	 * @see DbManager_MySQL::Insert() DbManager_MySQL::Insert()
+	 * @see DbManager_MySQL::Update() DbManager_MySQL::Update()
+	 * @see DbManager_MySQL::Delete() DbManager_MySQL::Delete()
+	 * @see DbManager_MySQL::NumRows() DbManager_MySQL::NumRows()
 	 */
 	public function FetchAssocList() {
 		$data = array(); //so an empty array is returned if no rows are set. avoids "Warning: Invalid argument supplied for foreach()"
-   		for ($i = 0; $i < $this->NumRows(); $i++) {
+		$numRows = $this->NumRows();
+   		for ($i = 0; $i < $numRows; $i++) {
        		$data[$i] = $this->FetchAssoc();
    		}
    		return $data;
@@ -622,36 +704,38 @@ class DbManager_MySQL implements DbManager {
 
 	/**
 	 * Places the last query results into an array of NON-ASSOC arrays, and returns the array. Returns an empty array if there are no results.
+	 * 
 	 * Example:
-	 * <code>
+	 * ``` php
 	 * Function returns an array similar to:
 	 * array(
 	 * 	0 => array(
 	 * 		0 => "4",
 	 * 		1 => "jack@frost.com",
 	 * 		2 => "Jack",
-	 *  ),
-	 *  1 => array(
-	 *  	0 => "6",
+	 * 	),
+	 * 	1 => array(
+	 * 		0 => "6",
 	 * 		1 => "queen@muppets.com",
 	 * 		2 => "Miss Piggy",
-	 *  ),
-	 *  ...
+	 * 	),
+	 * 	...
 	 * );
-	 * </code> 
+	 * ```
 	 * @return array An array of NON-ASSOC arrays, and returns the array. Returns an empty array if there are no results.
-	 * @see DbManager_MySQL::FetchAssocList()
-	 * @see DbManager_MySQL::FetchAssoc()
-	 * @see DbManager_MySQL::FetchArray()
-	 * @see DbManager_MySQL::Select()
-	 * @see DbManager_MySQL::Insert()
-	 * @see DbManager_MySQL::Update()
-	 * @see DbManager_MySQL::Delete()
-	 * @see DbManager_MySQL::NumRows()
+	 * @see DbManager_MySQL::FetchAssocList() DbManager_MySQL::FetchAssocList()
+	 * @see DbManager_MySQL::FetchAssoc() DbManager_MySQL::FetchAssoc()
+	 * @see DbManager_MySQL::FetchArray() DbManager_MySQL::FetchArray()
+	 * @see DbManager_MySQL::Select() DbManager_MySQL::Select()
+	 * @see DbManager_MySQL::Insert() DbManager_MySQL::Insert()
+	 * @see DbManager_MySQL::Update() DbManager_MySQL::Update()
+	 * @see DbManager_MySQL::Delete() DbManager_MySQL::Delete()
+	 * @see DbManager_MySQL::NumRows() DbManager_MySQL::NumRows()
 	 */
 	public function FetchArrayList() {
 		$data = array(); //so an empty array is returned if no rows are set. avoids "Warning: Invalid argument supplied for foreach()"
-   		for ($i = 0; $i < $this->NumRows(); $i++) {
+		$numRows = $this->NumRows();
+   		for ($i = 0; $i < $numRows; $i++) {
        		$data[$i] = $this->FetchArray();
    		}
    		return $data;
@@ -659,25 +743,27 @@ class DbManager_MySQL implements DbManager {
 
 	/**
 	 * Returns an ASSOC array of the last query results. Column names are the array keys. False is returned if there are no more results.
+	 * 
 	 * Example:
 	 * if( (row = $dbManager->FetchAssoc()) ){ $row['id']...
-	 * <code>
+	 * 
 	 * Function returns an array similar to:
+	 * ``` php
 	 * array(
 	 * 		"CustomerId" => "4",
 	 * 		"EmailAddress" => "jack@frost.com",
 	 * 		"Name" => "Jack",
 	 * );
-	 * </code>
+	 * ```
 	 * @return array An ASSOC array of the last query results. Column names are the array keys. False is returned if there are no more results.
-	 * @see DbManager_MySQL::FetchAssocList()
-	 * @see DbManager_MySQL::FetchArrayList()
-	 * @see DbManager_MySQL::FetchArray()
-	 * @see DbManager_MySQL::Select()
-	 * @see DbManager_MySQL::Insert()
-	 * @see DbManager_MySQL::Update()
-	 * @see DbManager_MySQL::Delete()
-	 * @see DbManager_MySQL::NumRows()
+	 * @see DbManager_MySQL::FetchAssocList() DbManager_MySQL::FetchAssocList()
+	 * @see DbManager_MySQL::FetchArrayList() DbManager_MySQL::FetchArrayList()
+	 * @see DbManager_MySQL::FetchArray() DbManager_MySQL::FetchArray()
+	 * @see DbManager_MySQL::Select() DbManager_MySQL::Select()
+	 * @see DbManager_MySQL::Insert() DbManager_MySQL::Insert()
+	 * @see DbManager_MySQL::Update() DbManager_MySQL::Update()
+	 * @see DbManager_MySQL::Delete() DbManager_MySQL::Delete()
+	 * @see DbManager_MySQL::NumRows() DbManager_MySQL::NumRows()
 	 */
 	public function FetchAssoc() {
 		if($this->_driver == self::MYSQL_DRIVER){ //-- mysql
@@ -690,24 +776,24 @@ class DbManager_MySQL implements DbManager {
 
 	/**
 	 * Returns a NON-ASSOC array of the last query results. Array keys are numeric. False is returned if there are no more results.
-	 * Example:
-	 * <code>
-	 * Function returns an array similar to:
+	 *
+	 * Example - Function returns an array similar to:
+	 * ``` php
 	 * array(
 	 * 		0 => "4",
 	 * 		1 => "jack@frost.com",
 	 * 		2 => "Jack",
 	 * );
-	 * </code>
+	 * ```
 	 * @return array An ASSOC array of the last query results. Column names are the array keys. False is returned if there are no more results.
-	 * @see DbManager_MySQL::FetchAssocList()
-	 * @see DbManager_MySQL::FetchArrayList()
-	 * @see DbManager_MySQL::FetchAssoc()
-	 * @see DbManager_MySQL::Select()
-	 * @see DbManager_MySQL::Insert()
-	 * @see DbManager_MySQL::Update()
-	 * @see DbManager_MySQL::Delete()
-	 * @see DbManager_MySQL::NumRows()
+	 * @see DbManager_MySQL::FetchAssocList() DbManager_MySQL::FetchAssocList()
+	 * @see DbManager_MySQL::FetchArrayList() DbManager_MySQL::FetchArrayList()
+	 * @see DbManager_MySQL::FetchAssoc() DbManager_MySQL::FetchAssoc()
+	 * @see DbManager_MySQL::Select() DbManager_MySQL::Select()
+	 * @see DbManager_MySQL::Insert() DbManager_MySQL::Insert()
+	 * @see DbManager_MySQL::Update() DbManager_MySQL::Update()
+	 * @see DbManager_MySQL::Delete() DbManager_MySQL::Delete()
+	 * @see DbManager_MySQL::NumRows() DbManager_MySQL::NumRows()
 	 */
 	public function FetchArray() {
 		if($this->_driver == self::MYSQL_DRIVER){ //-- mysql
@@ -721,11 +807,11 @@ class DbManager_MySQL implements DbManager {
 	/**
 	 * Returns the number of rows returned from the last query (not affected rows!). This command is only valid for statements like SELECT or SHOW that return an actual result set. To retrieve the number of rows affected by a INSERT, UPDATE, REPLACE or DELETE query, use AffectedRows()
 	 * @return int Returns the number of rows returned from the last query
-	 * @see DbManager_MySQL::AffectedRows();
-	 * @see DbManager_MySQL::Select()
-	 * @see DbManager_MySQL::Insert()
-	 * @see DbManager_MySQL::Update()
-	 * @see DbManager_MySQL::Delete()
+	 * @see DbManager_MySQL::AffectedRows() DbManager_MySQL::AffectedRows()
+	 * @see DbManager_MySQL::Select() DbManager_MySQL::Select()
+	 * @see DbManager_MySQL::Insert() DbManager_MySQL::Insert()
+	 * @see DbManager_MySQL::Update() DbManager_MySQL::Update()
+	 * @see DbManager_MySQL::Delete() DbManager_MySQL::Delete()
 	 */
 	public function NumRows() {
 		if($this->_driver == self::MYSQL_DRIVER){ //-- mysql
@@ -769,11 +855,11 @@ class DbManager_MySQL implements DbManager {
 	/**
 	 * Returns the number of affected rows by the last INSERT, UPDATE, REPLACE or DELETE query
 	 * @return int Returns the number of affected rows by the last INSERT, UPDATE, REPLACE or DELETE query
-	 * @see DbManager_MySQL::NumRows();
-	 * @see DbManager_MySQL::Select()
-	 * @see DbManager_MySQL::Insert()
-	 * @see DbManager_MySQL::Update()
-	 * @see DbManager_MySQL::Delete() 
+	 * @see DbManager_MySQL::Select() DbManager_MySQL::Select()
+	 * @see DbManager_MySQL::Insert() DbManager_MySQL::Insert()
+	 * @see DbManager_MySQL::Update() DbManager_MySQL::Update()
+	 * @see DbManager_MySQL::Delete() DbManager_MySQL::Delete()
+	 * @see DbManager_MySQL::NumRows() DbManager_MySQL::NumRows()
 	 */
 	public function AffectedRows() {
 		if(!$this->_isConnected) return false;
@@ -794,9 +880,9 @@ class DbManager_MySQL implements DbManager {
 	 */
 	public function EscapeString($string, $options=null) {
 		//TODO: get rid of this completely and disable magic quotes: http://www.php.net/manual/en/info.configuration.php#ini.magic-quotes-gpc
-		if (get_magic_quotes_gpc()) { //DEPRECATED! will be removed in PHP 6
-			$string = stripslashes($string);
-		}
+		//if (get_magic_quotes_gpc()) { //DEPRECATED! will be removed in PHP 6
+		//	$string = stripslashes($string);
+		//}
 		
 		if(!$this->_isConnected) $this->OpenConnection($options);
 		
@@ -888,11 +974,12 @@ class DbManager_MySQL implements DbManager {
 
 	/**
 	 * Prepares the WHERE clause (from $array_where) for a SQL statement
-	 * <code>
+	 * 
+	 * ``` php
 	 *  $options = array(
 	 *  	'quote-numerics' => false, //if true, numerics will always be quoted in the where clause (ie ...WHERE `price`='123'... instead of ... WHERE `price`=123...). NOTE- this is for reverse compatibility. only used if $table is a string and not a SmartTable object 
 	 *  );
-	 * </code>
+	 * ```
 	 * @param mixed $table The table name. Ex: "Customer". This can also be a SmartTable object- if so, data will be strongly typed and more accurate.
 	 * @param array $array_where
 	 * @param bool $dotNotation
@@ -932,7 +1019,7 @@ class DbManager_MySQL implements DbManager {
 	 * @param array $options
 	 * @param bool $first Ignore this. only used for recursion
 	 * @return string
-	 * @see DbManager_MySQL::GenerateWhereClause()
+	 * @see DbManager_MySQL::GenerateWhereClause() DbManager_MySQL::GenerateWhereClause()
 	 */
 	private function GenerateWhereRecursive($table, $key, $val, $dotNotation=false, $addColumnQuotes=false, $column='', $condition='=', $operator='AND', $options=array(), $first=true){
 		$key = trim($key);
@@ -977,7 +1064,7 @@ class DbManager_MySQL implements DbManager {
 	 * @param bool $addColumnQuotes
 	 * @param array $options
 	 * @return string
-	 * @see DbManager_MySQL::GenerateWhereRecursive()
+	 * @see DbManager_MySQL::GenerateWhereRecursive() DbManager_MySQL::GenerateWhereRecursive()
 	 */
 	private function GenerateWhereSingle($table, $column, $condition, $val, $dotNotation, $addColumnQuotes, $options=array()){
 		$ret = ""; //the value returned
@@ -999,11 +1086,17 @@ class DbManager_MySQL implements DbManager {
 			else $ret = $column." is null"; //'is null' for null
 		}
 		else{ //value is not null
-			
-			//SPECIAL CASE FOR "LIKE" CONDITION - See http://dev.mysql.com/doc/refman/5.0/en/string-comparison-functions.html
-			//"To search for "\", specify it as "\\\\"; this is because the backslashes are stripped once by the
-			//parser and again when the pattern match is made, leaving a single backslash to be matched against." 
+			//SPECIAL CASES FOR "LIKE" CONDITION
+			//See: http://stackoverflow.com/questions/3683746/escaping-mysql-wild-cards
 			if($condition == "LIKE" || $condition == "NOT LIKE"){
+				//to make sure we don't over-escape single quotes, we'll escape single quotes as "''" instead of "\'"
+				//underscore ('_') is a wildcard in LIKE matching one character. need to escape it to match the actual underscore
+				//see http://dev.mysql.com/doc/refman/5.1/en/string-literals.html 
+				$castQuoteVal = str_replace( array("\'", '_'), array("''", '\_'), $castQuoteVal);
+				
+				//"To search for "\", specify it as "\\\\"; this is because the backslashes are stripped once by the
+				//parser and again when the pattern match is made, leaving a single backslash to be matched against."
+				//see http://dev.mysql.com/doc/refman/5.0/en/string-comparison-functions.html
 				$castQuoteVal = addcslashes($castQuoteVal, '\\\\');
 			}
 			
@@ -1037,8 +1130,8 @@ class DbManager_MySQL implements DbManager {
 	 * Checks if the given $keyword is a special keyword (ie "OR", "AND", "<", "!=", etc) and returns the match. Returns false if $keyword is not a keyword.
 	 * @param string $keyword The keyword to check.
 	 * @return mixed The matched operator, condition, or FALSE if there is no match.
-	 * @see DbManager_MySQL::IsOperator()
-	 * @see DbManager_MySQL::IsCondition()
+	 * @see DbManager_MySQL::IsOperator() DbManager_MySQL::IsOperator()
+	 * @see DbManager_MySQL::IsCondition() DbManager_MySQL::IsCondition()
 	 */
 	public function IsKeyword($keyword){
 		if( ($operator = $this->IsOperator($keyword)) ) return $operator; //match operator
@@ -1050,8 +1143,8 @@ class DbManager_MySQL implements DbManager {
 	 * Returns the proper operator (AND or OR) if the $keyword is an operator (ie AND or OR). Otherwise returns false.
 	 * @param string $keyword The keyword to check
 	 * @return mixed The matched operator or FALSE if there is no match
-	 * @see DbManager_MySQL::IsKeyword()
-	 * @see DbManager_MySQL::IsCondition()
+	 * @see DbManager_MySQL::IsKeyword() DbManager_MySQL::IsKeyword()
+	 * @see DbManager_MySQL::IsCondition() DbManager_MySQL::IsCondition()
 	 */
 	public function IsOperator($keyword){
 		$keywordLower = strtolower(trim($keyword));
@@ -1068,8 +1161,8 @@ class DbManager_MySQL implements DbManager {
 	 * Returns the proper condition ("<",">","!=", etc) if the $keyword is an condition. Otherwise returns false.
 	 * @param string $keyword The keyword to check
 	 * @return mixed The matched condition or FALSE if there is no match
-	 * @see DbManager_MySQL::IsOperator()
-	 * @see DbManager_MySQL::IsKeyword()
+	 * @see DbManager_MySQL::IsOperator() DbManager_MySQL::IsOperator()
+	 * @see DbManager_MySQL::IsKeyword() DbManager_MySQL::IsKeyword()
 	 */
 	public function IsCondition($keyword){
 		$keyword = trim($keyword);
@@ -1096,11 +1189,12 @@ class DbManager_MySQL implements DbManager {
 	
 	/**
 	 * Returns the given $value with appropriate casts and quotes for SQL queries
-	 * <code>
+	 * 
+	 * ``` php
 	 * $options = array(
 	 * 	'quote-numerics' => false //for reverse compatibility. only used if $table is a string and not a SmartTable object
 	 * );
-	 * </code>
+	 * ```
 	 * @param mixed $table The table name. Ex: "Customer". This can also be a SmartTable object- if so, data will be strongly typed and more accurate.
 	 * @param mixed $value The value to check for quote usage
 	 * @param string $column The column name this value is used for. Used for looking up the data type in the SmartDb
@@ -1244,6 +1338,25 @@ class DbManager_MySQL implements DbManager {
 		else return true; //table doesn't exist anymore
 	}
 	/**
+	 * Emptys all rows from the given $tableName from within the given $databaseName.
+	 * @param string $databaseName The database containing the $tableName to empty all rows from
+	 * @param string $tableName The name of the table to empty all rows from
+	 * @return bool true if the table was successfully emptied, false if the table doesn't exist
+	 */
+	public function EmptyTable($databaseName, $tableName){
+		if(!$databaseName) throw new Exception('$databaseName not set');
+		if(!$tableName) throw new Exception('$tableName not set');
+	
+		if(!$this->TableExists($databaseName, $tableName)) return false; //table doesn't exist to drop
+	
+		$sql = "TRUNCATE TABLE `".$this->EscapeString($databaseName)."`.`".$this->EscapeString($tableName)."`";
+		$this->Query($sql, array(
+			"skip-select-db" => true
+		));
+		
+		return true;
+	}
+	/**
 	 * Returns true if the database was created, false if it already exists or was not created for some reason.
 	 * @param string $databaseName The name of the database to create 
 	 * @return int Returns true if the database was created or already exists, false if it not created for some reason
@@ -1285,8 +1398,9 @@ class DbManager_MySQL implements DbManager {
 	}
 	/**
 	 * Copies all structure and data from $sourceDatabaseName to $destDatabaseName. $destDatabaseName will be created if it is not already
+	 * 
 	 * The database user running this command will need appropriate privileges to both databases and/or the ability to create new databases
-	 * <code>
+	 * ``` php
 	 * $options = array(
 	 * 	'create-tables' => true,
 	 * 	'create-database' => true,
@@ -1294,7 +1408,7 @@ class DbManager_MySQL implements DbManager {
 	 * 	'drop-existing-tables' => false,
 	 * 	'drop-existing-database' => false, 
 	 * )
-	 * </code> 
+	 * ```
 	 * @param string $sourceDatabaseName The name of the source database
 	 * @param string $destDatabaseName The name of the destination database. This database will be created if it is not already
 	 * @param array $options An array of key-value pairs (see description above)
@@ -1427,6 +1541,26 @@ class DbManager_MySQL implements DbManager {
 		return $this->AffectedRows();
 	}
 	/**
+	 * Changes the SQL password for the user with the given $username on the given $host
+	 * @param string $username The username to update the password on
+	 * @param string $password The new password to set for this username on thie host
+	 * @param string $host The host that the given $username can connect from
+	 * @return int Returns the number of affected rows (1 if the user was created, 0 otherwise)
+	 */
+	public function ChangePassword($username, $password, $host="localhost"){
+		if(!$username) throw new Exception('$username not set');
+		if(!$password) throw new Exception('$password not set');
+		if(!$host) throw new Exception('$host not set');
+		
+		$connectOptions = array(
+			"skip-select-db" => true
+		);
+
+		$sql = "SET PASSWORD FOR '".$this->EscapeString($username, $connectOptions)."'@'".$this->EscapeString($host, $connectOptions)."' = PASSWORD('".$this->EscapeString($password, $connectOptions)."')";
+		$this->Query($sql, $connectOptions);
+		return $this->AffectedRows();
+	}
+	/**
 	 * Grants the given $username permission to the given $database, from the given $host
 	 * @param $databaseName The database name that the $username should be granted permission to 
 	 * @param $username The $username that should have permission to connect to the given $databaseName
@@ -1488,11 +1622,27 @@ class DbManager_MySQL implements DbManager {
 	
 	//********************* password management ********************************
 	/**
+	 * key must be length of 16, 24, or 32
+	 * @return string the unique encrypt key used internally
+	 */
+	private function PadEncryptKey($key){
+		$keyLength = strlen($key);
+		if($keyLength > 24) $keyLength = 32;
+		else if($keyLength > 16) $keyLength = 24;
+		else $keyLength = 16;
+		
+		$key = substr($key, 0, $keyLength);
+		$key = str_pad($key, $keyLength, "\0"); //pad with null characters
+		return $key;
+	}
+	
+	/**
 	 * A basic encrypt function for storing the password locally in this class
-	 * @param string $decrypt
-	 * @param string $key
+	 * @param string $encrypt text to encrypt
+	 * @param string $key key to encrypt against
 	 */
 	private function Encrypt($encrypt,$key) {
+		$key = $this->PadEncryptKey($key);
 		$iv = mcrypt_create_iv(mcrypt_get_iv_size(MCRYPT_RIJNDAEL_256, MCRYPT_MODE_ECB), MCRYPT_RAND);
 		$passcrypt = mcrypt_encrypt(MCRYPT_RIJNDAEL_256, $key, $encrypt, MCRYPT_MODE_ECB, $iv);
 		$encode = base64_encode($passcrypt);
@@ -1501,10 +1651,11 @@ class DbManager_MySQL implements DbManager {
 
 	/**
 	 * A basic decrypt function for storing the password locally in this class
-	 * @param string $decrypt
-	 * @param string $key
+	 * @param string $decrypt text to decrypt
+	 * @param string $key key to decrypt w
 	 */
 	private function Decrypt($decrypt,$key) {
+		$key = $this->PadEncryptKey($key);
 		$decoded = base64_decode($decrypt);
 		$iv = mcrypt_create_iv(mcrypt_get_iv_size(MCRYPT_RIJNDAEL_256, MCRYPT_MODE_ECB), MCRYPT_RAND);
 		$decrypted = mcrypt_decrypt(MCRYPT_RIJNDAEL_256, $key, $decoded, MCRYPT_MODE_ECB, $iv);

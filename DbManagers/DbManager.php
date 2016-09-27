@@ -8,10 +8,11 @@
  * http://www.phpsmartdb.com/license
  */
 /**
- * @package SmartDatabase
+ * Handles the actual database communication. This DbManager is for MySQL. (Set $GLOBALS['SQL_DEBUG_MODE'] to true to print all SQL requests.)
  */
 /**
  * Handles the actual database communication. This DbManager is for MySQL. (Set $GLOBALS['SQL_DEBUG_MODE'] to true to print all SQL requests.)
+ * @see DbManager_MySQL DbManager_MySQL
  * @package SmartDatabase
  */
 interface DbManager {
