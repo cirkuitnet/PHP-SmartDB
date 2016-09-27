@@ -8,12 +8,13 @@
  * http://www.phpsmartdb.com/license
  */
 /**
- * @package SmartDatabase
+ * Tables contain table properties and Columns (which contain column properties). No user/db data is on a Table level. See Rows and Cells.
  */
 /**
  */
 require_once(dirname(__FILE__).'/SmartColumn.php');
 /**
+ * Tables contain table properties and Columns (which contain column properties). No user/db data is on a Table level. See Rows and Cells.
  * @package SmartDatabase
  */
 class SmartTable implements ArrayAccess, Countable{
@@ -31,7 +32,7 @@ class SmartTable implements ArrayAccess, Countable{
 				'IsAbstract',
 				'AutoCommit',
 				'ExtendedByClassName',
-				'_inheritsTableName',
+				'_inheritsTableNames',
 				'_columns',
 				'_columnAliases',
 				'_keyColumns',
@@ -60,8 +61,8 @@ class SmartTable implements ArrayAccess, Countable{
 
 	/**
 	 * @var bool Defaults to false. If true, this table will not actually be created in the database, but will be available to be inherited from using the $table->InheritColumnsFromTable() method.
-	 * @see SmartTable::InheritColumnsFromTable()
-	 * @see SmartTable::GetInheritedTableName()
+	 * @see SmartTable::InheritColumnsFromTable() SmartTable::InheritColumnsFromTable()
+	 * @see SmartTable::GetInheritedTableNames() SmartTable::GetInheritedTableNames()
 	 */
 	public $IsAbstract = false;
 
@@ -76,6 +77,7 @@ class SmartTable implements ArrayAccess, Countable{
 	public $ExtendedByClassName;
 
 	/**
+	 * Constructor
 	 * @param string $tableName The name of the table
 	 * @return SmartTable
 	 */
@@ -105,7 +107,7 @@ class SmartTable implements ArrayAccess, Countable{
 	/**
 	 * Returns an assoc of all Columns. The returned array's key=$columnName, value=$Column
 	 * @return array An assoc of all Columns. The returned array's key=$columnName, value=$Column
-	 * @see SmartColumn
+	 * @see SmartColumn SmartColumn
 	 */
 	public function GetAllColumns(){
 		return $this->_columns;
@@ -114,7 +116,7 @@ class SmartTable implements ArrayAccess, Countable{
 	/**
 	 * Returns an assoc of all column aliases. The returned array's key=$columnAlias, value=$realColumnName
 	 * @return array An assoc of all column aliases. The returned array's key=$columnAlias, value=$realColumnName
-	 * @see SmartColumn
+	 * @see SmartColumn SmartColumn
 	 */
 	public function GetAllColumnAliases(){
 		return $this->_columnAliases;
@@ -194,20 +196,22 @@ class SmartTable implements ArrayAccess, Countable{
 	/**
 	 * Mostly for internal use. If true, Refresh() will be called automatically whenever a column is added or removed to this table.
 	 * As an optimization, you may want to disable $AutoRefresh when you are adding/removing bulk columns to a table, then make a single call to Refresh() once all column management is complete.
-	 * @see SmartTable::Refresh()
-	 * @see SmartTable::AddColumn()
-	 * @see SmartTable::RemoveColumn()
+	 * @see SmartTable::Refresh() SmartTable::Refresh()
+	 * @see SmartTable::AddColumn() SmartTable::AddColumn()
+	 * @see SmartTable::RemoveColumn() SmartTable::RemoveColumn()
 	 * @var bool
 	 */
 	public $AutoRefresh = true;
 
 	/**
 	 * Mostly for internal use. Re-computes column aliases, key columns, and etc from $this->_columns.
-	 * <p>This function gets called automatically from AddColumn() and RemoveColumn() unless $AutoRefresh is set to false (in which case, you'll need to call this function yourself when you have finished adding/removing columns).</p>
- 	 * <p>As an optimization, you may want to disable AutoRefresh when you are adding/removing bulk columns to a table, then make a single call to Refresh() once all column management is complete.</p>
-	 * @see SmartTable::$AutoRefresh
-	 * @see SmartTable::AddColumn()
-	 * @see SmartTable::RemoveColumn()
+	 * 
+	 * This function gets called automatically from AddColumn() and RemoveColumn() unless $AutoRefresh is set to false (in which case, you'll need to call this function yourself when you have finished adding/removing columns).
+	 * 
+ 	 * As an optimization, you may want to disable AutoRefresh when you are adding/removing bulk columns to a table, then make a single call to Refresh() once all column management is complete.
+	 * @see SmartTable::$AutoRefresh SmartTable::$AutoRefresh
+	 * @see SmartTable::AddColumn() SmartTable::AddColumn()
+	 * @see SmartTable::RemoveColumn() SmartTable::RemoveColumn()
 	 */
 	public function Refresh(){
 		$this->_keyColumns = array();
@@ -259,8 +263,8 @@ class SmartTable implements ArrayAccess, Countable{
 	/**
 	 * Adds a column to be managed by this Table. Replaces any column with the same name.
 	 * If adding bulk columns, you may want to disable $AutoRefresh until all columns have been added, then make a single call to Refresh()
-	 * @see SmartTable::Refresh()
-	 * @see SmartTable::$AutoRefresh
+	 * @see SmartTable::Refresh() SmartTable::Refresh()
+	 * @see SmartTable::$AutoRefresh SmartTable::$AutoRefresh
 	 * @param SmartColumn $Column The Column to add.
 	 * @param bool $replaceExisting If a column with the same name already exists on this table, should we replace it with this new Column?
 	 * @return bool True if the column was added successfully, false otherwise (may happen if the column exists and $replaceExisting == false)
@@ -295,11 +299,11 @@ class SmartTable implements ArrayAccess, Countable{
 	/**
 	 * Removes a column from this table. If the given $columnName does not exist, an exception is thrown.
 	 * If removing bulk columns, you may want to disable $AutoRefresh until all column management is complete, then make a single call to Refresh()
-	 * @see SmartTable::Refresh()
-	 * @see SmartTable::$AutoRefresh
+	 * @see SmartTable::Refresh() SmartTable::Refresh()
+	 * @see SmartTable::$AutoRefresh SmartTable::$AutoRefresh
 	 * @param string $columnName The name of the column to remove.
 	 * @return bool Always returns true. If the given $columnName does not exist, an exception is thrown.
-	 * @see SmartTable::ColumnExists()
+	 * @see SmartTable::ColumnExists() SmartTable::ColumnExists()
 	 */
 	public function RemoveColumn($columnName){
 		if(!$this->_columns[$columnName]) throw new Exception("Invalid column: '$columnName'");
@@ -321,32 +325,38 @@ class SmartTable implements ArrayAccess, Countable{
 
 /////////////////////////////// Table Inheritance ///////////////////////////////////
 	/**
-	 * If this table inherits another table, this is the name of that other table
-	 * <p>NOTE - Currently only supports inheriting 1 table! This will likely change this at some point down the road</p>
-	 * @todo Figure out a way to inherit from multiple tables across the board
-	 * @see SmartTable::$IsAbstract
+	 * If this table inherits other tables, this array will contain the names of the other table
+	 * @see SmartTable::$IsAbstract SmartTable::$IsAbstract
 	 * @var string The name of the table that $this table inherits from.
 	 */
-	private $_inheritsTableName = null;
+	private $_inheritsTableNames = [];
 
 	/**
-	 * If this table inherits another table, this is the name of that other table.
-	 * <p>NOTE - Currently only supports inheriting 1 table! This will likely change this at some point down the road</p>
-	 * @see SmartTable::$IsAbstract
-	 * @return string The name of the table that $this table inherits from.
+	 * If this table inherits other tables, the returned array will contain the names of the other table.
+	 * Will be an empty array if no inheritance
+	 * @see SmartTable::$IsAbstract SmartTable::$IsAbstract
+	 * @return array The name of the table that $this table inherits from.
+	 */
+	public function GetInheritedTableNames(){
+		return $this->_inheritsTableNames;
+	}
+	/**
+	 * DEPRECATED - Used GetInheritedTableNames()
+	 * @deprecated
+	 * @ignore;
 	 */
 	public function GetInheritedTableName(){
-		return $this->_inheritsTableName;
+		return $this->GetInheritedTableNames();
 	}
 	/**
 	 * All columns (and relations associated with those columns) from the given $Table are added to this $Table (structure only, no data!)
-	 * @see SmartTable::$IsAbstract
-	 * @see SmartTable::GetInheritedTableName()
+	 * @see SmartTable::$IsAbstract SmartTable::$IsAbstract
+	 * @see SmartTable::GetInheritedTableNames() SmartTable::GetInheritedTableNames()
 	 * @param SmartTable $Table
 	 */
 	public function InheritColumnsFromTable(SmartTable $Table){
-		if($this->_inheritsTableName) throw new Exception("Table {$this->TableName} can only inherit from 1 table! Currently inherits table {$this->_inheritsTableName}, trying to also inherit table {$Table->TableName}");
-		$this->_inheritsTableName = $Table->TableName;
+		if( in_array($Table->TableName, $this->_inheritsTableNames) ) return true; //already inherited
+		$this->_inheritsTableNames[] = $Table->TableName;
 
 		$inheritCols = $Table->GetAllColumns();
 		foreach($inheritCols as $columnName=>$Column){
@@ -374,8 +384,8 @@ class SmartTable implements ArrayAccess, Countable{
 	 * Example usage: $smartdb['tablename']() instead of $smartrow['tablename']->GetNewRow()
 	 * @param mixed $lookupVals Either 1) empty (will return a new row in this case), 2) An assoc-array of column=>value to lookup. For example: array("column1"=>"lookupVal", "column2"=>"lookupVal", ...). OR 3) As a shorthand, if the table contains a single primary key column, $lookupVals can be the value of that column to lookup instead of an array, ie 421
 	 * @return SmartRow A Row instance matching the criteria of $lookupVals or a new row if $lookupVals was not given. The returned lookup row may or may not Exist()
-	 * @see SmartTable::LookupRow()
-	 * @see SmartTable::GetNewRow()
+	 * @see SmartTable::LookupRow() SmartTable::LookupRow()
+	 * @see SmartTable::GetNewRow() SmartTable::GetNewRow()
 	 * @ignore
 	 */
 	public function __invoke($lookupVals=null){
@@ -516,26 +526,27 @@ class SmartTable implements ArrayAccess, Countable{
 	/**
 	 * Returns an array of all Row instances that match the given $lookupAssoc column values, or an empty array if there are no matches. If the option 'return-count-only'=true, returns an integer of number of rows selected. To execute this function, this table must have a primary key.
 	 * Options are as follows:
-	 * <code>
+	 * ``` php
 	 * $options = array(
 	 * 	'sort-by'=>null, //Either a string of the column to sort ASC by, or an assoc array of "ColumnName"=>"ASC"|"DESC" to sort by. An exception will be thrown if a column does not exist.
-	 * 	'return-assoc'=>false, //if true, the returned assoc-array will have the row's primary key column value as its key (if a non-composite primary key exists on the table. otherwise this option is ignored) and the Row instance as its value. ie array("2"=>$row,...) instead of just array($row,...);
-	 *  'return-next-row'=>null, //OUT variable. integer. if you set this parameter in the $options array, then this function will return only 1 row of the result set at a time. If there are no rows selected or left to iterate over, null is returned.
+	 * 	'callback'=>null,		//function - if set, this function will be invoked for each row and the full result set will NOT be returned- only the LAST ROW in the set will be returned (if there is one). the function's signature should be function($row, $i){} where $row is the actual SmartRow, and $i is the 1-based index of the row being returned
+	 * 	'return-assoc'=>false, 	//if true, the returned assoc-array will have the row's primary key column value as its key (if a non-composite primary key exists on the table. otherwise this option is ignored) and the Row instance as its value. ie array("2"=>$row,...) instead of just array($row,...);
+	 * 	'return-next-row'=>null, //OUT variable. integer. if you set this parameter in the $options array, then this function will return only 1 row of the result set at a time. If there are no rows selected or left to iterate over, null is returned.
 	 *  						// THIS PARAMETER MUST BE PASSED BY REFERENCE - i.e. array( "return-next-row" => &$curCount ) - the incoming value of this parameter doesn't matter and will be overwritten)
 	 *  						// After this function is executed, this OUT variable will be set with the number of rows that have been returned thus far.
 	 *  						// Each consecutive call to this function with the 'return-next-row' option set will return the next row in the result set, and also increment the 'return-next-row' variable to the number of rows that have been returned thus far
-	 *  'limit'=>null, // With one argument (ie $limit="10"), the value specifies the number of rows to return from the beginning of the result set
+	 * 	'limit'=>null, // With one argument (ie $limit="10"), the value specifies the number of rows to return from the beginning of the result set
 	 *				   // With two arguments (ie $limit="100,10"), the first argument specifies the offset of the first row to return, and the second specifies the maximum number of rows to return. The offset of the initial row is 0 (not 1):
-	 *  'return-count'=>null, //OUT variable only. integer. after this function is executed, this variable will be set with the number of rows being returned. Usage ex: array('return-count'=>&$count)
-	 *  'return-count-only'=>false, //if true, the return-count will be returned instead of the rows. A good optimization if you dont need to read any data from the rows and just need the rowcount of the search
-	 *  }
-	 * </code>
+	 * 	'return-count'=>null, //OUT variable only. integer. after this function is executed, this variable will be set with the number of rows being returned. Usage ex: array('return-count'=>&$count)
+	 * 	'return-count-only'=>false, //if true, the return-count will be returned instead of the rows. A good optimization if you dont need to read any data from the rows and just need the rowcount of the search
+	 * )
+	 * ```
 	 * @param array $lookupAssoc [optional] An assoc-array of column=>value to lookup. For example: array("column1"=>"lookupVal", "column2"=>"lookupVal", ...). If this is left null or empty array, all rows will be returned.
 	 * @param array $options [optional] See description
 	 * @return mixed An array of all Row instances matching the criteria of $lookupAssoc, or if the option 'return-count-only'=true, returns an integer of number of rows selected
-	 * @see SmartColumn::LookupRows()
-	 * @see SmartTable::LookupRow()
-	 * @see SmartTable::GetAllRows()
+	 * @see SmartColumn::LookupRows() SmartColumn::LookupRows()
+	 * @see SmartTable::LookupRow() SmartColumn::LookupRow()
+	 * @see SmartTable::GetAllRows() SmartColumn::GetAllRows()
 	 */
 	public function LookupRows($lookupAssoc=null, array $options=null){
 		if(!$this->PrimaryKeyExists()) throw new Exception("Function '".__FUNCTION__."' only works on Tables that contain a primary key, but could probably be changed to work for any table structure");
@@ -551,6 +562,13 @@ class SmartTable implements ArrayAccess, Countable{
 
 		//check for the 'return-next-row' option to return 1 row at a time
 		$returnNextRow = $this->CheckReturnNextRow($options, $this->_storedDbManagers['LookupRows'], __FUNCTION__); //returns INT >= 0 or FALSE
+		
+		//check the 'callback' option
+		$callback = $options['callback'];
+		if($callback && !is_callable($callback)){
+			//verify we have an anonymous function or a function name in global scope
+			throw new Exception("Callback function '$callback' does not exist.");
+		}
 
 		//do the query if we're not returning the next row from our result set
 		if(!$returnNextRow || $returnNextRow==0){ //spelling out both cases for clarity - $returnNextRow could be 0 or false here. both should run the new query
@@ -574,6 +592,7 @@ class SmartTable implements ArrayAccess, Countable{
 			if($options['return-count-only']) return $numRowsSelected;
 		}
 
+		//fetch SQL results
 		if($returnNextRow!==false){ //specifically check for FALSE here (zero is valid for returning the 1st row of the set)
 			//if we're returning the first row of a result set, we need to store this particular result dbmanager to iterate over later, so clone our current DbManager and save it to this Table object
 			if($returnNextRow===0){
@@ -581,52 +600,93 @@ class SmartTable implements ArrayAccess, Countable{
 			}
 
 			//return just a single result at a time from the stored DbManager's result set
-			$row = $this->_storedDbManagers['LookupRows']->FetchAssoc();
-			if(!$row) return null; //no more rows to fetch in this result set
+			$sqlResult = $this->_storedDbManagers['LookupRows']->FetchAssoc(); //just 1 row.
+			if(!$sqlResult) return null; //no more rows to fetch in this result set
 			
 			$options['return-next-row']++; //track the number of records we've returned
+			
+			//take SQL results and return SmartRows
+			$smartRow = $this->ReturnSmartRows($sqlResult, $keyColumnName, $options['return-assoc'], $returnNextRow);
+			
+			//callback?
+			if($callback){
+				//call the user's function
+				call_user_func($callback, $smartRow, $options['return-next-row']);
+			}
+			
+			return $smartRow;
+		}
+		else if($callback){
+			$numRows = $dbManager->NumRows();
+			$smartRow = null;
+			
+			//if we're returning one row at a time, we need to store this particular result dbmanager to iterate over later, so clone our current DbManager and save it to this Table object
+			$this->_storedDbManagers['LookupRows-Callback'] = clone $dbManager;
+			for ($i=1; $i <= $numRows; $i++) {
+				//get row
+				$sqlResult = $this->_storedDbManagers['LookupRows-Callback']->FetchAssoc();
+				$smartRow = $this->ReturnSmartRows($sqlResult, $keyColumnName, $options['return-assoc'], true);
+				
+				//call the user's function
+				call_user_func($callback, $smartRow, $i);
+			}
+			
+			//clear cached result sets we may have
+			if($this->_storedDbManagers['LookupRows-Callback']){  //clear any cached result sets we may have
+				$this->_storedDbManagers['LookupRows-Callback']->FlushResults();
+				unset($this->_storedDbManagers['LookupRows-Callback']);
+			}
+			
+			return $smartRow;
 		}
 		else{ //'return-next-row' option is not set. return array of all results
-			$results = $dbManager->FetchAssocList(); //get an array of all of the rows
+			$sqlResult = $dbManager->FetchAssocList(); //get an array of all of the rows
+			
+			//take SQL results and return SmartRows
+			return $this->ReturnSmartRows($sqlResult, $keyColumnName, $options['return-assoc'], $returnNextRow);
 		}
-
-		$returnVals = array();
+		
+	}
+	
+	private function ReturnSmartRows($sqlResult, $keyColumnName, $returnAssoc=false, $returnNextRow=false){
+		//take SQL results and return SmartRows
+		$smartRows = array();
 		if($this->ExtendedByClassName && class_exists($this->ExtendedByClassName,true)){
 			if($returnNextRow!==false){ //specifically check for FALSE here (zero is valid for returning the 1st row of the set)
 				//return only a single row at a time
-				return new $this->ExtendedByClassName($this->Database, $row[$keyColumnName]);
+				$smartRows = new $this->ExtendedByClassName($this->Database, $sqlResult[$keyColumnName]);
 			}
-			else if($options['return-assoc']){ //return all rows as an assoc array with row-key as array-key
-				foreach ($results as $row) {
-					$returnVals[$row[$keyColumnName]] = new $this->ExtendedByClassName($this->Database, $row[$keyColumnName]);
+			else if($returnAssoc){ //return all rows as an assoc array with row-key as array-key
+				foreach ($sqlResult as $row) {
+					$smartRows[$row[$keyColumnName]] = new $this->ExtendedByClassName($this->Database, $row[$keyColumnName]);
 				}
 			}
 			else{ //return all rows pushed onto an array
-				foreach ($results as $row) {
-					$returnVals[] = new $this->ExtendedByClassName($this->Database, $row[$keyColumnName]);
+				foreach ($sqlResult as $row) {
+					$smartRows[] = new $this->ExtendedByClassName($this->Database, $row[$keyColumnName]);
 				}
 			}
 		}
 		else {
 			if($this->ExtendedByClassName && $this->Database->DEV_MODE_WARNINGS)
 				trigger_error("Warning: no class reference found for Table '{$this->TableName}'. ExtendedByClassName = '{$this->ExtendedByClassName}'. Make sure this value is not empty and that the file containing that class is included.", E_USER_WARNING);
-
+		
 			if($returnNextRow!==false){ //specifically check for FALSE here (zero is valid for returning the 1st row of the set)
 				//return only a single row at a time
-				return new SmartRow($this->TableName, $this->Database, $row[$keyColumnName]);
+				$smartRows = new SmartRow($this->TableName, $this->Database, $sqlResult[$keyColumnName]);
 			}
-			else if($options['return-assoc']){ //return all rows as an assoc array with row-key as array-key
-				foreach ($results as $row) {
-					$returnVals[$row[$keyColumnName]] = new SmartRow($this->TableName, $this->Database,$row[$keyColumnName]);
+			else if($returnAssoc){ //return all rows as an assoc array with row-key as array-key
+				foreach ($sqlResult as $row) {
+					$smartRows[$row[$keyColumnName]] = new SmartRow($this->TableName, $this->Database,$row[$keyColumnName]);
 				}
 			}
 			else{ //return all rows pushed onto an array
-				foreach ($results as $row) {
-					$returnVals[] = new SmartRow($this->TableName, $this->Database,$row[$keyColumnName]);
+				foreach ($sqlResult as $row) {
+					$smartRows[] = new SmartRow($this->TableName, $this->Database,$row[$keyColumnName]);
 				}
 			}
 		}
-		return $returnVals;
+		return $smartRows;
 	}
 
 	/**
@@ -635,9 +695,9 @@ class SmartTable implements ArrayAccess, Countable{
 	 * As a shortcut, invoking the SmartTable directly will call LookupRow, i.e., $smartdb['tablename'](212) instead of $smartdb['tablename']->LookupRow(212) or $smartdb['tablename']->LookupRow(array('id'=>212))
 	 * @param mixed $lookupVals Either 1) An assoc-array of column=>value to lookup. For example: array("column1"=>"lookupVal", "column2"=>"lookupVal", ...). OR 2) As a shorthand, if the table contains a single primary key column, $lookupVals can be the value of that column to lookup instead of an array, ie 421
 	 * @return SmartRow A Row instance matching the criteria of $lookupVals. The returned row may or may not Exist
-	 * @see SmartRow::Exists()
-	 * @see SmartColumn::LookupRows()
-	 * @see SmartTable::LookupRows()
+	 * @see SmartRow::Exists() SmartRow::Exists()
+	 * @see SmartColumn::LookupRows() SmartRow::LookupRows()
+	 * @see SmartTable::LookupRows() SmartRow::LookupRows()
 	 */
 	public function LookupRow($lookupVals){
 		if(!$this->PrimaryKeyExists()) throw new Exception("Function '".__FUNCTION__."' only works on Tables that contain a primary key");
@@ -718,6 +778,14 @@ class SmartTable implements ArrayAccess, Countable{
 	/**
 	 * Takes a lookupAssoc array and flattens it to an array of just columnName => value for all elements of the array
 	 * Only sets columnName => value if the given lookupAssoc sets the column equal to a particular value. if it sets the column to a condition or tries to lookup multiple values, the final returned array will not include that column
+	 * @param array $flattenedLookupAssoc internal
+	 * @param string $key internal
+	 * @param mixed $val internal
+	 * @param string $column internal
+	 * @param string $condition internal
+	 * @param string $operator internal
+	 * @param string $first internal
+	 * @throws Exception throws exception if an invalid column name is included
 	 */
 	private function FlattenLookupAssoc(&$flattenedLookupAssoc, $key, $val, $column='', $condition='=', $operator='AND', $first=true){
 		$key = trim($key);
@@ -765,27 +833,35 @@ class SmartTable implements ArrayAccess, Countable{
 	/**
 	 * Gets all values in all rows for the given $returnColumn, optionally unique and sorted. Optionally in an assoc with the primary key column value as the assoc's key value. Alternatively, if the option 'return-count-only'=true, returns an integer of number of rows selected.
 	 * Options are as follows:
-	 * <code>
+	 * ``` php
 	 * $options = array(
 	 * 	'sort-by'=>null, //Either a string of the column to sort ASC by, or an assoc array of "ColumnName"=>"ASC"|"DESC" to sort by. An exception will be thrown if a column does not exist.
-	 *  'get-unique'=>false, //If true, only unique values will be returned. Note: array keys in the returned array will NOT be the key column when this is true)
+	 * 	'get-unique'=>false, //If true, only unique values will be returned. Note: array keys in the returned array will NOT be the key column when this is true)
 	 * 	'return-assoc'=>false, //if true, the returned assoc-array will have the row's primary key column value as its key (if a non-composite primary key exists on the table. otherwise this option is ignored) and the $returnColumn's value as its value. ie array("2"=>$returnColumnValue,...) instead of just array($returnColumnValue,...);
-	 *  'limit'=>null, // With one argument (ie $limit="10"), the value specifies the number of rows to return from the beginning of the result set
+	 * 	'limit'=>null, // With one argument (ie $limit="10"), the value specifies the number of rows to return from the beginning of the result set
 	 *				   // With two arguments (ie $limit="100,10"), the first argument specifies the offset of the first row to return, and the second specifies the maximum number of rows to return. The offset of the initial row is 0 (not 1):
-	 *  'return-count'=>null, //OUT variable only. integer. after this function is executed, this variable will be set with the number of values being returned. Usage ex: array('return-count'=>&$count)
-	 *  'return-count-only'=>false, //if true, the return-count will be returned instead of the rows. A good optimization if you dont need to read any data from the rows and just need the rowcount of the search
-	 *  }
-	 * </code>
+	 * 	'return-count'=>null, //OUT variable only. integer. after this function is executed, this variable will be set with the number of values being returned. Usage ex: array('return-count'=>&$count)
+	 * 	'return-count-only'=>false, //if true, the return-count will be returned instead of the rows. A good optimization if you dont need to read any data from the rows and just need the rowcount of the search
+	 * }
+	 * ```
+	 * @param string $returnColumn The name of the column to return the values of (can be null only for reverse compatibility)
 	 * @param array $lookupAssoc [optional] An assoc-array of column=>value to lookup. For example: array("column1"=>"lookupVal", "column2"=>"lookupVal", ...). If this is left null or empty array, all column values for all rows will be returned.
-	 * @param string $returnColumn The name of the column to return the values of
 	 * @param array $options [optional] See description
 	 * @return mixed An array of key-value pairs. The keys are either 1: nothing, or 2: the primary key (if 'return-assoc' option is TRUE and 'get-unique' option is false and the table has a primary key), and the values are the actual column values. Alternatively, if the option 'return-count-only'=true, returns an integer of number of rows selected.
 	 */
-	public function LookupColumnValues($lookupAssoc=null, $returnColumn, array $options=null){
+	public function LookupColumnValues($returnColumn=null, $lookupAssoc=null, array $options=null){
+		//reverse-compatibility: $lookupAssoc used to be first parameter, then $returnColumn was second. handle both situations
+		if((!$returnColumn && $lookupAssoc) || is_array($returnColumn)){ //if this is true "$returnColumn" is actually "$lookupAssoc" (reverse compatibility). need to swap these parameters
+			$swapParams = $lookupAssoc; //tmp store the actual $returnColumn (in $lookupAssoc) so we can overwrite $lookupAssoc
+			$lookupAssoc = $returnColumn; //overwrite $lookupAssoc to be the actual lookup array
+			$returnColumn = $swapParams; //overwrite $returnColumn with the actual column
+		}
+		
 		if(!$this->ColumnExists($returnColumn)) throw new Exception("Bad return column for function '".__FUNCTION__."': Column '{$returnColumn}' does not exist in table {$this->TableName}");
 
-		//may need to unserialize the returned data. get the column and check if it's serialized
+		//column may be an alias and/or may need to unserialize the returned data. get the actual column and check if it's serialized
 		$Column = $this->GetColumn($returnColumn);
+		$returnColumn = $Column->ColumnName; //override $returnColumn name. handles aliases
 		$isSerializedColumn = $Column->IsSerializedColumn;
 		
 		//$lookupAssoc is not required. if no $lookupAssoc is given, this will work similar to SmartColumn->GetAllValues().
@@ -850,12 +926,12 @@ class SmartTable implements ArrayAccess, Countable{
 	/**
 	 * Returns the value of the column found, or FALSE if no row exists matching the criteria of $lookupAssoc
 	 * Note: this function will throw an exception if more than 1 row is found matching the criteria of $lookupAssoc
-	 * @param array $lookupAssoc An assoc-array of column=>value to lookup. For example: array("column1"=>"lookupVal", "column2"=>"lookupVal", ...)
 	 * @param string $returnColumn The name of the column to return the value of
+	 * @param array $lookupAssoc [optional] An assoc-array of column=>value to lookup. For example: array("column1"=>"lookupVal", "column2"=>"lookupVal", ...). If empty, nothing is filtered (an exception is thrown if more than 1 value is returned) 
 	 * @return mixed The value of the column found, or FALSE if no row exists matching the criteria of $lookupAssoc
 	 */
-	public function LookupColumnValue(array $lookupAssoc, $returnColumn){
-		$foundColumns = $this->LookupColumnValues($lookupAssoc, $returnColumn);
+	public function LookupColumnValue($returnColumn, $lookupAssoc=null){
+		$foundColumns = $this->LookupColumnValues($returnColumn, $lookupAssoc);
 		if(count($foundColumns)==0) return false; //row not found
 		if(count($foundColumns)>1) throw new Exception("Returned more than 1 row when looking up a single row.");
 
@@ -866,95 +942,151 @@ class SmartTable implements ArrayAccess, Countable{
 	/**
 	 * Deletes the row instance matching the criteria of $lookupVals. Returns number of rows deleted (1 or 0)
 	 * NOTE: any columns in $lookupAssoc must be a key or unique!!! We need to ensure that we'll only have 1 row.
+	 * Throws an exception if more than 1 row is returned.
+	 *
+	 * Options are as follows:
+	 * ``` php
+	 * $options = array(
+	 * 	'skip-callbacks'=>false //If true, all row-level "Delete" callbacks will be skipped. This can substantially improve the performance of very large bulk deletions.
+	 * )
+	 * ```
 	 * @param mixed $lookupAssoc Either 1) An assoc-array of column=>value to lookup. For example: array("column1"=>"lookupVal", "column2"=>"lookupVal", ...). OR 2) As a shorthand, if the table contains a single primary key column, $lookupVals can be the value of that column to lookup instead of an array, ie 421
+	 * @param array $options [optional] See description
 	 * @return int number of rows deleted (1 or 0)
-	 * @see SmartRow::Delete()
-	 * @see SmartColumn::DeleteRows()
-	 * @see SmartTable::DeleteRows()
-	 * @see SmartTable::DeleteAllRows()
+	 * @see SmartRow::Delete() SmartRow::Delete()
+	 * @see SmartColumn::DeleteRows() SmartColumn::DeleteRows()
+	 * @see SmartTable::DeleteRows() SmartTable::DeleteRows()
+	 * @see SmartTable::DeleteAllRows() SmartTable::DeleteAllRows()
 	 */
-	public function DeleteRow($lookupAssoc){
+	public function DeleteRow($lookupAssoc, array $options=null){
 		if(!$this->PrimaryKeyExists()) throw new Exception("Function '".__FUNCTION__."' only works on Tables that contain a primary key");
 
-		//handle $lookupAssoc as a non-array... only works if column is a non-composite primary key
-		if($lookupAssoc && !is_array($lookupAssoc)){ // NON-ARRAY. special case where $lookupAssoc is just the key column value
-			if($this->PrimaryKeyIsComposite()) throw new Exception('$lookupAssoc can only be a non-array if the table contains a single primary key column.');
-
-			$keyColumnValue = $lookupAssoc;
-			$keyColumns = $this->GetKeyColumns();
-			$keyColumnNameInArray = array_keys($keyColumns);
-			$keyColumnName = $keyColumnNameInArray[0];
-			$lookupAssoc = array($keyColumnName=>$keyColumnValue);
-		}
-		else if(is_array($lookupAssoc)){
-			//make sure we're only looking up with key/unique columns
-			foreach($lookupAssoc as $columnName=>$lookupVal){
-				$thisCol = $this->GetColumn($columnName);
-				if( !$thisCol->IsUnique && !$thisCol->IsPrimaryKey ){
-					throw new Exception('The $lookupAssoc parameter passed to function "'.__FUNCTION__.'" must only contain unique columns or key columns. Column "'.$columnName.'" is neither.');
+		//skipping delete callbacks on the row-level will delete rows directly on the DB level for efficiency
+		if($options['skip-callbacks']){ //yes, skip callbacks. faster.
+			//handle $lookupAssoc as a non-array... only works if column is a non-composite primary key
+			if($lookupAssoc && !is_array($lookupAssoc)){ // NON-ARRAY. special case where $lookupAssoc is just the key column value
+				if($this->PrimaryKeyIsComposite()) throw new Exception('$lookupAssoc can only be a non-array if the table contains a single primary key column.');
+			
+				$keyColumnValue = $lookupAssoc;
+				$keyColumns = $this->GetKeyColumns();
+				$keyColumnNameInArray = array_keys($keyColumns);
+				$keyColumnName = $keyColumnNameInArray[0];
+				$lookupAssoc = array($keyColumnName=>$keyColumnValue);
+			}
+			else if(is_array($lookupAssoc)){
+				//make sure we're only looking up with key/unique columns
+				foreach($lookupAssoc as $columnName=>$lookupVal){
+					$thisCol = $this->GetColumn($columnName);
+					if( !$thisCol->IsUnique && !$thisCol->IsPrimaryKey ){
+						throw new Exception('The $lookupAssoc parameter passed to function "'.__FUNCTION__.'" must only contain unique columns or key columns. Column "'.$columnName.'" is neither.');
+					}
 				}
 			}
+			
+			$lookupAssoc = $this->VerifyLookupAssoc($lookupAssoc, __FUNCTION__);
+
+			$dbManager = $this->Database->DbManager;
+			if(!$dbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
+			return $dbManager->Delete($this, $lookupAssoc, 1, array('add-column-quotes'=>true, 'add-dot-notation'=>true));
 		}
-
-		$lookupAssoc = $this->VerifyLookupAssoc($lookupAssoc, __FUNCTION__);
-
-		$dbManager = $this->Database->DbManager;
-		if(!$dbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
-		return $dbManager->Delete($this, $lookupAssoc, 1, array('add-column-quotes'=>true, 'add-dot-notation'=>true));
+		else{ //dont skip callbacks. need to lookup the row and delete the row directly. slower than the above
+			$Row = $this->LookupRow($lookupAssoc);
+			if( $Row->Delete() ) return 1; //1 row deleted
+			else return 0; //0 rows deleted
+		}
 	}
 
 	/**
 	 * Deletes all rows with where the column values matches the passed $lookupAssoc
+	 * 
+	 * Options are as follows:
+	 * ``` php
+	 * $options = array(
+	 * 	'skip-callbacks'=>false //If true, all row-level "Delete" callbacks will be skipped. This can substantially improve the performance of very large bulk deletions.
+	 * )
+	 * ```
 	 * @param array $lookupAssoc An assoc-array of column=>value to lookup. For example: array("column1"=>"lookupVal", "column2"=>"lookupVal", ...)
+	 * @param array $options [optional] See description
 	 * @return int the number of rows deleted
-	 * @see SmartRow::Delete()
-	 * @see SmartColumn::DeleteRows()
-	 * @see SmartTable::DeleteAllRows()
-	 * @see SmartTable::DeleteRow()
+	 * @see SmartRow::Delete() SmartRow::Delete()
+	 * @see SmartColumn::DeleteRows() SmartColumn::DeleteRows()
+	 * @see SmartTable::DeleteAllRows() SmartTable::DeleteAllRows()
+	 * @see SmartTable::DeleteRow() SmartTable::DeleteRow()
 	 */
-	public function DeleteRows(array $lookupAssoc){
-		$lookupAssoc = $this->VerifyLookupAssoc($lookupAssoc, __FUNCTION__);
-
-		$dbManager = $this->Database->DbManager;
-		if(!$dbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
-		return $dbManager->Delete($this, $lookupAssoc, '', array('add-column-quotes'=>true, 'add-dot-notation'=>true));
+	public function DeleteRows(array $lookupAssoc, array $options=null){
+		//skipping delete callbacks on the row-level will delete rows directly on the DB level for efficiency
+		if($options['skip-callbacks']){ //yes, skip callbacks. faster.
+			$lookupAssoc = $this->VerifyLookupAssoc($lookupAssoc, __FUNCTION__);
+	
+			$dbManager = $this->Database->DbManager;
+			if(!$dbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
+			return $dbManager->Delete($this, $lookupAssoc, '', array('add-column-quotes'=>true, 'add-dot-notation'=>true));
+		}
+		else{ //dont skip callbacks. need to lookup each row and delete each row directly. slower than the above
+			$deletedCount = 0;
+			while($Row = $this->LookupRows($lookupAssoc, array('return-next-row'=>&$curCount) )){
+				//delete row and increase count if successful
+				if( $Row->Delete() ) $deletedCount++;
+			}
+			return $deletedCount;
+		}
 	}
 
 	/**
 	 * Deletes all rows in the table
+	 * 
+	 * Options are as follows:
+	 * ``` php
+	 * $options = array(
+	 * 	'skip-callbacks'=>false //If true, all row-level "Delete" callbacks will be skipped. This can substantially improve the performance of very large bulk deletions.
+	 * )
+	 * ```
+	 * @param array $options [optional] See description
 	 * @return int the number of rows deleted
-	 * @see SmartRow::Delete()
-	 * @see SmartColumn::DeleteRows()
-	 * @see SmartTable::DeleteRow()
-	 * @see SmartTable::DeleteRows()
+	 * @see SmartRow::Delete() SmartRow::Delete()
+	 * @see SmartColumn::DeleteRows() SmartColumn::DeleteRows()
+	 * @see SmartTable::DeleteRow() SmartTable::DeleteRow()
+	 * @see SmartTable::DeleteRows() SmartTable::DeleteRows()
 	 */
-	public function DeleteAllRows(){
-		$dbManager = $this->Database->DbManager;
-		if(!$dbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
-		return $dbManager->Delete($this, '', '', array('add-column-quotes'=>true, 'add-dot-notation'=>true));
+	public function DeleteAllRows(array $options=null){
+		//skipping delete callbacks on the row-level will delete rows directly on the DB level for efficiency
+		if($options['skip-callbacks']){ //yes, skip callbacks. faster.
+			$dbManager = $this->Database->DbManager;
+			if(!$dbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
+			return $dbManager->Delete($this, '', '', array('add-column-quotes'=>true, 'add-dot-notation'=>true));
+		}
+		else{ //dont skip callbacks. need to lookup each row and delete each row directly. slower than the above
+			$deletedCount = 0;
+			while($Row = $this->GetAllRows( array('return-next-row'=>&$curCount)) ){
+				//delete row and increase count if successful
+				if( $Row->Delete() ) $deletedCount++;
+			}
+			return $deletedCount;
+		}
 	}
 
 	/**
-	 * Looks up an array of all Row instances that belong to this table, or an empty array if there are no matches. The returned array's keys=$primaryKeyValue, value=$Row. If the option 'return-count-only'=true, returns an integer of number of rows selected. To execute this function, this table must have a primary key, but this could probably be changed.
+	 * Looks up an array of all Row instances that belong to this table, or an empty array if there are no matches. The returned array's keys=0-indexed iterator (or if the 'return-assoc' option is true, keys are the row's primary key value), value=$Row. If the option 'return-count-only'=true, returns an integer of number of rows selected. To execute this function, this table must have a primary key, but this could probably be changed.
 	 * Options are as follows:
-	 * <code>
+	 * ``` php
 	 * $options = array(
 	 * 	'sort-by'=>null, //Either a string of the column to sort ASC by, or an assoc array of "ColumnName"=>"ASC"|"DESC" to sort by. An exception will be thrown if a column does not exist.
-	 * 	'return-assoc'=>false, //if true, the returned assoc-array will have the row's primary key column value as its key and the row as its value. ie array("2"=>$row,...) instead of just array($row,...);
-	 *  'return-next-row'=>null, //OUT variable. integer. if you set this parameter in the $options array, then this function will return only 1 row of the result set at a time. If there are no rows selected or left to iterate over, null is returned.
+	 * 	'callback'=>null,		//function - if set, this function will be invoked for each row and the full result set will NOT be returned- only the LAST ROW in the set will be returned (if there is one). the function's signature should be function($row, $i){} where $row is the actual SmartRow, and $i is the 1-based index of the row being returned
+	 * 	'return-assoc'=>false,	//if true, the returned assoc-array will have the row's primary key column value as its key and the row as its value. ie array("2"=>$row,...) instead of just array($row,...);
+	 * 	'return-next-row'=>null, //OUT variable. integer. if you set this parameter in the $options array, then this function will return only 1 row of the result set at a time. If there are no rows selected or left to iterate over, null is returned.
 	 *  						// THIS PARAMETER MUST BE PASSED BY REFERENCE - i.e. array( "return-next-row" => &$curCount ) - the incoming value of this parameter doesn't matter and will be overwritten)
 	 *  						// After this function is executed, this OUT variable will be set with the number of rows that have been returned thus far.
 	 *  						// Each consecutive call to this function with the 'return-next-row' option set will return the next row in the result set, and also increment the 'return-next-row' variable to the number of rows that have been returned thus far
-	 *  'limit'=>null, // With one argument (ie $limit="10"), the value specifies the number of rows to return from the beginning of the result set
+	 * 	'limit'=>null, // With one argument (ie $limit="10"), the value specifies the number of rows to return from the beginning of the result set
 	 *				   // With two arguments (ie $limit="100,10"), the first argument specifies the offset of the first row to return, and the second specifies the maximum number of rows to return. The offset of the initial row is 0 (not 1):
-	 *  'return-count'=>null, //OUT variable only. integer. after this function is executed, this variable will be set with the number of rows being returned. Usage ex: array('return-count'=>&$count)
-	 *  'return-count-only'=>false, //if true, the return-count will be returned instead of the rows. A good optimization if you dont need to read any data from the rows and just need the rowcount of the search
+	 * 	'return-count'=>null, //OUT variable only. integer. after this function is executed, this variable will be set with the number of rows being returned. Usage ex: array('return-count'=>&$count)
+	 * 	'return-count-only'=>false, //if true, the return-count will be returned instead of the rows. A good optimization if you dont need to read any data from the rows and just need the rowcount of the search
 	 *  }
-	 * </code>
+	 * ```
 	 * @param array $options [optional] See description
 	 * @return mixed An array of Row instances that belong to this table, or an empty array if there are no matches. The returned array's keys=$primaryKeyValue, value=$Row. If the option 'return-count-only'=true, returns an integer of number of rows selected. To execute this function, this table must have a primary key, but this could probably be changed.
-	 * @see SmartColumn::LookupRows()
-	 * @see SmartTable::LookupRows()
+	 * @see SmartColumn::LookupRows() SmartColumn::LookupRows()
+	 * @see SmartTable::LookupRows() SmartTable::LookupRows()
 	 * @todo Make all tables work with this function
 	 */
 	public function GetAllRows(array $options=null){
@@ -965,7 +1097,7 @@ class SmartTable implements ArrayAccess, Countable{
 	 * Returns a new row from this table that can be added to the table by ->Commit(). Equivalent to creating a new instance of $this->ExtendedByClassName (if defined) or "new SmartRow($this->TableName, $this->Database);"
 	 * As a shortcut, invoking the SmartTable directly with no parameters will call GetNewRow, i.e., $smartdb['tablename']() instead of $smartdb['tablename']->GetNewRow()
 	 * @return SmartRow A new row from this table
-	 * @see SmartRow::__construct()
+	 * @see SmartRow::__construct() SmartRow::__construct()
 	 */
 	public function GetNewRow(){
 		if($this->ExtendedByClassName && class_exists($this->ExtendedByClassName,true)){
@@ -1003,6 +1135,11 @@ class SmartTable implements ArrayAccess, Countable{
 				}
 
 				if($this->ColumnExists($sortBy)) { //column exists
+					//column may be an alias. get the actual column name
+					$Column = $this->GetColumn($sortBy);
+					$sortBy = $Column->ColumnName; //override $sortBy name with actual name
+					
+					//set final sort val
 					$sortByFinal[$sortBy] = $sortOrder;
 				}
 				else{
@@ -1014,6 +1151,11 @@ class SmartTable implements ArrayAccess, Countable{
 			$sortBy = $sortBy;
 			$sortOrder = "asc"; //default for a single string column
 			if($this->ColumnExists($sortBy)) { //column exists. default to ASC
+				//column may be an alias. get the actual column name
+				$Column = $this->GetColumn($sortBy);
+				$sortBy = $Column->ColumnName; //override $sortBy name with actual name
+				
+				//set final sort val
 				$sortByFinal[$sortBy] = $sortOrder;
 			}
 			else{

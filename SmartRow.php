@@ -8,7 +8,7 @@
  * http://www.phpsmartdb.com/license
  */
 /**
- * @package SmartDatabase
+ * Manages a single row within a table of the database.
  */
 /**
  */
@@ -17,12 +17,12 @@ require_once(dirname(__FILE__).'/SmartCell.php');
  * Manages a single row within a table of the database.
  * <p>It is recommended that you use SmartTable::GetNewRow() and SmartTable::LookupRow() instead of calling the SmartRow constructor explicitly. SmartTable::GetNewRow() provides a bottom-up method for creating new rows (which matches the rest of the SmartDb). SmartTable::LookupRow() provides a method for returning a single row based on the primary key (or, optionally, other columns). Calling this constructor explicitly will work all the same though (ex: "$newrow = new Product($db);" to get a new row, or "$row = new Product($db, 4);" to get the row with id 4)</p>
  * <p>To invoke this constructor, you can either do:</p>
- * <code>
+ * ``` php
  * $row = new SmartRow("YOUR_TABLE_NAME", $Database, [$keyColumnValues=null], [$options=null]);
- * </code>
+ * ```
  * <br>
  * <p>Or extend your own class from the SmartRow. For example:</p>
- * <code>
+ * ``` php
  * <?
  * class YOUR_CLASS_NAME extends SmartRow{
  * 	public function __construct($Database, $keyColumnValues=null, $options=null){
@@ -50,9 +50,9 @@ require_once(dirname(__FILE__).'/SmartCell.php');
  * 	//---------- END EXAMPLE CUSTOM FUNCTIONALITY ------------//
  * }
  * ?>
- * </code>
+ * ```
  * <p>Or make your own class available to be extended upon further:</p>
- * <code>
+ * ``` php
  * <?
  * class YOUR_CLASS_NAME extends SmartRow{
  * 	// There are 2 signatures for this (which allows for extending on this class, but using a different table)
@@ -65,15 +65,15 @@ require_once(dirname(__FILE__).'/SmartCell.php');
  *  //implement custom functionality using $this
  * }
  * ?>
- * </code>
+ * ```
  * <p>Note: if creating your own class that extends SmartRow, YOUR_CLASS_NAME should be the same on that is set for SmartTable::$ExtendedByClassName</p>
- * @see SmartRow::__construct()
- * @see SmartTable::GetNewRow()
- * @see SmartTable::LookupRow()
- * @see SmartTable::$ExtendedByClassName
+ * @see SmartRow::__construct() SmartRow::__construct()
+ * @see SmartTable::GetNewRow() SmartTable::GetNewRow()
+ * @see SmartTable::LookupRow() SmartTable::LookupRow()
+ * @see SmartTable::$ExtendedByClassName SmartTable::$ExtendedByClassName
  * @package SmartDatabase
  */
-class SmartRow implements ArrayAccess{
+class SmartRow implements ArrayAccess, JsonSerializable{
 	
 
 	/////////////////////////////// SERIALIZATION - At top so we don't forget to update these when we add new vars //////////////////////////
@@ -131,16 +131,21 @@ class SmartRow implements ArrayAccess{
 
 	/**
 	 * Manages a single row within the table specified in $tableName
-	 * <p>If $dbManager is null, exceptions will be thrown anytime this class attempts to access the database. This should almost never be null except under special circumstances when you will not use the database at all, but need an 'in-memory' instance only</p>
-	 * <p>If the key column values are not passed to the constructor, the default will be null and this is assumed to be a new row to be inserted into the database.</p>
-	 * <p>If the key column values are passed, the row in the database with that key value will be looked up and used.</p>
-	 * <p>However, if the table's key is auto-increment and the passed key value does not exist in the database, an exception will be thrown whenever data is read or modified.</p>
-	 * <p><b>$options is an assoc-array, as follows:</b></p>
-	 * <code>
+	 * 
+	 * If $dbManager is null, exceptions will be thrown anytime this class attempts to access the database. This should almost never be null except under special circumstances when you will not use the database at all, but need an 'in-memory' instance only
+	 * 
+	 * If the key column values are not passed to the constructor, the default will be null and this is assumed to be a new row to be inserted into the database.
+	 * 
+	 * If the key column values are passed, the row in the database with that key value will be looked up and used.
+	 * 
+	 * However, if the table's key is auto-increment and the passed key value does not exist in the database, an exception will be thrown whenever data is read or modified.
+	 * 
+	 * $options is an assoc-array, as follows:
+	 * ``` php
 	 * $options = array(
 	 * 	'use-default-values'=true, //if set to false, the default values will not be set on any Cell of the new row
 	 * );
-	 * </code>
+	 * ```
 	 * @param string $tableName
 	 * @param SmartDatabase $Database
 	 * @param mixed $keyColumnValues [optional] If null, this row is assumed to be a new row. If not null: (1) For tables with multiple key columns, must be an assoc-array of columnName=>value of each key column. (2) For tables with 1 key column, this can be a single value of the key column to lookup (though the array will still work)
@@ -208,10 +213,12 @@ class SmartRow implements ArrayAccess{
 	}
 	/**
 	 * DEPRECATED - Used SmartRow::Refresh(). Forces re-initialization of this Row (pulling values from the database).
-	 * <p>Good to use if you are storing a serialized version of this row and need to make sure all DB values are set.</p>
-	 * <p>You shouldn't need to use this much; it is mostly for internal use. Initialization is made to be completely automatic.</p>
+	 * 
+	 * Good to use if you are storing a serialized version of this row and need to make sure all DB values are set.
+	 * 
+	 * You shouldn't need to use this much; it is mostly for internal use. Initialization is made to be completely automatic.
 	 * @return bool	<b>true</b> if successfully retreived all columns from database, if this row has no key columns, or if this is a new row to insert later.<br><b>false</b> if this is not a new row and values were not retreived because the key column(s) was/were not found in database table
-	 * @see SmartRow::Refresh()
+	 * @see SmartRow::Refresh() SmartRow::Refresh()
 	 * @deprecated
 	 * @ignore;
 	 */
@@ -220,8 +227,10 @@ class SmartRow implements ArrayAccess{
 	}
 	/**
 	 * Forces re-initialization of this Row (pulling all values from the database for this id).
-	 * <p>Good to use if you are storing a serialized version of this row and need to make sure all DB values are set.</p>
-	 * <p>You shouldn't need to use this much; it is mostly for internal use. Initialization is made to be completely automatic.</p>
+	 * 
+	 * Good to use if you are storing a serialized version of this row and need to make sure all DB values are set.
+	 * 
+	 * You shouldn't need to use this much; it is mostly for internal use. Initialization is made to be completely automatic.
 	 * @return bool	<b>true</b> if successfully retreived all columns from database, if this row has no key columns, or if this is a new row to insert later.<br><b>false</b> if this is not a new row and values were not retreived because the key column(s) was/were not found in database table
 	 */
 	public function Refresh(){
@@ -243,13 +252,14 @@ class SmartRow implements ArrayAccess{
 	/**
 	 * Returns a string of all current errors that exist within this row, or FALSE if no errors were found.
 	 * Row should not be committed to the database until this function returns false.
-	 * <code>
+	 * ``` php
 	 * $options = array(
-	 *  'ignore-key-errors'=>false //If true: does not validate the key columns. If false: validates all columns
-	 *  'only-verify-set-cells'=>false //If true: only cells that have been set (i.e. isset()==true) will be verified (not recommended if this info will be committed to db). If false: all cells will be verified (should be used if this info will be committed to db).
+	 *  'ignore-key-errors'=>false, //If true: does not validate the key columns. If false: validates all columns
+	 *  'only-verify-set-cells'=>false, //If true: only cells that have been set (i.e. isset()==true) will be verified (not recommended if this info will be committed to db). If false: all cells will be verified (should be used if this info will be committed to db).
 	 *  'error-message-suffix'=>"<br>\n" //appended to each error message
-	 * </code>
-	 * @see SmartRow::GetColumnsInError()
+	 * )
+	 * ```
+	 * @see SmartRow::GetColumnsInError() SmartRow::GetColumnsInError()
 	 * @param array $options [optional] See description.
 	 * @return mixed A string of current errors that exist within this cell, or FALSE if no errors were found
 	 */
@@ -272,13 +282,14 @@ class SmartRow implements ArrayAccess{
 	/**
 	 * Returns an array of all cells that are currently have an erroneous value or an empty array if no errors exist in any cells. The returned array's Key=$columnName, Value=$Cell.
 	 * Row should not be committed to the database until this function returns an empty array.
-	 * <code>
+	 * ``` php
 	 * $options = array(
-	 *  'ignore-key-errors'=>false //If true: does not validate the key columns. If false: validates all columns
+	 *  'ignore-key-errors'=>false, //If true: does not validate the key columns. If false: validates all columns
 	 *  'only-verify-set-cells'=>false //If true: only cells that have been set (i.e. isset()==true) will be verified (not recommended if this info will be committed to db). If false: all cells will be verified (should be used if this info will be committed to db).
-	 * </code>
+	 * )
+	 * ```
 	 * @param array $options [optional] See description
-	 * @see SmartRow::HasErrors()
+	 * @see SmartRow::HasErrors() SmartRow::HasErrors()
 	 * @return array an array of all cells that are currently have an erroneous value or an empty array if no errors exist in any cells. The returned array's Key=$columnName, Value=$Cell.
 	 */
 	public function GetColumnsInError(array $options=null){
@@ -300,7 +311,7 @@ class SmartRow implements ArrayAccess{
 	}
 	/**
 	 * Returns the Cell instance of this row from the specified $columnName. Can also use Column($columnName). Shortcut: use array notation- $row['YOUR_COLUMN_NAME']
-	 * @see SmartRow::Column()
+	 * @see SmartRow::Column() SmartRow::Column()
 	 * @param string $columnName
 	 * @return SmartCell The Cell of this row with the given $columnName
 	 * @ignore
@@ -319,7 +330,7 @@ class SmartRow implements ArrayAccess{
 	}
 	/**
 	 * Alias for GetAllCells()
-	 * @see SmartRow::GetAllCells()
+	 * @see SmartRow::GetAllCells() SmartRow::GetAllCells()
 	 * @return array An array of all cell instances contained in this row. The array's key=$columnName, value=$Cell
 	 */
 	public function GetAllColumns(){
@@ -327,7 +338,7 @@ class SmartRow implements ArrayAccess{
 	}
 	/**
 	 * Returns an array of all cell instances of this row. The array's key=$columnName, value=$Cell
-	 * @see SmartRow::GetAllColumns()
+	 * @see SmartRow::GetAllColumns() SmartRow::GetAllColumns()
 	 * @return array An array of all cell instances contained in this row. The array's key=$columnName, value=$Cell
 	 * @ignore
 	 */
@@ -339,7 +350,7 @@ class SmartRow implements ArrayAccess{
 	/**
 	 * Unsets all values in all cells of this row (doens't touch the keys columns though).
 	 * This is good to use before using LookupKeys() to search for values because this will clear default value that any Column may have.
-	 * @see SmartRow::LookupKeys()
+	 * @see SmartRow::LookupKeys() SmartRow::LookupKeys()
 	 */
 	public function UnsetNonKeyColumnValues(){
 		foreach($this->Table->GetNonKeyColumns() as $Column){
@@ -349,14 +360,31 @@ class SmartRow implements ArrayAccess{
 		$this->_isDirty = true;
 		$this->_initialized = true;
 	}
+	
+	/**
+	 * Force unsets all key-column values of this row (doesn't touch the non-key columns)
+	 * This is not a common procedure. It's good if you want to use a single PHP row object, but keep unsetting the key columns to commit new rows to the database. Otherwise, you'll want to use SetKeyColumnValues() to handle special cases
+	 * @see SmartRow::SetKeyColumnValues() SmartRow::SetKeyColumnValues()
+	 * @ignore
+	 */
+	public function UnsetKeyColumnValues(){
+		foreach($this->Table->GetKeyColumns() as $Column){
+			$this->_cells[$Column->ColumnName]->ForceUnset();
+		}
+
+		$this->_isDirty = true;
+		$this->_initialized = false;
+	}
 
 	/**
 	 * Attempts to get all key columns from the assoc-array (including POST, GET, SESSION, etc.) that belong to this Row/Table and sets them as values in this Row (for columns in which setting is allowed)
-	 * <p>NOTE- Any key column that is not set in the array will be set to NULL as part of the key!!!!! So be careful about leaving out key columns.</p>
-	 * <p>$keyColumnValuesAssoc structure:</p>
-	 * <code>
+	 * 
+	 * NOTE- Any key column that is not set in the array will be set to NULL as part of the key!!!!! So be careful about leaving out key columns.
+	 * 
+	 * $keyColumnValuesAssoc structure:
+	 * ``` php
 	 * $keyColumnValuesAssoc = array('TableName'=>array('KeyColumn1'=>value, ...))
-	 * </code>
+	 * ```
 	 * @param array $keyColumnValuesAssoc The array("TableName"=>array("KeyColumn1"=>"value", "keyColumn2"=>"value",...)) that will be the new key values for this instance.
 	 * @param bool $updateNewKeyRowIfAlreadyExists <b>If true</b>: if the newly defined key exists in the database, the row will be updated with the current values of this instance upon calling Commit()... but if the newly defined key does not exist, this row will be inserted as a new row.<br><b>If false</b>: if the newly defined key exists in the database, an exception is thrown and should be handled by the application... but if the newly defined key does not exist, the row will be inserted as a new row.
 	 * @param bool $deleteOldKeyRowIfExists <b>If true</b>: if a row with the old key exists in the database (the one used in this Row prior to calling this method), it will be deleted (NOTE: old key row is deleted immediately if this is true, new row is not created in database until call to Commit()) .<br><b>If false</b>: if a row with the old key exists in the database (the one used in this Row prior to calling this method), it will not be deleted
@@ -456,15 +484,21 @@ class SmartRow implements ArrayAccess{
 
 	/**
 	 * Attempts to get all NON KEY columns from the assoc-array (including POST, GET, SESSION, etc.) that belong to this Row and sets them as values in this Row (for columns in which setting is allowed)
-	 * <p>Any column that is not set in array will not be modified</p>
-	 * <p>$assocArray structure:</p>
-	 * <code>
+	 * 
+	 * Any column that is not set in array will not be modified
+	 * 
+	 * $assocArray structure:
+	 * ``` php
 	 * $assocArray = array('TableName'=>array('ColumnName1'=>value, ...))
-	 * </code>
+	 * ```
 	 * @param array $assocArray see function description
 	 */
 	public function SetNonKeyColumnValues(array $assocArray){
-		if(!$assocArray) return;
+		if(!$assocArray) return false;
+
+		//info must be setup as $assocArray = array('TableName'=>array('ColumnName1'=>value, ...))
+		$rowInfoArr = $assocArray[$this->Table->TableName];
+		if(!$rowInfoArr || !is_array($rowInfoArr)) return false;
 
 		//check real columns
 		foreach($this->Table->GetNonKeyColumns() as $Column){
@@ -472,20 +506,20 @@ class SmartRow implements ArrayAccess{
 			$columnName = $Column->ColumnName;
 			$Cell = $this->_cells[$columnName];
 
-			if(isset($assocArray[$this->Table->TableName][$columnName])){ //real columns
-				$Cell->SetValue($assocArray[$this->Table->TableName][$columnName]);
+			if(array_key_exists($columnName, $rowInfoArr)){ //real columns
+				$Cell->SetValue($rowInfoArr[$columnName]);
 			}
-			else if(isset($assocArray[$this->Table->TableName][$columnName.'_Notifier'])){ //real column notifier
-				$Cell->SetValue($assocArray[$this->Table->TableName][$columnName.'_Notifier']); //notifier let us know this column was in use on the page, but as a checkbox, its POST does not get sent if the checkbox is not checked. so set the 'not checked' value
+			else if(array_key_exists($columnName.'_Notifier', $rowInfoArr)){ //real column notifier
+				$Cell->SetValue($rowInfoArr[$columnName.'_Notifier']); //notifier let us know this column was in use on the page, but as a checkbox, its POST does not get sent if the checkbox is not checked. so set the 'not checked' value
 			}
 			else{ //check column alias only as a last resort if the real column name was not found
 				$aliases = $Column->GetAliases();
 				foreach($aliases as $alias=>$nothing){
-					if(isset($assocArray[$this->Table->TableName][$alias])){ //aliased column
-						$Cell->SetValue($assocArray[$this->Table->TableName][$alias]);
+					if(array_key_exists($alias, $rowInfoArr)){ //aliased column
+						$Cell->SetValue($rowInfoArr[$alias]);
 					}
-					else if(isset($assocArray[$this->Table->TableName][$alias.'_Notifier'])){ //aliased column notifier
-						$Cell->SetValue($assocArray[$this->Table->TableName][$alias.'_Notifier']); //notifier let us know this column was in use on the page, but as a checkbox, its POST does not get sent if the checkbox is not checked. so set the 'not checked' value
+					else if(array_key_exists($alias.'_Notifier', $rowInfoArr)){ //aliased column notifier
+						$Cell->SetValue($rowInfoArr[$alias.'_Notifier']); //notifier let us know this column was in use on the page, but as a checkbox, its POST does not get sent if the checkbox is not checked. so set the 'not checked' value
 					}
 				}
 			}
@@ -494,11 +528,13 @@ class SmartRow implements ArrayAccess{
 
 	/**
 	 * Attempts to get all key and non-key columns from the assoc-array (including POST, GET, SESSION, etc.) that belong to this Row and sets them as values in this Row (for columns in which setting is allowed)
-	 * <p>NOTE- Any non-key column that is not set in the array will not have its value changed, but any key column that is not set in the array will be set to NULL as part of the key!!!!! So be careful about leaving out key columns.</p>
-	 * <p>$assocArray structure:</p>
-	 * <code>
+	 * 
+	 * NOTE- Any non-key column that is not set in the array will not have its value changed, but any key column that is not set in the array will be set to NULL as part of the key!!!!! So be careful about leaving out key columns.
+	 * 
+	 * $assocArray structure:
+	 * ``` php
 	 * $assocArray = array('TableName'=>array('ColumnName1'=>value, 'ColumnName2'=>value, ...))
-	 * </code>
+	 * ```
 	 * @param bool $updateNewKeyRowIfAlreadyExists <b>If true</b>: if the newly defined key exists in the database, the row will be updated with the current values of this instance upon calling Commit()... but if the newly defined key does not exist, this row will be inserted as a new row.<br><b>If false</b>: if the newly defined key exists in the database, an exception is thrown and should be handled by the application... but if the newly defined key does not exist, the row will be inserted as a new row.
 	 * @param bool $deleteOldKeyRowIfExists <b>If true</b>: if a row with the old key exists in the database (the one used in this Row prior to calling this method), it will be deleted (NOTE: old key row is deleted immediately if this is true, new row is not created in database until call to Commit()) .<br><b>If false</b>: if a row with the old key exists in the database (the one used in this Row prior to calling this method), it will not be deleted
 	 * @param array $assocArray see function description
@@ -510,7 +546,7 @@ class SmartRow implements ArrayAccess{
 
 	/**
 	 * Returns an array of all KEY columns and thier current values: array("TableName"=>array("ColumnName"=>currentValue,...))
-	 * @param array &$assocArray [optional] If provided, the column values will be added to this array and returned. Will be populated as such: array("TableName"=>array("ColumnName"=>currentValue,...))
+	 * @param array $assocArray [optional] If provided, the column values will be added to this array and returned. Will be populated as such: array("TableName"=>array("ColumnName"=>currentValue,...))
 	 * @param bool $onlyAddSetColumns [optional] <b>If false</b>, populates the provided assoc-array with ALL get-able key columns.<br><b>If true</b>, populates the provided assoc-array with only the get-able columns that have been set (i.e. isset()==true)
 	 * @return array columns and values from this Row as an assoc array
 	 */
@@ -528,8 +564,9 @@ class SmartRow implements ArrayAccess{
 
 	/**
 	 * Returns an array of all NON-KEY columns and thier current values: array("TableName"=>array("ColumnName"=>currentValue,...))
-	 * <p>Internally: forces initialization</p>
-	 * @param array &$assocArray [optional] If provided, the column values will be added to this array and returned. Will be populated as such: array("TableName"=>array("ColumnName"=>currentValue,...))
+	 * 
+	 * Internally: forces initialization
+	 * @param array $assocArray [optional] If provided, the column values will be added to this array and returned. Will be populated as such: array("TableName"=>array("ColumnName"=>currentValue,...))
 	 * @param bool $onlyAddSetColumns [optional] <b>If false</b>, populates the provided assoc-array with ALL get-able columns.<br><b>If true</b>, populates the provided assoc-array with only the get-able key columns that have been set (i.e. isset()==true)
 	 * @return array columns and values from this Row as an assoc array
 	 */
@@ -548,16 +585,18 @@ class SmartRow implements ArrayAccess{
 
 	/**
 	 * Returns an array of columns and their current values: array("TableName"=>array("ColumnName"=>currentValue,...))
-	 * <p>ALL columns are returned by default (keys and non-key columns). Can filter these... see $options below</p>
+	 * 
+	 * ALL columns are returned by default (keys and non-key columns). Can filter these... see $options below
+	 * 
 	 * Options are as follows:
-	 * <code>
+	 * ``` php
 	 * $options = array(
 	 * 	'only-add-set-columns'=>false, //If false, populates the provided assoc-array with ALL get-able key columns. If true, populates the provided assoc-array with only the get-able columns that have been set (i.e. isset()==true)
-	 *  'get-key-columns'=>true, //if true, key columns are returned in the array. if false, key columns are not returned in the array
-	 *  'get-non-key-columns'=>true, //if true, non-key columns are returned in the array. if false, non-key columns are not returned in the array
-	 *  }
-	 * </code>
-	 * @param array &$assocArray [optional] If provided, the column values will be added to this array and returned. Will be populated as such: array("TableName"=>array("ColumnName"=>currentValue,...))
+	 * 	'get-key-columns'=>true, //if true, key columns are returned in the array. if false, key columns are not returned in the array
+	 * 	'get-non-key-columns'=>true, //if true, non-key columns are returned in the array. if false, non-key columns are not returned in the array
+	 * )
+	 * ```
+	 * @param array $assocArray [optional] If provided, the column values will be added to this array and returned. Will be populated as such: array("TableName"=>array("ColumnName"=>currentValue,...))
 	 * @param array $options [optional] See description
 	 * @return array columns and values from this Row as an assoc array
 	 */
@@ -590,16 +629,17 @@ class SmartRow implements ArrayAccess{
 
 	/**
 	 * Looks up any column values that has been set on this row and returns an array of the key values that matched, or if the option 'return-count-only'=true, returns an integer of number of rows selected
-	 * Options are as follows:
-	 * <code>
+	 * 
+	 * $options are as follows:
+	 * ``` php
 	 * $options = array(
 	 * 	'sort-by'=>null, //Either a string of the column to sort ASC by, or an assoc array of "ColumnName"=>"ASC"|"DESC" to sort by. An exception will be thrown if a column does not exist.
-	 *  'limit'=>null, // With one argument (ie $limit="10"), the value specifies the number of rows to return from the beginning of the result set
+	 * 	'limit'=>null, // With one argument (ie $limit="10"), the value specifies the number of rows to return from the beginning of the result set
 	 *				   // With two arguments (ie $limit="100,10"), the first argument specifies the offset of the first row to return, and the second specifies the maximum number of rows to return. The offset of the initial row is 0 (not 1):
-	 *  'return-count'=>null, //OUT variable only. integer. after this function is executed, this variable will be set with the number of values being returned. Usage ex: array('return-count'=>&$count)
-	 *  'return-count-only'=>false, //if true, the return-count will be returned instead of the rows. A good optimization if you dont need to read any data from the rows and just need the rowcount of the search
-	 *  }
-	 * </code>
+	 * 	'return-count'=>null, //OUT variable only. integer. after this function is executed, this variable will be set with the number of values being returned. Usage ex: array('return-count'=>&$count)
+	 * 	'return-count-only'=>false, //if true, the return-count will be returned instead of the rows. A good optimization if you dont need to read any data from the rows and just need the rowcount of the search
+	 * )
+	 * ```
 	 * @param bool $updateRowIfOneRowFound [optional] If true and only 1 row is found when looking for rows with matching column values, this row instance will be updated to manage the matching row. (if true, take precedence over the 'return-count-only' option)
 	 * @param array $options [optional] See description
 	 * @return mixed An array of key values that match the columns that have been set in this Row or if the option 'return-count-only'=true, returns an integer of number of rows selected
@@ -694,6 +734,7 @@ class SmartRow implements ArrayAccess{
 
 	/**
 	 * Gets all column values from the database and sets each as a local variable
+	 * @param bool $exceptionOnError internal - true to throw exception on error, otherwise fails silently
 	 * @todo add comments that explain what happens if no primary key exists
 	 * @return bool	<b>true</b> if successfully retrieved all columns from database, if this Row/Table has no key columns, or if this is a new row to insert later.<br><b>false</b> if this is not a new row and values were not retreived because the key column(s) was/were not found in database table
 	 */
@@ -769,6 +810,7 @@ class SmartRow implements ArrayAccess{
 		}
 
 		if($this->_existsInDb == false || !$this->Table->PrimaryKeyExists()){ //row is not in database yet. insert a new row
+			$numRowsInserted = 0; //event could be cancelled. make sure this is 0 at this point for our return value
 			if($this->_onBeforeCommit) $this->FireCallback($this->_onBeforeCommit, $e=array('cancel-event'=>&$cancelEvent));
 			if($this->_onBeforeInsert) $this->FireCallback($this->_onBeforeInsert, $e=array('cancel-event'=>&$cancelEvent));
 			if(!$cancelEvent){
@@ -781,6 +823,7 @@ class SmartRow implements ArrayAccess{
 		else{ //row exists in database. Update it
 			if(!$this->IsDirty()) return -1; //nothing to commit
 
+			$numRowsUpdated = 0; //event could be cancelled. make sure this is 0 at this point for our return value
 			if($this->_onBeforeCommit) $this->FireCallback($this->_onBeforeCommit, $e=array('cancel-event'=>&$cancelEvent));
 			if($this->_onBeforeUpdate) $this->FireCallback($this->_onBeforeUpdate, $e=array('cancel-event'=>&$cancelEvent));
 			if(!$cancelEvent){
@@ -869,7 +912,7 @@ class SmartRow implements ArrayAccess{
 	 * Deletes the row from the database with the key specified in this Row (if exists)
 	 * Table must have a key column defined to use this function. There is no way we can be certain on which row to delete if no key columns are defined. Must use functions from the Table class to delete rows from tables with no key columns defined.
 	 * @return bool true if the row was deleted, false if the row does not exist (if more than 1 row was deleted, an exception is thrown. this would indicate a severe problem with data consistency)
-	 * @see SmartTable::DeleteRows()
+	 * @see SmartTable::DeleteRows() SmartTable::DeleteRows()
 	 */
 	public function Delete(){
 		//only delete if a key column is defined
@@ -951,11 +994,22 @@ class SmartRow implements ArrayAccess{
 	    return $this->Table->ColumnExists($offset);
 	}
 
+
+/////////////////////////////// JsonSerializable ///////////////////////////////////
+	
+	/**
+	 * Implements 'JsonSerializable' interface so this object can be converted to json directly with: "json_encode($SMARTROW)"
+	 * @see JsonSerializable::jsonSerialize()
+	 */
+	public function jsonSerialize() {
+		return $this->GetColumnValues();
+	}
+	
 /////////////////////////////// TO STRING ///////////////////////////////////
 	/**
 	 * Used for debugging. Allows you to echo this instance directly to get the status. Wraps ToString().
 	 * Gets this row's status and columns with current values. Will will need to print/echo to see results.
-	 * @see SmartRow::ToString()
+	 * @see SmartRow::ToString() SmartRow::ToString()
 	 * @return string This row's status and columns with current values. Will will need to print/echo to see results.
 	 */
 	public function __toString(){
@@ -970,6 +1024,8 @@ class SmartRow implements ArrayAccess{
 	/**
 	 * Used for debugging.
 	 * Gets this row's status and columns with current values. Will will need to print/echo to see results.
+	 * @param int $emptyLinesBefore optional extra lines for debugging
+	 * @param int $emptyLinesAfter optional extra lines for debugging
 	 * @return string This row's status and columns with current values. Will will need to print/echo to see results.
 	 */
 	public function ToString($emptyLinesBefore=0, $emptyLinesAfter=0){
@@ -1068,24 +1124,29 @@ class SmartRow implements ArrayAccess{
 
 	/**
 	 * Fires all callbacks for the given callback array
+	 * @param array $callbackArr array of callbacks to invoke
+	 * @param array $eventArgs array passed by reference so callbacks can easily communicate on different levels
 	 */
 	private function FireCallback($callbackArr, &$eventArgs=null){
 		if($this->_disableCallbacks || count($callbackArr)<=0) return; //no callbacks defined or callbacks disabled
 		if($eventArgs==null) $eventArgs = array();
 		foreach($callbackArr as $callback){
-			call_user_func($callback, $this, &$eventArgs); //pass $this->Row reference back through to the callback
+			call_user_func($callback, $this, $eventArgs); //pass $this->Row reference back through to the callback
 		}
 	}
 
 
 	/**
 	 * Adds a $callbackFunction to be fired before the row has been committed to database (can be insert or update).
-	 * <p>The signature of your $callbackFunction should be as follows: yourCallbackFunctionName($eventObject, $eventArgs)</p>
-	 * <p>$eventObject in your $callbackFunction will be the Row instance that is firing the event callback</p>
-	 * <p>$eventArgs in your $callbackFunction will have the following keys:</p>
-	 * <code>
+	 * 
+	 * The signature of your $callbackFunction should be as follows: yourCallbackFunctionName($eventObject, $eventArgs)
+	 * 
+	 * $eventObject in your $callbackFunction will be the Row instance that is firing the event callback
+	 * 
+	 * $eventArgs in your $callbackFunction will have the following keys:
+	 * ``` php
 	 * array('cancel-event'=>&false); //setting 'cancel-event' to true within your $callbackFunction will prevent the event from continuing
-	 * </code>
+	 * ```
 	 * @param mixed $callbackFunction the name of the function to callback that exists within the given $functionScope
 	 * @param mixed $functionScope [optional] the scope of the $callbackFunction, this may be an instance reference (a class that the function is within), a string that specifies the name of a class (that contains the static $callbackFunction), , or NULL if the function is in global scope
 	*/
@@ -1099,12 +1160,15 @@ class SmartRow implements ArrayAccess{
 	}
 	/**
 	 * Adds a $callbackFunction to be fired after the row has been committed to database (can be insert or update).
-	 * <p>The signature of your $callbackFunction should be as follows: yourCallbackFunctionName($eventObject, $eventArgs)</p>
-	 * <p>$eventObject in your $callbackFunction will be the Row instance that is firing the event callback</p>
-	 * <p>$eventArgs in your $callbackFunction will have the following keys:</p>
-	 * <code>
+	 * 
+	 * The signature of your $callbackFunction should be as follows: yourCallbackFunctionName($eventObject, $eventArgs)
+	 * 
+	 * $eventObject in your $callbackFunction will be the Row instance that is firing the event callback
+	 * 
+	 * $eventArgs in your $callbackFunction will have the following keys:
+	 * ``` php
 	 * array();
-	 * </code>
+	 * ```
 	 * @param mixed $callbackFunction the name of the function to callback that exists within the given $functionScope
 	 * @param mixed $functionScope [optional] the scope of the $callbackFunction, this may be an instance reference (a class that the function is within), a string that specifies the name of a class (that contains the static $callbackFunction), , or NULL if the function is in global scope
 	*/
@@ -1118,12 +1182,15 @@ class SmartRow implements ArrayAccess{
 	}
 	/**
 	 * Adds a $callbackFunction to be fired before the has been insertted to database (doesnt include update).
-	 * <p>The signature of your $callbackFunction should be as follows: yourCallbackFunctionName($eventObject, $eventArgs)</p>
-	 * <p>$eventObject in your $callbackFunction will be the Row instance that is firing the event callback</p>
-	 * <p>$eventArgs in your $callbackFunction will have the following keys:</p>
-	 * <code>
+	 * 
+	 * The signature of your $callbackFunction should be as follows: yourCallbackFunctionName($eventObject, $eventArgs)
+	 * 
+	 * $eventObject in your $callbackFunction will be the Row instance that is firing the event callback
+	 * 
+	 * $eventArgs in your $callbackFunction will have the following keys:
+	 * ``` php
 	 * array('cancel-event'=>&false); //setting 'cancel-event' to true within your $callbackFunction will prevent the event from continuing
-	 * </code>
+	 * ```
 	 * @param mixed $callbackFunction the name of the function to callback that exists within the given $functionScope
 	 * @param mixed $functionScope [optional] the scope of the $callbackFunction, this may be an instance reference (a class that the function is within), a string that specifies the name of a class (that contains the static $callbackFunction), , or NULL if the function is in global scope
 	*/
@@ -1137,12 +1204,15 @@ class SmartRow implements ArrayAccess{
 	}
 	/**
 	 * Adds a $callbackFunction to be fired after the row has been insertted to database (doesnt include update).
-	 * <p>The signature of your $callbackFunction should be as follows: yourCallbackFunctionName($eventObject, $eventArgs)</p>
-	 * <p>$eventObject in your $callbackFunction will be the Row instance that is firing the event callback</p>
-	 * <p>$eventArgs in your $callbackFunction will have the following keys:</p>
-	 * <code>
+	 * 
+	 * The signature of your $callbackFunction should be as follows: yourCallbackFunctionName($eventObject, $eventArgs)
+	 * 
+	 * $eventObject in your $callbackFunction will be the Row instance that is firing the event callback
+	 * 
+	 * $eventArgs in your $callbackFunction will have the following keys:
+	 * ``` php
 	 * array();
-	 * </code>
+	 * ```
 	 * @param mixed $callbackFunction the name of the function to callback that exists within the given $functionScope
 	 * @param mixed $functionScope [optional] the scope of the $callbackFunction, this may be an instance reference (a class that the function is within), a string that specifies the name of a class (that contains the static $callbackFunction), , or NULL if the function is in global scope
 	*/
@@ -1156,12 +1226,15 @@ class SmartRow implements ArrayAccess{
 	}
 	/**
 	 * Adds a $callbackFunction to be fired before the row has been updated to database (doesnt include insert).
-	 * <p>The signature of your $callbackFunction should be as follows: yourCallbackFunctionName($eventObject, $eventArgs)</p>
-	 * <p>$eventObject in your $callbackFunction will be the Row instance that is firing the event callback</p>
-	 * <p>$eventArgs in your $callbackFunction will have the following keys:</p>
-	 * <code>
+	 * 
+	 * The signature of your $callbackFunction should be as follows: yourCallbackFunctionName($eventObject, $eventArgs)
+	 * 
+	 * $eventObject in your $callbackFunction will be the Row instance that is firing the event callback
+	 * 
+	 * $eventArgs in your $callbackFunction will have the following keys:
+	 * ``` php
 	 * array('cancel-event'=>&false); //setting 'cancel-event' to true within your $callbackFunction will prevent the event from continuing
-	 * </code>
+	 * ```
 	 * @param mixed $callbackFunction the name of the function to callback that exists within the given $functionScope
 	 * @param mixed $functionScope [optional] the scope of the $callbackFunction, this may be an instance reference (a class that the function is within), a string that specifies the name of a class (that contains the static $callbackFunction), , or NULL if the function is in global scope
 	*/
@@ -1175,12 +1248,15 @@ class SmartRow implements ArrayAccess{
 	}
 	/**
 	 * Adds a $callbackFunction to be fired after the row has been updated to database (doesnt include insert).
-	 * <p>The signature of your $callbackFunction should be as follows: yourCallbackFunctionName($eventObject, $eventArgs)</p>
-	 * <p>$eventObject in your $callbackFunction will be the Row instance that is firing the event callback</p>
-	 * <p>$eventArgs in your $callbackFunction will have the following keys:</p>
-	 * <code>
+	 * 
+	 * The signature of your $callbackFunction should be as follows: yourCallbackFunctionName($eventObject, $eventArgs)
+	 * 
+	 * $eventObject in your $callbackFunction will be the Row instance that is firing the event callback
+	 * 
+	 * $eventArgs in your $callbackFunction will have the following keys:
+	 * ``` php
 	 * array();
-	 * </code>
+	 * ```
 	 * @param mixed $callbackFunction the name of the function to callback that exists within the given $functionScope
 	 * @param mixed $functionScope [optional] the scope of the $callbackFunction, this may be an instance reference (a class that the function is within), a string that specifies the name of a class (that contains the static $callbackFunction), , or NULL if the function is in global scope
 	*/
@@ -1194,12 +1270,15 @@ class SmartRow implements ArrayAccess{
 	}
 	/**
 	 * Adds a $callbackFunction to be fired before the row has been deleted from database.
-	 * <p>The signature of your $callbackFunction should be as follows: yourCallbackFunctionName($eventObject, $eventArgs)</p>
-	 * <p>$eventObject in your $callbackFunction will be the Row instance that is firing the event callback</p>
-	 * <p>$eventArgs in your $callbackFunction will have the following keys:</p>
-	 * <code>
+	 * 
+	 * The signature of your $callbackFunction should be as follows: yourCallbackFunctionName($eventObject, $eventArgs)
+	 * 
+	 * $eventObject in your $callbackFunction will be the Row instance that is firing the event callback
+	 * 
+	 * $eventArgs in your $callbackFunction will have the following keys:
+	 * ``` php
 	 * array('cancel-event'=>&false); //setting 'cancel-event' to true within your $callbackFunction will prevent the event from continuing
-	 * </code>
+	 * ```
 	 * @param mixed $callbackFunction the name of the function to callback that exists within the given $functionScope
 	 * @param mixed $functionScope [optional] the scope of the $callbackFunction, this may be an instance reference (a class that the function is within), a string that specifies the name of a class (that contains the static $callbackFunction), , or NULL if the function is in global scope
 	 */
@@ -1213,12 +1292,15 @@ class SmartRow implements ArrayAccess{
 	}
 	/**
 	 * Adds a $callbackFunction to be fired after the row has been deleted from database.
-	 * <p>The signature of your $callbackFunction should be as follows: yourCallbackFunctionName($eventObject, $eventArgs)</p>
-	 * <p>$eventObject in your $callbackFunction will be the Row instance that is firing the event callback</p>
-	 * <p>$eventArgs in your $callbackFunction will have the following keys:</p>
-	 * <code>
+	 * 
+	 * The signature of your $callbackFunction should be as follows: yourCallbackFunctionName($eventObject, $eventArgs)
+	 * 
+	 * $eventObject in your $callbackFunction will be the Row instance that is firing the event callback
+	 * 
+	 * $eventArgs in your $callbackFunction will have the following keys:
+	 * ``` php
 	 * array();
-	 * </code>
+	 * ```
 	 * @param mixed $callbackFunction the name of the function to callback that exists within the given $functionScope
 	 * @param mixed $functionScope [optional] the scope of the $callbackFunction, this may be an instance reference (a class that the function is within), a string that specifies the name of a class (that contains the static $callbackFunction), , or NULL if the function is in global scope
 	*/
@@ -1261,17 +1343,20 @@ class SmartRow implements ArrayAccess{
 
 	/**
 	 * Adds a $callbackFunction to be fired when <b>ANY</b> column of this row has been set (though not necessarily 'changed')
-	 * <p>The signature of your $callbackFunction should be as follows: yourCallbackFunctionName($eventObject, $eventArgs)</p>
-	 * <p>$eventObject in your $callbackFunction will be the Row instance that is firing the event callback</p>
-	 * <p>$eventArgs in your $callbackFunction will have the following keys:</p>
-	 * <code>
+	 * 
+	 * The signature of your $callbackFunction should be as follows: yourCallbackFunctionName($eventObject, $eventArgs)
+	 * 
+	 * $eventObject in your $callbackFunction will be the Row instance that is firing the event callback
+	 * 
+	 * $eventArgs in your $callbackFunction will have the following keys:
+	 * ``` php
 	 * array(
 	 * 	'cancel-event'=>&false,  //setting 'cancel-event' to true within your $callbackFunction will prevent the event from continuing
 	 * 	'Cell'=>&object, //the Cell that fired the event (Cell's contain all Column functionality and properties)
 	 * 	'current-value'=>object, //the current value of this column, BEFORE it has changed to 'new-value'
 	 * 	'new-value'=>&object, //the value that this column is going to be set to, replacing the 'current-value'
 	 * );
-	 * </code>
+	 * ```
 	 * @param mixed $callbackFunction the name of the function to callback that exists within the given $functionScope
 	 * @param mixed $functionScope [optional] the scope of the $callbackFunction, this may be an instance reference (a class that the function is within), a string that specifies the name of a class (that contains the static $callbackFunction), , or NULL if the function is in global scope
 	*/
@@ -1284,7 +1369,8 @@ class SmartRow implements ArrayAccess{
 		}
 
 		if(!$functionScope){
-			if(!function_exists($callbackFunction)) throw new Exception("Callback function '$callbackFunction' does not exist.");
+			//verify we have an anonymous function or a function name in global scope
+			if( !($callbackFunction instanceof Closure) && !function_exists($callbackFunction)) throw new Exception("Callback function '$callbackFunction' does not exist.");
 			$this->_onSetAnyCellValue[] = $callbackFunction;
 		}
 		else {
@@ -1294,7 +1380,7 @@ class SmartRow implements ArrayAccess{
 	}
 	/**
 	 * Alias for SmartRow::OnSetColumnValue()
-	 * @see SmartRow::OnSetColumnValue()
+	 * @see SmartRow::OnSetColumnValue() SmartRow::OnSetColumnValue()
 	 * @ignore
 	 * @deprecated
 	 */
@@ -1303,17 +1389,20 @@ class SmartRow implements ArrayAccess{
 	}
 	/**
 	 * Adds a $callbackFunction to be fired before <b>ANY</b> column of this row has been changed
-	 * <p>The signature of your $callbackFunction should be as follows: yourCallbackFunctionName($eventObject, $eventArgs)</p>
-	 * <p>$eventObject in your $callbackFunction will be the Row instance that is firing the event callback</p>
-	 * <p>$eventArgs in your $callbackFunction will have the following keys:</p>
-	 * <code>
+	 * 
+	 * The signature of your $callbackFunction should be as follows: yourCallbackFunctionName($eventObject, $eventArgs)
+	 * 
+	 * $eventObject in your $callbackFunction will be the Row instance that is firing the event callback
+	 * 
+	 * $eventArgs in your $callbackFunction will have the following keys:
+	 * ``` php
 	 * array(
 	 * 	'cancel-event'=>&false,  //setting 'cancel-event' to true within your $callbackFunction will prevent the event from continuing
 	 * 	'Cell'=>&object, //the Cell that fired the event
 	 * 	'current-value'=>object, //the current value of this column, BEFORE it has changed to 'new-value'
 	 * 	'new-value'=>&object, //the value that this column is going to be set to, replacing the 'current-value'
 	 * );
-	 * </code>
+	 * ```
 	 * @param mixed $callbackFunction the name of the function to callback that exists within the given $functionScope
 	 * @param mixed $functionScope [optional] the scope of the $callbackFunction, this may be an instance reference (a class that the function is within), a string that specifies the name of a class (that contains the static $callbackFunction), , or NULL if the function is in global scope
 	*/
@@ -1326,7 +1415,8 @@ class SmartRow implements ArrayAccess{
 		}
 
 		if(!$functionScope){
-			if(!function_exists($callbackFunction)) throw new Exception("Callback function '$callbackFunction' does not exist.");
+			//verify we have an anonymous function or a function name in global scope
+			if( !($callbackFunction instanceof Closure) && !function_exists($callbackFunction)) throw new Exception("Callback function '$callbackFunction' does not exist.");
 			$this->_onBeforeAnyCellValueChanged[] = $callbackFunction;
 		}
 		else {
@@ -1336,7 +1426,7 @@ class SmartRow implements ArrayAccess{
 	}
 	/**
 	 * Alias for SmartRow::OnBeforeColumnValueChanged()
-	 * @see SmartRow::OnBeforeColumnValueChanged()
+	 * @see SmartRow::OnBeforeColumnValueChanged() SmartRow::OnBeforeColumnValueChanged()
 	 * @ignore
 	 * @deprecated
 	 */
@@ -1345,16 +1435,18 @@ class SmartRow implements ArrayAccess{
 	}
 	/**
 	 * Adds a $callbackFunction to be fired after <b>ANY</b> column of this row has been changed
-	 * <p>The signature of your $callbackFunction should be as follows: yourCallbackFunctionName($eventObject, $eventArgs)</p>
-	 * <p>$eventObject in your $callbackFunction will be the Row instance that is firing the event callback</p>
-	 * <p>$eventArgs in your $callbackFunction will have the following keys:</p>
-	 * <code>
+	 * The signature of your $callbackFunction should be as follows: yourCallbackFunctionName($eventObject, $eventArgs)
+	 * 
+	 * $eventObject in your $callbackFunction will be the Row instance that is firing the event callback
+	 * 
+	 * $eventArgs in your $callbackFunction will have the following keys:
+	 * ``` php
 	 * array(
 	 * 	'Cell'=>&object, //the Cell that fired the event
 	 * 	'current-value'=>object, //the current value of this column, AFTER it has been changed from 'old-value'
 	 * 	'old-value'=>&object, //the value that this column was set to before it was updated with the 'current-value'
 	 * );
-	 * </code>
+	 * ```
 	 * @param mixed $callbackFunction the name of the function to callback that exists within the given $functionScope
 	 * @param mixed $functionScope [optional] the scope of the $callbackFunction, this may be an instance reference (a class that the function is within), a string that specifies the name of a class (that contains the static $callbackFunction), , or NULL if the function is in global scope
 	*/
@@ -1367,7 +1459,8 @@ class SmartRow implements ArrayAccess{
 		}
 
 		if(!$functionScope){
-			if(!function_exists($callbackFunction)) throw new Exception("Callback function '$callbackFunction' does not exist.");
+			//verify we have an anonymous function or a function name in global scope
+			if( !($callbackFunction instanceof Closure) && !function_exists($callbackFunction)) throw new Exception("Callback function '$callbackFunction' does not exist.");
 			$this->_onAfterAnyCellValueChanged[] = $callbackFunction;
 		}
 		else {
@@ -1377,7 +1470,7 @@ class SmartRow implements ArrayAccess{
 	}
 	/**
 	 * Alias for SmartRow::OnAfterColumnValueChanged()
-	 * @see SmartRow::OnAfterColumnValueChanged()
+	 * @see SmartRow::OnAfterColumnValueChanged() SmartRow::OnAfterColumnValueChanged()
 	 * @ignore
 	 * @deprecated
 	 */

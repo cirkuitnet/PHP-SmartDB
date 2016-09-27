@@ -33,6 +33,7 @@
                               <xs:enumeration value="" />
                               <xs:enumeration value="utf8_general_ci" id="utf8_general_ci" />
                               <xs:enumeration value="latin1_swedish_ci" id="latin1_swedish_ci" />
+                              <xs:enumeration value="utf8mb4_unicode_ci" id="utf8mb4_unicode_ci" />
                             </xs:restriction>
                           </xs:simpleType>
                         </xs:attribute>
@@ -57,6 +58,7 @@
                         <xs:attribute name="AllowLookup" type="xs:boolean" default="true" />
                         <xs:attribute name="AllowGetAll" type="xs:boolean" default="true" />
                         <xs:attribute name="DefaultValue" type="xs:string" default="" use="optional" />
+                        <xs:attribute name="Example" type="xs:string" default="" use="optional" />
                         <xs:attribute name="InputRequired" type="xs:boolean" default="false" use="optional" />
                         <xs:attribute name="InputEmptyError" type="xs:string" use="optional" />
                         <xs:attribute name="InputRegexCheck" type="xs:string" use="optional" />
@@ -88,8 +90,28 @@
                     </xs:element>
                   </xs:sequence>
                   <xs:attribute name="IsAbstract" type="xs:boolean" default="false" />
-                  <xs:attribute name="TableName" type="xs:string" use="optional" />
-                  <xs:attribute name="InheritsTableName" type="xs:string" use="optional" />
+                  <xs:attribute name="TableName" use="optional">
+                    <xs:simpleType>
+                      <xs:restriction base="xs:string">
+                        <xs:pattern value="\s*[$a-zA-Z0-9_-]+\s*"/>
+                      </xs:restriction>
+                    </xs:simpleType>
+                  </xs:attribute>
+                  <xs:attribute name="InheritsTableNames" use="optional">
+                    <xs:simpleType>
+                      <xs:restriction base="xs:string">
+                        <xs:pattern value="(\s*[$a-zA-Z0-9_-]+\s*,?)+"/>
+                      </xs:restriction>
+                    </xs:simpleType>
+                  </xs:attribute>
+                  <!-- "InheritsTableName" is deprecated. Use "InheritsTableNames" since multiple inheritance is now supported -->
+                  <xs:attribute name="InheritsTableName" use="optional">
+                    <xs:simpleType>
+                      <xs:restriction base="xs:string">
+                        <xs:pattern value="(\s*[$a-zA-Z0-9_-]+\s*,?)+"/>
+                      </xs:restriction>
+                    </xs:simpleType>
+                  </xs:attribute>
                   <xs:attribute name="CommitChangesAutomatically" type="xs:boolean" default="false" />
                 </xs:complexType>
               </xs:element>

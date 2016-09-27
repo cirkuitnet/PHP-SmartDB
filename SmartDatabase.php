@@ -9,11 +9,9 @@
  */
 /**
  * Manages a connection to the database and stores information about its table structure
- * @package SmartDatabase
  */
 /**
  */
-
 //PHP 5.3.0 is required. removing this check for performance. PHP <5.3 is considered EOL now
 //if (strnatcmp( ($version=phpversion()), '5.3.0') < 0){ //check php constraints. eventually we'll get rid of this when everyone is 5.3.0+
 //	throw new Exception("This version of SmartDatabase only works with PHP versions 5.3.0 and newer. You are using PHP version $version");
@@ -21,11 +19,13 @@
 
 require_once(dirname(__FILE__).'/SmartTable.php');
 require_once(dirname(__FILE__).'/SmartRow.php');
+
 /**
+ * Manages a connection to the database and stores information about its table structure
  * @package SmartDatabase
  */
 class SmartDatabase implements ArrayAccess, Countable{
-	const Version = "1.34"; //should update this for ANY change to structure at least. used for determining if a serialized SmartDatabase object is invalid/out of date
+	const Version = "1.40"; //should update this for ANY change to structure at least. used for determining if a serialized SmartDatabase object is invalid/out of date
 	
 	/////////////////////////////// SERIALIZATION - At top so we don't forget to update these when we add new vars //////////////////////////
 		/**
@@ -50,7 +50,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 	
 	/**
 	 * @var DbManager The DbManager instance, passed in the class constructor
-	 * @see SmartDatabase::__construct()
+	 * @see SmartDatabase::__construct() SmartDatabase::__construct()
 	 */
 	public $DbManager;
 
@@ -72,15 +72,15 @@ class SmartDatabase implements ArrayAccess, Countable{
 
 	/**
 	 * Constructor for a new SmartDatabse object. Note that you can cache these objects within Memcached so we don't have to parse the XML and create the structure for every request (@see SmartDatabase::GetCached()).
-	 * <code>
-	 * 	$options = array(
-	 * 		'db-manager' => null, //DbManager - The DbManager instance that will be used to perform operations on the actual database. If null, no database operations can be performed (use for 'in-memory' instances)
-	 * 		'xml-schema-file-path' => null, //string - the database schema file to load. If left null, you will need to either build the database yourself useing ->AddTable() or load a schema from XML using ->LoadSchema()
-	 * 		'dev-mode' => true, //boolean - development mode toggle. When true, does extra verifications (ie data types, columns, etc) that are a must for development, but may slow things down a bit when running in production.
-	 * 		'dev-mode-warnings' => true, //boolean. if true and in $DEV_MODE, warnings will be shown for like missing classes and etc.
-	 * 	)
-	 * </code>
-	 * @see SmartDatabase::GetCached()
+	 * ``` php
+	 * $options = array(
+	 * 	'db-manager' => null, //DbManager - The DbManager instance that will be used to perform operations on the actual database. If null, no database operations can be performed (use for 'in-memory' instances)
+	 * 	'xml-schema-file-path' => null, //string - the database schema file to load. If left null, you will need to either build the database yourself useing ->AddTable() or load a schema from XML using ->LoadSchema()
+	 * 	'dev-mode' => true, //boolean - development mode toggle. When true, does extra verifications (ie data types, columns, etc) that are a must for development, but may slow things down a bit when running in production.
+	 * 	'dev-mode-warnings' => true, //boolean. if true and in $DEV_MODE, warnings will be shown for like missing classes and etc.
+	 * )
+	 * ```
+	 * @see SmartDatabase::GetCached() SmartDatabase::GetCached()
 	 * @param array $options [optional] see description above
 	 * @param string $deprecated [optional] [deprecated] Use $options instead. This used to be the 'xml-schema-file-path' option
 	 * @return SmartDatabase
@@ -115,7 +115,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 /////////////////////////////// Table Management ///////////////////////////////////
 	/**
 	 * @var array Key is the table name. Value is the Table instance
-	 * @see SmartDatabase::__construct()
+	 * @see SmartDatabase::__construct() SmartDatabase::__construct()
 	 * @ignore
 	 */
 	protected $_tables = array();
@@ -123,7 +123,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 	/**
 	 * Returns an assoc of all tables. The returned array's key=$tableName, value=$Table
 	 * @return array an assoc of all tables. The returned array's key=$tableName, value=$Table
-	 * @see SmartTable
+	 * @see SmartTable SmartTable
 	 */
 	public function GetAllTables(){
 		return $this->_tables;
@@ -189,11 +189,11 @@ class SmartDatabase implements ArrayAccess, Countable{
 	/**
 	 * Loads a database schema from an XML file. This schema will replace any tables that are currently being managed by the Database instance.
 	 * <p><b>$options is an assoc-array, as follows:</b></p>
-	 * <code>
+	 * ``` php
 	 * $options = array(
 	 * 	'clear-current-schema'=false, //if set to true, all tables currently loaded within this instance will be removed (unmanaged. the actual table still exists in the real db). if false, the given $xmlSchemaFilePath is simply added to whatever is currently in this database instance (tables/properties with the same name are overwritten with the new schema)
 	 * );
-	 * </code>
+	 * ```
 	 * @param string $xmlSchemaFilePath The path of the XML database schema file to load.
 	 * @param array $options [optional] See description
 	 */
@@ -224,7 +224,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 	 * Gets the current database schema in XML format and optionally writes the XML to a file (specified in $xmlSchemaFilePath). The XML string is returned regardless.
 	 * @param string $xmlSchemaFilePath [optional] If provided, the new XML will overwrite the file at the specified path
 	 * @return string The current database schema in XML format
-	 * @see ReadDb_MySQL::GetArray()
+	 * @see ReadDb_MySQL::GetArray() ReadDb_MySQL::GetArray()
 	 */
 	public function WriteXmlSchema($xmlSchemaFilePath=null){
 		/**
@@ -249,8 +249,9 @@ class SmartDatabase implements ArrayAccess, Countable{
 			$xml .= ">\n";
 			$xml .= '		<Database';
 			$xml .= ' TableName="'.$Table->TableName.'"';
-			if($Table->GetInheritedTableName()){
-				$xml .= ' InheritsTableName="'.$Table->GetInheritedTableName().'"';
+			if($Table->GetInheritedTableNames()){
+				$csvTableNames = implode($Table->GetInheritedTableNames(), ',');
+				$xml .= ' InheritsTableNames="'.$csvTableNames.'"';
 			}
 			if($Table->IsAbstract){
 				$xml .= ' IsAbstract="'.bs($Table->IsAbstract).'"';
@@ -321,6 +322,9 @@ class SmartDatabase implements ArrayAccess, Countable{
 				}
 				if($Column->DefaultValue || $Column->DefaultValue===0 || $Column->DefaultValue==="0"){
 					$xml .= ' DefaultValue="'.htmlspecialchars($Column->DefaultValue).'"';
+				}
+				if($Column->Example || $Column->Example===0 || $Column->Example==="0"){
+					$xml .= ' Example="'.htmlspecialchars($Column->Example).'"';
 				}
 				if($Column->IsRequired && !$Column->IsAutoIncrement){ //auto-increment shouldnt be required, otherwise we dont get the autoincrement value
 					$xml .= ' InputRequired="'.bs($Column->IsRequired).'"';
@@ -403,11 +407,12 @@ class SmartDatabase implements ArrayAccess, Countable{
 
 	/**
 	 * Builds the database from the given, validated, XML Assoc
+	 * @param array $xmlAssoc the xml database structure
 	 */
 	private function BuildDatabase(array $xmlAssoc){
 		//database table/column structure
 		$allXmlClasses = $xmlAssoc['CodeGenSchema'][0]['v']['Class'];
-		$allInheritedTables = array(); //key is the table name, value is the inhertied table name. (ie key table inherits value table)
+		$allInheritedTables = array(); //key is the table name, value is an array containing all inhertied table names. (ie key table inherits value tables)
 		if(is_array($allXmlClasses)){
 			foreach($allXmlClasses as $xmlClass){
 				$xmlDatabase = $xmlClass['v']['Database'][0];
@@ -420,8 +425,13 @@ class SmartDatabase implements ArrayAccess, Countable{
 				$table->IsAbstract = (strtolower($xmlDatabase['a']['IsAbstract']) === 'true' ? true : false);
 
 				//track inherited tables. will handle adding inherited columns after all regular tables/column have been added
-				if( ($inheritsTableName = $xmlDatabase['a']['InheritsTableName']) ){
-					$allInheritedTables[$tableName] = $inheritsTableName;
+				//"InheritsTableName" attribute is old and deprecated. use the plural "InheritsTableNames" since it is supported now
+				if( ($inheritsTableNames = $xmlDatabase['a']['InheritsTableNames'] ?: $xmlDatabase['a']['InheritsTableName']) ){
+					//$inheritsTableNames could be CSV of multiple table names
+					$inheritTableNamesArr = explode(',', $inheritsTableNames);
+					foreach($inheritTableNamesArr as $inheritTableName){
+						$allInheritedTables[$tableName][] = trim($inheritTableName);
+					}
 				}
 
 				$table->AutoRefresh = false; //optimization. we'll manually call $table->Refresh() after all columns have been added
@@ -468,6 +478,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 					$column->AllowLookup =(strtolower($xmlColumn['a']['AllowLookup']) === 'false' ? false : true); //default value is true
 					$column->AllowGetAll = (strtolower($xmlColumn['a']['AllowGetAll']) === 'false' ? false : true); //default value is true
 					$column->DefaultValue = $xmlColumn['a']['DefaultValue'];
+					$column->Example = $xmlColumn['a']['Example'];
 					$column->IsUnique = (strtolower($xmlColumn['a']['IsUnique']) === 'true' ? true : false);
 					$column->FulltextIndex = (strtolower($xmlColumn['a']['FulltextIndex']) === 'true' ? true : false);
 					$column->NonuniqueIndex = (strtolower($xmlColumn['a']['NonuniqueIndex']) === 'true' ? true : false);
@@ -523,7 +534,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 		//handle inherited tables
 		$queuedTables=array();
 		$completedTables=array();
-		foreach($allInheritedTables as $tableName=>$inheritTablename){
+		foreach($allInheritedTables as $tableName=>$inheritTableNamesArr){
 			$this->BuildInheritedTables($tableName, $allInheritedTables, $queuedTables, $completedTables);
 		}
 
@@ -543,20 +554,22 @@ class SmartDatabase implements ArrayAccess, Countable{
 		if($queuedTables[$tableName]) throw new Exception("Table inheritance loop: ".print_r($queuedTables,true));
 		$queuedTables[$tableName] = true;
 
-		if( ($inheritTablename = $allInheritedTables[$tableName]) ){
-			if(!$completedTables[$inheritTablename]){ //inherited table is not ready yet, build it first
-				$this->BuildInheritedTables($inheritTablename, $allInheritedTables, $queuedTables, $completedTables);
+		if( ($inheritTableNamesArr = $allInheritedTables[$tableName]) ){
+			foreach($inheritTableNamesArr as $inheritTablename){
+				if(!$completedTables[$inheritTablename]){ //inherited table is not ready yet, build it first
+					$this->BuildInheritedTables($inheritTablename, $allInheritedTables, $queuedTables, $completedTables);
+				}
+	
+				try {
+					$inheritTable = $this->GetTable($inheritTablename);
+				}
+				catch(Exception $e){
+					throw new Exception("Table '$tableName' is set to inherit from table '$inheritTablename', but '$inheritTablename' does not exist. ".$e->getMessage() );
+				}
+	
+				$table = $this->GetTable($tableName);
+				$table->InheritColumnsFromTable($inheritTable);
 			}
-
-			try {
-				$inheritTable = $this->GetTable($inheritTablename);
-			}
-			catch(Exception $e){
-				throw new Exception("Table '$tableName' is set to inherit from table '$inheritTablename', but '$inheritTablename' does not exist. ".$e->getMessage() );
-			}
-
-			$table = $this->GetTable($tableName);
-			$table->InheritColumnsFromTable($inheritTable);
 		}
 
 		$queuedTables[$tableName] = false;
@@ -564,6 +577,9 @@ class SmartDatabase implements ArrayAccess, Countable{
 	}
 
 	/**
+	 * parses the XML file into a structured assoc array
+	 * @param string $xmlPath path of the xml file to parse
+	 * @param string $xsdFilePath path of the xsd schema file for verifying the xml is valid
 	 * @return array parses the XML file into a structured assoc array
 	 */
 	private function GetAssocFromXml($xmlPath, $xsdFilePath=null) {
@@ -580,6 +596,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 	    return $this->Xml2assoc($reader);
 	}
 	/**
+	 * @param string $xml xml to parse
 	 * @return array helper, recursive function for GetAssocFromXml
 	 */
 	private function Xml2assoc($xml) {
@@ -603,6 +620,8 @@ class SmartDatabase implements ArrayAccess, Countable{
 
 	/**
 	 * Returns true if the XML file given in the constructor of this class validates with the schema, false if the XML is invalid.
+	 * @param string $xmlFilePath path of the xml file to parse
+	 * @param string $schemaFilePath path of the xsd schema file for verifying the xml is valid
 	 * @return bool true if the XML file given in the constructor of this class validates with the schema, false if the XML is invalid.
 	 */
 	private function IsXmlFileValid($xmlFilePath, $schemaFilePath){
@@ -628,7 +647,8 @@ class SmartDatabase implements ArrayAccess, Countable{
 /////////////////////////////// SyncDb ///////////////////////////////////
 	/**
 	 * Synchronizes the structure of this Database instance to the SQL database connection in the DbManager
-	 * <code>
+	 * 
+	 * ``` php
 	 * 	$options = array(
 	 * 		'debug-mode' => false, //if true, prints all Sync SQL instead of executing it
 	 * 		'backup-tables' => true, //if true, creates a backup table before altering any existing tables
@@ -636,7 +656,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 	 * 		'update' => true, //if true, existing SQL columns will be updated to match properties defined in the SmartDatabase
 	 * 		'delete' => true, //if true, columns that do not exist on a SmartDb managed table will be removed (note: unmanaged TABLES are never deleted!)
 	 * 	);
-	 * </code>
+	 * ```
 	 * @param bool $printResults [optional] If true, the results will be printed to the screen. (Results are returned regardless.)
 	 * @param array $options [optional] See description above
 	 * @return string The results of the sync
@@ -779,6 +799,9 @@ class SmartDatabase implements ArrayAccess, Countable{
 						case "utf8_general_ci":
 							$sqlCreateTable .= " CHARACTER SET utf8 COLLATE utf8_general_ci";
 							break;
+						case "utf8mb4_unicode_ci":
+							$sqlCreateTable .= " CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci";
+							break;
 						case "latin1_swedish_ci":
 							$sqlCreateTable .= " CHARACTER SET latin1 COLLATE latin1_swedish_ci";
 							break;
@@ -856,13 +879,14 @@ class SmartDatabase implements ArrayAccess, Countable{
 /////////////////////////////// ReadDatabase //////////////////////////////////
 	/**
 	 * Reads the current connected database's structure ($this->DbManager)
-	 * <code>
+	 * 
+	 * ``` php
 	 * 	$options = array(
 	 * 		'preserve-current' => false, //if true, the current smart database structure will be preserved. existing tables/column will be overwritten by the db definitions
 	 * 		'ignore-table-prefix' => 'backup_', //will not import tables that start with the given prefix
 	 * 		'table' => null, //string - if provided, will only read the structure of the given table name
 	 * 	)
-	 * </code> 
+	 * ``` 
 	 * @param array $options
 	 */
 	public function ReadDatabaseStructure($options=null){
@@ -937,7 +961,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 					//ex type: "int(1) unsigned"
 					$dataType = substr($columnProps['Type'], 0, $pos); //"int"
 					$extraInfo = substr($columnProps['Type'], $pos); //"(1) unsigned"
-					$size = str_replace(" unsigned","",$extraInfo, &$unsigned);//"(1)" - $unsigned will be 0 or 1
+					$size = str_replace(" unsigned","",$extraInfo, $unsigned);//"(1)" - $unsigned will be 0 or 1
 					$size = trim($size, "() "); //1
 					
 					if($dataType == "enum"){
@@ -1096,7 +1120,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 //////////////////////////////// STATIC - GET SmartDatabase OBJECT FROM MEMCACHED ////////////////////////////////
 	/**
 	 * An alternative to calling "new SmartDatabase($options)" - uses memcached to get/save an entire SmartDb structure within cache. You must pass in at least the 'memcached-key' and 'xml-schema-file-path' options. Also, the returned SmartDb will not have it's DbManager set unless you pass the 'db-manager' option, so you may need to set it manually.
-	 * <code>
+	 * ``` php
 	 * 	//options are same as SmartDatabase constructor, plus a few extra for memcached
 	 * 	$options = array(
 	 * 		'db-manager' => null, //DbManager - The DbManager instance that will be used to perform operations on the actual database. If null, no database operations can be performed (use for 'in-memory' instances)
@@ -1110,11 +1134,13 @@ class SmartDatabase implements ArrayAccess, Countable{
 	 * 		'memcached-serializer' => Memcached::SERIALIZER_IGBINARY, //a much better serializer than the default one in PHP
 	 * 		'memcached-compression' => true, //actually makes things faster too
 	 * 	)
-	 * </code>
+	 * ```
 	 * @param array $options [optional] see description above
 	 * @return SmartDatabase
 	 */
 	public static function GetCached(array $options = null){
+		$memcachedExists = class_exists('MemCached'); //we'll make sure memcached exists before using it
+		
 		$defaultOptions = array( //default options
 			//'db-manager' => null,
 			//'xml-schema-file-path' => null, //REQUIRED for caching to work properly!
@@ -1124,7 +1150,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 			'memcached-host' => 'localhost',
 			'memcached-port' => 11211,
 			'memcached-timeout' => 250, //override default. make failover fast-ish
-			'memcached-serializer' => Memcached::SERIALIZER_IGBINARY, //a much better serializer than the default one in PHP
+			'memcached-serializer' => ($memcachedExists ? Memcached::SERIALIZER_IGBINARY : null), //a much better serializer than the default one in PHP
 			'memcached-compression' => true //actually makes things faster too
 		);
 		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
@@ -1137,28 +1163,33 @@ class SmartDatabase implements ArrayAccess, Countable{
 			throw new \Exception("'memcached-key' and 'xml-schema-file-path' are both required options for SmartDatabase::GetCached()");
 		}
 		
-		try{
-			//check for cached smartdb
-			$mc = new MemCached();
-			$mc->addServer($options['memcached-host'], $options['memcached-port']);
-			
-			//set options
-			$mc->setOption( Memcached::OPT_SERIALIZER, $options['memcached-serializer'] );
-			$mc->setOption( Memcached::OPT_CONNECT_TIMEOUT, $options['memcached-timeout'] ); 
-			$mc->setOption( Memcached::OPT_COMPRESSION, $options['memcached-compression'] );
-			
-			//try to get the key from cache
-			$cachedDb = $mc->get( $options['memcached-key'] );
-			
-			//log an error if we didn't get a key. we'll see a lot of these if the cache server is down
-			$resultCode = $mc->getResultCode();
-			if($resultCode != Memcached::RES_SUCCESS){
-				error_log("SmartDb - MemCached Error - Could not get SmartDb object '".$options['memcached-key']."'. Error Code: ".$resultCode.", Error Msg: ".$mc->getResultMessage());
+		if( $memcachedExists ){
+			try{
+				//check for cached smartdb
+				$mc = new MemCached();
+				$mc->addServer($options['memcached-host'], $options['memcached-port']);
+				
+				//set options
+				$mc->setOption( Memcached::OPT_SERIALIZER, $options['memcached-serializer'] );
+				$mc->setOption( Memcached::OPT_CONNECT_TIMEOUT, $options['memcached-timeout'] ); 
+				$mc->setOption( Memcached::OPT_COMPRESSION, $options['memcached-compression'] );
+				
+				//try to get the key from cache
+				$cachedDb = $mc->get( $options['memcached-key'] );
+				
+				//log an error if we didn't get a key. we'll see a lot of these if the cache server is down
+				$resultCode = $mc->getResultCode();
+				if($resultCode != Memcached::RES_SUCCESS){
+					error_log("SmartDb - MemCached Error - Could not get SmartDb object '".$options['memcached-key']."'. Error Code: ".$resultCode.", Error Msg: ".$mc->getResultMessage());
+				}
+			}
+			catch(\Exception $e){
+				error_log("SmartDb - MemCached Exception - Could not get SmartDb object '".$options['memcached-key']."'. Exception Msg: ".$e->getMessage());
+				$mc = null;
 			}
 		}
-		catch(\Exception $e){
-			error_log("SmartDb - MemCached Exception - Could not get SmartDb object '".$options['memcached-key']."'. Exception Msg: ".$e->getMessage());
-			$mc = null;
+		else{
+			error_log("SmartDb - MemCached class does not exist - Could not get cached SmartDb object '".$options['memcached-key']."'");
 		}
 		
 		//check if cachedDb is found and valid

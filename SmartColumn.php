@@ -8,9 +8,10 @@
  * http://www.phpsmartdb.com/license
  */
 /**
- * @package SmartDatabase
+ * Columns contain all of the column properties and no user/db data. It's strictly structural. Data is contained in Cells
  */
 /**
+ * Columns contain all of the column properties and no user/db data. It's strictly structural. Data is contained in Cells
  * @package SmartDatabase
  */
 class SmartColumn{
@@ -39,6 +40,7 @@ class SmartColumn{
 				'AllowLookup',
 				'AllowGetAll',
 				'DefaultValue',
+				'Example',
 				'IsUnique',
 				'IsPrimaryKey',
 				'IsAutoIncrement',
@@ -74,11 +76,14 @@ class SmartColumn{
 	 */
 	public $DisplayName;
 	/**
-	 * @var string The SQL data type of this column. Check XmlSchema.xsd for all possible values of this column (last I check, it was: "char|varchar|text|mediumtext|longtext|blob|mediumblob|longblob|tinyint|smallint|mediumint|int|bigint|float|double|decimal|date|datetime|timestamp|time|binary|enum\((\s*'[ a-zA-Z0-9/_-]+'\s*,)*(\s*'[ a-zA-Z0-9/_-]+'\s*)\)")
+	 * @var string The SQL data type of this column. Check XmlSchema.xsd for all possible values of this column.
+	 * Last I checked, it was:
+	 * 
+	 * "char|varchar|text|mediumtext|longtext|blob|mediumblob|longblob|tinyint|smallint|mediumint|int|bigint|float|double|decimal|date|datetime|timestamp|time|binary|enum\((\s*'[ a-zA-Z0-9/_-]+'\s*,)*(\s*'[ a-zA-Z0-9/_-]+'\s*)\)|array|object";
 	 */
 	public $DataType;
 	/**
-	 * @var string The SQL collation for this column (ie "latin1_swedish_ci", "utf8_general_ci", etc)
+	 * @var string The SQL collation for this column (ie "latin1_swedish_ci", "utf8_general_ci", "utf8mb4_unicode_ci", etc)
 	 */
 	public $Collation;
 	/**
@@ -100,13 +105,13 @@ class SmartColumn{
 	
 	/**
 	 * @var mixed The size of the column. For DataType=="decimal" columns, this is "PRECISION,SCALE" (ie "14,4"). For other columns, this represents the maximum number of characters allowed for this column. Can be null.
-	 * @see SmartColumn::GetMaxLength()
+	 * @see SmartColumn::GetMaxLength() SmartColumn::GetMaxLength()
 	 */
 	public $MaxSize;
 	/**
 	 * Uses the column's $MaxSize property to determine what that maximum number of characters that are allowed in this column, regardless of data type (i.e. decimals are different than regular MaxSize)
 	 * @return int Returns the maximum number of characters this column can hold. If no MaxSize is set, returns null.
-	 * @see SmartColumn::$MaxSize
+	 * @see SmartColumn::$MaxSize SmartColumn::$MaxSize
 	 */
 	public function GetMaxLength(){
 		$maxSize = $this->MaxSize;
@@ -147,6 +152,10 @@ class SmartColumn{
 	 */
 	public $DefaultValue;
 	/**
+	 * @var mixed The example value for this column. Can be null. Used for form object "placeholders"
+	 */
+	public $Example;
+	/**
 	 * @var bool True if this column is specified as UNIQUE
 	 */
 	public $IsUnique;
@@ -168,29 +177,29 @@ class SmartColumn{
 	public $NonuniqueIndex;
 	/**
 	 * @var string Default it "text". See XmlSchema.xsd for possible values (Last I checked, it was: "text", "password", "checkbox", "radio", "select", "textarea", "hidden", "colorpicker", "datepicker", "slider" ... the last 3, are for use with jQuery UI)
-	 * @see SmartCell::GetFormObject()
+	 * @see SmartCell::GetFormObject() SmartCell::GetFormObject()
 	 */
 	public $DefaultFormType = "text";
 
 	/**
 	 * @var bool True if data is required for this column, false if null is an acceptable value
-	 * @see SmartColumn::$IsRequiredMessage
+	 * @see SmartColumn::$IsRequiredMessage SmartColumn::$IsRequiredMessage
 	 */
 	public $IsRequired;
 	/**
 	 * @var string The error message to show if the field is required. If null, a decent default message will be used (i.e. "Phone Number" is required.).
-	 * @see SmartColumn::$IsRequired
+	 * @see SmartColumn::$IsRequired SmartColumn::$IsRequired
 	 */
 	public $IsRequiredMessage;
 
 	/**
 	 * @var string Regex the value of this column must match against. Can be null. Uses preg_match() in PHP... automatically wraps it with slashes in PHP (i.e. preg_match('/'.$this->RegexCheck.'/i')) and javascript error checking (SmartFormValidation_jQueryValidate.php)... so don't wrap your own! Both php and javascript can only do case-insensitive matching at the moment, but both are supported with a single value here.
-	 * @see SmartColumn::$RegexFailMessage
+	 * @see SmartColumn::$RegexFailMessage SmartColumn::$RegexFailMessage
 	 */
 	public $RegexCheck;
 	/**
 	 * @var string The error message to show if the column value does not match against $RegexCheck. If null, a decent default message will be used (i.e. Invalid value for "Phone Number").
-	 * @see SmartColumn::$RegexCheck
+	 * @see SmartColumn::$RegexCheck SmartColumn::$RegexCheck
 	 */
 	public $RegexFailMessage;
 	/**
@@ -200,6 +209,7 @@ class SmartColumn{
 	public $SortOrder;
 
 	/**
+	 * Constructor
 	 * @param string $columnName The name of the column. You should never really call this explicitly. Instead, do a $SmartDatabase['TABLE_NAME']['COLUMN_NAME'] to get the column (i.e. $db['Products']['Price']).
 	 * @return SmartColumn
 	 */
@@ -230,8 +240,8 @@ class SmartColumn{
 	 * @param string $columnName The related column's name
 	 * @param bool $addRelationOnRelatedColumn [optional] If true (default), the related column will be updated with the relation too. If false, you will need to add this relation to the related column by hand.
 	 * @return bool true if success, false if the relation already existed.
-	 * @see SmartColumn::RemoveRelation()
-	 * @see SmartColumn::HasRelation()
+	 * @see SmartColumn::RemoveRelation() SmartColumn::RemoveRelation()
+	 * @see SmartColumn::HasRelation() SmartColumn::HasRelation()
 	 */
 	public function AddRelation($tableName, $columnName, $addRelationOnRelatedColumn=true){
 		if(!$this->Table->Database->TableExists($tableName)) throw new Exception("Related table '$tableName' does not exist");
@@ -254,8 +264,8 @@ class SmartColumn{
 	 * @param string $columnName The related column's name
 	 * @param bool $removeRelationOnRelatedColumn [optional] If true (default), the related column will have this relation removed as well. If false, you will need to remove the relation on the related column by hand.
 	 * @return bool true if success, false if the column was not found as a current relation.
-	 * @see SmartColumn::AddRelation()
-	 * @see SmartColumn::HasRelation()
+	 * @see SmartColumn::AddRelation() SmartColumn::AddRelation()
+	 * @see SmartColumn::HasRelation() SmartColumn::HasRelation()
 	 */
 	public function RemoveRelation($tableName, $columnName, $removeRelationOnRelatedColumn=true){
 		if(!isset($tableName)) throw new Exception('$tableName must be set');
@@ -277,8 +287,8 @@ class SmartColumn{
 	 * @param string $tableName
 	 * @param string $columnName
 	 * @return bool true if a relation exists between this column and the passed $tableName, $columnName. false otherwise
-	 * @see SmartColumn::AddRelation()
-	 * @see SmartColumn::RemoveRelation()
+	 * @see SmartColumn::AddRelation() SmartColumn::AddRelation()
+	 * @see SmartColumn::RemoveRelation() SmartColumn::RemoveRelation()
 	 */
 	public function HasRelation($tableName, $columnName){
 		if(!$this->Table->Database->TableExists($tableName)) throw new Exception("Related table '$tableName' does not exist");
@@ -300,11 +310,13 @@ class SmartColumn{
 
 	/**
 	 * Returns an array of all aliases. array($key=alias => $val=true);
-	 * <code>
+	 * 
+	 * ``` php
 	 * 	$options = array(
 	 * 		'names-only' => false, //if true, the returned array will just be an array of alias names
 	 * 	)
-	 * </code>
+	 * ```
+	 * @param array $options [optional] See description
 	 * @return array All aliases of this Column
 	 */
 	public function GetAliases($options=null){
@@ -318,8 +330,8 @@ class SmartColumn{
 	 * Removes an alias from the column. Returns true if success, false if the column alias does not currently exist.
 	 * @param string $alias An alias for this column
 	 * @return bool true if success, false if the alias already exists
-	 * @see SmartColumn::RemoveAlias()
-	 * @see SmartColumn::HasAlias()
+	 * @see SmartColumn::RemoveAlias() SmartColumn::RemoveAlias()
+	 * @see SmartColumn::HasAlias() SmartColumn::HasAlias()
 	 */
 	public function AddAlias($alias){
 		if(!$alias) throw new Exception('$alias must be set');
@@ -335,8 +347,8 @@ class SmartColumn{
 	 * Removes an alias from the column. Returns true if success, false if the column alias does not currently exist.
 	 * @param string $alias The alias to remove from this column
 	 * @return bool true if success, false if the column alias does not exist.
-	 * @see SmartColumn::AddAlias()
-	 * @see SmartColumn::HasAlias()
+	 * @see SmartColumn::AddAlias() SmartColumn::AddAlias()
+	 * @see SmartColumn::HasAlias() SmartColumn::HasAlias()
 	 */
 	public function RemoveAlias($alias){
 		if(!$alias) throw new Exception('$alias must be set');
@@ -352,8 +364,8 @@ class SmartColumn{
 	 * Returns true if a this column is alised by the given $alias, false otherwise.
 	 * @param string $alias The alias to check
 	 * @return bool true if a this column is alised by the given $alias, false otherwise.
-	 * @see SmartColumn::AddAlias()
-	 * @see SmartColumn::RemoveAlias()
+	 * @see SmartColumn::AddAlias() SmartColumn::AddAlias()
+	 * @see SmartColumn::RemoveAlias() SmartColumn::RemoveAlias()
 	 */
 	public function HasAlias($alias){
 		return ($this->_aliases[$alias] != null);
@@ -363,22 +375,22 @@ class SmartColumn{
 	/**
 	 * Gets all values in all rows for this column, optionally unique and sorted. Optionally in an assoc with the primary key column value as the assoc's key value. Alternatively, if the option 'return-count-only'=true, returns an integer of number of rows selected.
 	 * Options are as follows:
-	 * <code>
+	 * ``` php
 	 * $options = array(
 	 * 	'sort-by'=>null, //Either a string of the column to sort ASC by, or an assoc array of "ColumnName"=>"ASC"|"DESC" to sort by. An exception will be thrown if a column does not exist.
-	 *  'get-unique'=>false, //If true, only unique values will be returned. Note: array keys in the returned array will NOT be the key column when this is true)
+	 * 	'get-unique'=>false, //If true, only unique values will be returned. Note: array keys in the returned array will NOT be the key column when this is true)
 	 * 	'return-assoc'=>false, //if true, the returned assoc-array will have the row's primary key column value as its key and the row as its value. ie array("2"=>$row,...) instead of just array($row,...);
-	 *  'limit'=>null, // With one argument (ie $limit="10"), the value specifies the number of rows to return from the beginning of the result set
-	 *				   // With two arguments (ie $limit="100,10"), the first argument specifies the offset of the first row to return, and the second specifies the maximum number of rows to return. The offset of the initial row is 0 (not 1):
-	 *  'return-count'=>null, //OUT variable only. integer. after this function is executed, this variable will be set with the number of values being returned. Usage ex: array('return-count'=>&$count)
-	 *  'return-count-only'=>false, //if true, the return-count will be returned instead of the rows. A good optimization if you dont need to read any data from the rows and just need the rowcount of the search.
+	 * 	'limit'=>null, // With one argument (ie $limit="10"), the value specifies the number of rows to return from the beginning of the result set
+	 *						// With two arguments (ie $limit="100,10"), the first argument specifies the offset of the first row to return, and the second specifies the maximum number of rows to return. The offset of the initial row is 0 (not 1):
+	 * 	'return-count'=>null, //OUT variable only. integer. after this function is executed, this variable will be set with the number of values being returned. Usage ex: array('return-count'=>&$count)
+	 * 	'return-count-only'=>false, //if true, the return-count will be returned instead of the rows. A good optimization if you dont need to read any data from the rows and just need the rowcount of the search.
 	 *  }
-	 * </code>
+	 * ```
 	 * @param array $options [optional] See description
 	 * @return mixed An array of key-value pairs. The keys are either 1: nothing, or 2: the primary key (if 'return-assoc' option is TRUE and 'get-unique' option is false and the table has a primary key), and the values are the actual column values. Alternatively, if the option 'return-count-only'=true, returns an integer of number of rows selected.
 	 */
 	public function GetAllValues(array $options=null){
-		return $this->Table->LookupColumnValues(null, $this->ColumnName, $options);
+		return $this->Table->LookupColumnValues($this->ColumnName, null, $options);
 	}
 	
 	/**
@@ -386,7 +398,7 @@ class SmartColumn{
 	 * @param array $lookupAssoc An assoc-array of column=>value to filter for max value. For example: array("column1"=>"lookupVal", "column2"=>"lookupVal", ...)
 	 * @param array $options [optional] (none yet)
 	 * @return mixed The maximum value of the column, optionally filtered by $lookupAssoc
-	 * @see SmartColumn::GetAggregateValue()
+	 * @see SmartColumn::GetAggregateValue() SmartColumn::GetAggregateValue()
 	 */
 	public function GetMaxValue(array $lookupAssoc=null, array $options=null){
 		return $this->GetAggregateValue('max', $lookupAssoc, $options);
@@ -397,7 +409,7 @@ class SmartColumn{
 	 * @param array $lookupAssoc An assoc-array of column=>value to filter for max value. For example: array("column1"=>"lookupVal", "column2"=>"lookupVal", ...)
 	 * @param array $options [optional] (none yet)
 	 * @return mixed The minimum value of the column, optionally filtered by $lookupAssoc
-	 * @see SmartColumn::GetAggregateValue()
+	 * @see SmartColumn::GetAggregateValue() SmartColumn::GetAggregateValue()
 	 */
 	public function GetMinValue(array $lookupAssoc=null, array $options=null){
 		return $this->GetAggregateValue('min', $lookupAssoc, $options);
@@ -410,8 +422,8 @@ class SmartColumn{
 	 * @param array $lookupAssoc An assoc-array of column=>value to filter for max value. For example: array("column1"=>"lookupVal", "column2"=>"lookupVal", ...)
 	 * @param array $options [optional] (none yet)
 	 * @return mixed The aggregate value of the column, optionally filtered by $lookupAssoc
-	 * @see SmartColumn::GetMaxValue()
-	 * @see SmartColumn::GetMinValue()
+	 * @see SmartColumn::GetMaxValue() SmartColumn::GetMaxValue()
+	 * @see SmartColumn::GetMinValue() SmartColumn::GetMinValue()
 	 */
 	public function GetAggregateValue($aggregateFunction, array $lookupAssoc=null, array $options=null){
 		if($this->IsSerializedColumn) throw new Exception("Function '".__FUNCTION__."' does not work with serialized column types (array or object) (table: {$this->Table->TableName}, column: {$this->ColumnName})");
@@ -450,26 +462,29 @@ class SmartColumn{
 
 	/**
 	 * Looks up an array of all Row instances that match the given column $value, or an empty array if there is no match. Alternatively, if the option 'return-count-only'=true, returns an integer of number of rows selected.
-	 * <p>To execute this function, this table must have a primary key.</p>
-	 * <p>Options are as follows:</p>
-	 * <code>
+	 * 
+	 * To execute this function, this table must have a primary key.
+	 * 
+	 * Options are as follows:
+	 * ``` php
 	 * $options = array(
 	 * 	'sort-by'=>null, //Either a string of the column to sort ASC by, or an assoc array of "ColumnName"=>"ASC"|"DESC" to sort by. An exception will be thrown if a column does not exist.
 	 * 	'return-assoc'=>false, //if true, the returned assoc-array will have the row's primary key column value as its key and the row as its value. ie array("2"=>$row,...) instead of just array($row,...);
-	 *  'return-next-row'=>null, //OUT variable. integer. if you set this parameter in the $options array, then this function will return only 1 row of the result set at a time. If there are no rows selected or left to iterate over, null is returned.
+	 * 	'callback'=>null,		//function - if set, this function will be invoked for each row and the full result set will NOT be returned- only the LAST ROW in the set will be returned (if there is one). the function's signature should be function($row, $i){} where $row is the actual SmartRow, and $i is the 1-based index of the row being returned
+	 * 	'return-next-row'=>null, //OUT variable. integer. if you set this parameter in the $options array, then this function will return only 1 row of the result set at a time. If there are no rows selected or left to iterate over, null is returned.
 	 *  						// THIS PARAMETER MUST BE PASSED BY REFERENCE - i.e. array( "return-next-row" => &$curCount ) - the incoming value of this parameter doesn't matter and will be overwritten)
 	 *  						// After this function is executed, this OUT variable will be set with the number of rows that have been returned thus far.
 	 *  						// Each consecutive call to this function with the 'return-next-row' option set will return the next row in the result set, and also increment the 'return-next-row' variable to the number of rows that have been returned thus far
-	 *  'limit'=>null, // With one argument (ie $limit="10"), the value specifies the number of rows to return from the beginning of the result set
-	 *				   // With two arguments (ie $limit="100,10"), the first argument specifies the offset of the first row to return, and the second specifies the maximum number of rows to return. The offset of the initial row is 0 (not 1):
-	 *  'return-count'=>null, //OUT variable only. integer. after this function is executed, this variable will be set with the number of rows being returned. Usage ex: array('return-count'=>&$count)
-	 *  'return-count-only'=>false, //if true, the return-count will be returned instead of the rows. A good optimization if you dont need to read any data from the rows and just need the rowcount of the search.
+	 * 	'limit'=>null,  // With one argument (ie $limit="10"), the value specifies the number of rows to return from the beginning of the result set
+	 *						// With two arguments (ie $limit="100,10"), the first argument specifies the offset of the first row to return, and the second specifies the maximum number of rows to return. The offset of the initial row is 0 (not 1):
+	 * 	'return-count'=>null, //OUT variable only. integer. after this function is executed, this variable will be set with the number of rows being returned. Usage ex: array('return-count'=>&$count)
+	 * 	'return-count-only'=>false, //if true, the return-count will be returned instead of the rows. A good optimization if you dont need to read any data from the rows and just need the rowcount of the search.
 	 *  }
-	 * </code>
+	 * ```
 	 * @param mixed $value The $value to lookup in this column
 	 * @param array $options [optional] See description
 	 * @return mixed Gets an array of all Row instances that match the given $value, or an empty array if there is no match. Alternatively, if the option 'return-count-only'=true, returns an integer of number of rows selected.
-	 * @see SmartColumn::LookupRow()
+	 * @see SmartColumn::LookupRow() SmartColumn::LookupRow()
 	 * @todo Implement table's with composite keys into this function
 	 */
 	public function LookupRows($value, array $options=null){
@@ -481,7 +496,7 @@ class SmartColumn{
 
 	/**
 	 * Alias for LookupRows. See SmartColumn::LookupRows()
-	 * @see SmartColumn::LookupRows()
+	 * @see SmartColumn::LookupRows() SmartColumn::LookupRows()
 	 * @deprecated use SmartColumn::LookupRows()
 	 * @ignore
 	 */
@@ -494,8 +509,8 @@ class SmartColumn{
 	 * To execute this function, this table must have a primary key. Throws an exception if more than 1 row is returned.
 	 * @param mixed $value The $value to lookup in this column
 	 * @return SmartRow Looks up an a row instance that matches the given column $value.  If there is no match, an instance is still returned but ->Exists() will be false. The returned row will have the searched column=>value set by default (excluding auto-increment primary key columns when the row does not exist)
-	 * @see SmartColumn::LookupRows()
-	 * @see SmartRow::Exists()
+	 * @see SmartColumn::LookupRows() SmartColumn::LookupRows()
+	 * @see SmartRow::Exists() SmartRow::Exists()
 	 * @todo Implement table's with composite keys into this function
 	 */
 	public function LookupRow($value){
@@ -506,7 +521,7 @@ class SmartColumn{
 	}
 	/**
 	 * Alias for LookupRow. See SmartColumn::LookupRow()
-	 * @see SmartColumn::LookupRow()
+	 * @see SmartColumn::LookupRow() SmartColumn::LookupRow()
 	 * @deprecated use SmartColumn::LookupRows()
 	 * @ignore
 	 */
@@ -516,47 +531,93 @@ class SmartColumn{
 	
 	/**
 	 * Deletes all rows with where the column value matches the passed $value
+	 * 
+	 * $options are as follows:
+	 * ``` php
+	 * $options = array(
+	 * 	'skip-callbacks'=>false //If true, all row-level "Delete" callbacks will be skipped. This can substantially improve the performance of very large bulk deletions.
+	 * }
+	 * ```
 	 * @param mixed $value the value to look-up in this column
+	 * @param array $options [optional] See description
 	 * @return int the number of rows deleted
 	 */
-	public function DeleteRows($value){
-		$dbManager = $this->Table->Database->DbManager;
-		if(!$dbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
-
-		//normalize serialized data
-		if($this->IsSerializedColumn) $value = $this->GetSerializedValue($value);
-		
-		return $dbManager->Delete($this->Table, array(array($this->ColumnName=>$value)), '', array('add-column-quotes'=>true, 'add-dot-notation'=>true));
+	public function DeleteRows($value, array $options=null){
+		//skipping delete callbacks on the row-level will delete rows directly on the DB level for efficiency
+		if($options['skip-callbacks']){ //yes, skip callbacks. faster.
+			$dbManager = $this->Table->Database->DbManager;
+			if(!$dbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
+	
+			//normalize serialized data
+			if($this->IsSerializedColumn) $value = $this->GetSerializedValue($value);
+			
+			return $dbManager->Delete($this->Table, array(array($this->ColumnName=>$value)), '', array('add-column-quotes'=>true, 'add-dot-notation'=>true));
+		}
+		else{ //dont skip callbacks. need to lookup each row and delete each row directly. slower than the above
+			$deletedCount = 0;
+			while($Row = $this->Table->LookupRows( array($this->ColumnName=>$value), array('return-next-row'=>&$curCount) )){
+				//delete row and increase count if successful
+				if( $Row->Delete() ) $deletedCount++;
+			}
+			return $deletedCount;
+		}
 	}
 	/**
 	 * Alias for DeleteRows. See SmartColumn::DeleteRows()
-	 * @see SmartColumn::DeleteRows()
+	 * @see SmartColumn::DeleteRows() SmartColumn::DeleteRows()
 	 * @deprecated use SmartColumn::LookupRows()
 	 * @ignore
 	 */
-	public function DeleteRowsWithValue($value){
-		return $this->DeleteRows($value);
+	public function DeleteRowsWithValue($value, array $options=null){
+		return $this->DeleteRows($value, $options);
 	}
 
 	/**
 	 * Sets the given $value to the column for every row in the table. Returns the number of rows affected.
+	 * Options are as follows:
+	 * ``` php
+	 * $options = array(
+	 * 	'skip-callbacks'=>false, //If true, all row-level callbacks AND error-checking will be skipped. This can substantially improve the performance on very large tables.
+	 * 	'skip-error-checking'=>false //Only available in conjunction with 'skip-callbacks'=true. If both of these options are true, all row-level error checking will be skipped when each updated Row is Commit()'ed.
+	 * }
+	 * ```
 	 * @param mixed $value The scalar value to set in this column for every row in the table
+	 * @param array $options [optional] See description
 	 * @return int the number of rows affected
 	 */
-	public function SetAllValues($value){
+	public function SetAllValues($value, array $options=null){
 		if($this->IsUnique || $this->IsPrimaryKey) throw new Exception("Cannot set all values for a column specified as Unique or Primary Key (table: {$this->Table->TableName}, column: {$this->ColumnName})");
-		$dbManager = $this->Table->Database->DbManager;
-		if(!$dbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
 		
-		//may need to serialize the $value data
-		if($this->IsSerializedColumn){
-			$value = $this->GetSerializedValue($value);
+		//skipping callbacks on the row-level will update rows directly on the DB level for efficiency
+		if($options['skip-callbacks']){ //yes, skip callbacks. faster.
+			$dbManager = $this->Table->Database->DbManager;
+			if(!$dbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
+			
+			//may need to serialize the $value data
+			if($this->IsSerializedColumn){
+				$value = $this->GetSerializedValue($value);
+			}
+			
+			return $dbManager->Update($this->Table, array($this->ColumnName=>$value), '', '', array('add-column-quotes'=>true, 'add-dot-notation'=>true));
 		}
-		
-		return $dbManager->Update($this->Table, array($this->ColumnName=>$value), '', '', array('add-column-quotes'=>true, 'add-dot-notation'=>true));
+		else{ //dont skip callbacks. need to lookup each row and update each row directly. slower than the above
+			$updatedCount = 0;
+			$skipErrorChecking = $options['skip-error-checking'];
+			while($Row = $this->Table->GetAllRows( array('return-next-row'=>&$curCount) )){
+				//update row and increase count if successful
+				$Row[ $this->ColumnName ] = $value;
+				if( $Row->Commit($skipErrorChecking) === 1 ) $updatedCount++;
+			}
+			return $updatedCount;
+		}
 	}
 	
 /////////////////////////////// Serialize/Unserialize Array/Object functions ///////////////////////////////////
+	/**
+	 * If the data type serializes data (array, object), this function convers the given $value to the serialized data
+	 * @param mixed $value the value to serialize
+	 * @return the serialized value
+	 */
 	public function GetSerializedValue($value){
 		switch($this->DataType){
 			case 'array':
@@ -570,6 +631,11 @@ class SmartColumn{
 		return $value;
 	}
 	
+	/**
+	 * If the data type unserializes data (array, object), this function convers the given $value to the unserialized data
+	 * @param mixed $value the value to unserialize
+	 * @return the unserialized value
+	 */
 	public function GetUnserializedValue($value){
 		switch($this->DataType){
 			case 'array':
@@ -583,6 +649,11 @@ class SmartColumn{
 		return $value;
 	}
 	
+	/**
+	 * Serializes the given $array
+	 * @param array $array the array to serialize
+	 * @return the serialized array
+	 */
 	public static function SerializeArray($array){
 		if(!$array) $array = null; //force null if nothing is set. note, this includes an empty array
 		else if(!is_array($array)){ //verify array type
@@ -596,6 +667,11 @@ class SmartColumn{
 		return $array;
 	}
 	
+	/**
+	 * Serializes the given $object
+	 * @param object $object the object to serialize
+	 * @return the serialized object
+	 */
 	public static function SerializeObject($object){
 		if(!$object) $object = null; //force null if nothing is set
 		else if(!is_object($object)){ //verify object type
@@ -609,6 +685,11 @@ class SmartColumn{
 		return $object;
 	}
 	
+	/**
+	 * Unserializes the given $array
+	 * @param array $serializedArray the array to unserialize
+	 * @return the unserialized array
+	 */
 	public static function UnserializeArray($serializedArray){
 		if(!$serializedArray) return array(); //return empty array always instead of null
 		$arrayValue = @unserialize($serializedArray);
@@ -618,6 +699,11 @@ class SmartColumn{
 		return $arrayValue;
 	}
 	
+	/**
+	 * Unserializes the given $object
+	 * @param object $serializedObject the object to unserialize
+	 * @return the unserialized object
+	 */
 	public static function UnserializeObject($serializedObject){
 		if(!$serializedObject) return null;
 		$objValue = @unserialize($serializedObject);
@@ -648,7 +734,7 @@ class SmartColumn{
 	 * Example usage: $smartdb['tablename']['columnname'](212) instead of $smartrow['tablename']['columnname']->LookupRow(212)
 	 * @param mixed $lookupVal The value to lookup in this particular column
 	 * @return array A an array of Row instance matching the criteria of $lookupVal.
-	 * @see SmartTable::LookupRows()
+	 * @see SmartTable::LookupRows() SmartTable::LookupRows()
 	 * @ignore
 	 */
 	public function __invoke($lookupVal=null, $options=null){
