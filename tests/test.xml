@@ -12,6 +12,7 @@
       <Field Name="Id" DataType="int" AllowSet="true" TrimAndStripTagsOnSet="false" AllowGet="true" AllowLookup="true" AllowGetAll="true" InputRequired="false" FormType="hidden" IsUnique="true" PrimaryKey="true" AutoIncrement="true" />
       <Field Name="Name" DataType="varchar" MaxSize="255" AllowSet="true" TrimAndStripTagsOnSet="false" AllowGet="true" AllowLookup="true" AllowGetAll="true" InputRequired="false" FormType="text" IsUnique="false" AutoIncrement="false" />
 	  <Field Name="UserType" DataType="enum( 'a','b', 'c/d' )" AllowSet="true" TrimAndStripTagsOnSet="false" AllowGet="true" AllowLookup="true" AllowGetAll="true" InputRequired="false" FormType="text" IsUnique="false" AutoIncrement="false" />
+	  <Field Name="UserTypeSet" DataType="set( 'a','b', 'c/d' )" DefaultValue="a" AllowSet="true" TrimAndStripTagsOnSet="false" AllowGet="true" AllowLookup="true" AllowGetAll="true" InputRequired="false" FormType="text" IsUnique="false" AutoIncrement="false" />
     </Database>
   </Class>
   <Class Name="Log">
@@ -23,6 +24,15 @@
 	  <Field Name="NumViews" DataType="int" AllowSet="true" TrimAndStripTagsOnSet="false" AllowGet="true" AllowLookup="true" AllowGetAll="true" InputRequired="false" FormType="text" IsUnique="false" AutoIncrement="false" />
     </Database>
   </Class>
+  <Class Name="TimeLog">
+    <Database TableName="TimeLog">
+      <Field Name="TimeLogId" DataType="int" InputRequired="false" IsUnique="true" PrimaryKey="true" AutoIncrement="true" />
+      <Field Name="Datetime" DataType="datetime" />
+      <Field Name="Timestamp" DataType="timestamp" />
+      <Field Name="Date" DataType="date" />
+      <Field Name="Time" DataType="time" />
+    </Database>
+  </Class>
   <Class Name="Questionare">
     <Database CommitChangesAutomatically="false" TableName="Questionare">
       <Field Name="QuestionareId" DataType="int" AllowSet="true" TrimAndStripTagsOnSet="false" AllowGet="true" AllowLookup="true" AllowGetAll="true" DefaultValue="" InputRequired="false" FormType="hidden" IsUnique="false" PrimaryKey="true" AutoIncrement="true" />
@@ -32,9 +42,10 @@
       <Field Name="Password" DataType="varchar" MaxSize="55" AllowSet="true" TrimAndStripTagsOnSet="false" AllowGet="true" AllowLookup="true" AllowGetAll="false" DefaultValue="" InputRequired="false" FormType="password" IsUnique="false" />
       <Field Name="Sex" DataType="varchar" PossibleValues="M,F" MaxSize="55" AllowSet="true" TrimAndStripTagsOnSet="true" AllowGet="true" AllowLookup="true" AllowGetAll="false" DefaultValue="" InputRequired="false" FormType="radio" IsUnique="false" />
       <Field Name="AgeGroup" DisplayName="Age Group" DataType="varchar" MaxSize="55" AllowSet="true" TrimAndStripTagsOnSet="true" AllowGet="true" AllowLookup="true" AllowGetAll="false" DefaultValue="" InputRequired="false" FormType="select" IsUnique="false" />
+      <Field Name="Hobbies" DataType="set('Long Walks on the Beach','Going Out','Movies')" FormType="select" />
       <Field Name="Notes" DataType="text" Example="Write something about yourself." AllowSet="true" TrimAndStripTagsOnSet="true" MinSize="5" MaxSize="10" AllowGet="true" AllowLookup="true" AllowGetAll="false" InputRequired="false" FormType="textarea" IsUnique="false" />
 	  <Field Name="Email" DisplayName="Your Email Address" Example="your@email.com" DataType="varchar" MaxSize="55" AllowSet="true" TrimAndStripTagsOnSet="true" AllowGet="true" AllowLookup="true" AllowGetAll="true" DefaultValue="" InputRequired="true" InputEmptyError="Put in an email address, damnit!" InputRegexCheck="^[_a-zA-Z0-9-\+]+(\.[_a-zA-Z0-9-\+]+)*@[a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)*(\.[a-zA-Z]{2,4})$" InputRegexFailError="Invalid email address format." FormType="text" IsUnique="false" />
-	  <Field Name="Date" DisplayName="Pick your date" DataType="timestamp" />
+	  <Field Name="Date" DisplayName="Pick your date" DataType="timestamp" FormType="text" />
     </Database>
   </Class>
   <Class Name="FastSetting">
@@ -72,6 +83,7 @@
 		<Field Name="binaryreq" DataType="binary" InputRequired="true" DefaultValue="1" />
 		<Field Name="binary8" DataType="binary" MaxSize="8" />
 		<Field Name="enum" DataType="enum('Option 1','Option 2','Option 3')" />
+		<Field Name="set" DataType="set('Option 1','Option 2','Option 3')" />
 		<Field Name="array" DataType="array" />
 		<Field Name="object" DataType="object" />
 		<Field Name="array-notnull" DataType="array" InputRequired="true" />

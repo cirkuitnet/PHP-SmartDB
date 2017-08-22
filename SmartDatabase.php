@@ -25,7 +25,7 @@ require_once(dirname(__FILE__).'/SmartRow.php');
  * @package SmartDatabase
  */
 class SmartDatabase implements ArrayAccess, Countable{
-	const Version = "1.40"; //should update this for ANY change to structure at least. used for determining if a serialized SmartDatabase object is invalid/out of date
+	const Version = "1.45"; //should update this for ANY change to structure at least. used for determining if a serialized SmartDatabase object is invalid/out of date
 	
 	/////////////////////////////// SERIALIZATION - At top so we don't forget to update these when we add new vars //////////////////////////
 		/**
@@ -37,6 +37,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 				'Version',
 				'DEV_MODE',
 				'DEV_MODE_WARNINGS',
+				'DefaultTimezone',
 				'_tables',
 				'XmlSchemaDateModified'
 			);
@@ -69,6 +70,14 @@ class SmartDatabase implements ArrayAccess, Countable{
 	 * @var bool if true and in $DEV_MODE, warnings will be shown for like missing classes and etc.
 	 */
 	public $DEV_MODE_WARNINGS = true;
+	
+	/**
+	 * @var string  If this is a date column and a TimeZone is set on this column (or the database-level), then ALL datetime/timestamp values stored will be converted to UTC time for storing in the DB, then returned in the set timezone.
+	 * Empty will use system time and won't touch dates (not recommended)
+	 * There is a SmartDatabase level $DefaultTimezone, and also a SmartColumn $DefaultTimezone. If both values are set, the column's default will take precedence.
+	 * NOTE: Use LONG timezone names here, not shortened values like "EST". You can use "date_default_timezone_get()" to get current system timezone. Ref: http://php.net/manual/en/timezones.php
+	 */
+	public $DefaultTimezone;
 
 	/**
 	 * Constructor for a new SmartDatabse object. Note that you can cache these objects within Memcached so we don't have to parse the XML and create the structure for every request (@see SmartDatabase::GetCached()).
@@ -78,6 +87,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 	 * 	'xml-schema-file-path' => null, //string - the database schema file to load. If left null, you will need to either build the database yourself useing ->AddTable() or load a schema from XML using ->LoadSchema()
 	 * 	'dev-mode' => true, //boolean - development mode toggle. When true, does extra verifications (ie data types, columns, etc) that are a must for development, but may slow things down a bit when running in production.
 	 * 	'dev-mode-warnings' => true, //boolean. if true and in $DEV_MODE, warnings will be shown for like missing classes and etc.
+	 * 	'default-timezone' => ''	//string (i.e. "America/Indiana/Indianapolis"). if set, sets the DefaultTimezone to this value. using "date_default_timezone_get()" will use php's default date timezone that is currently set and can be changed with a call to "date_default_timezone_set(...);". empty will use default system time (not recommended). Ref: http://php.net/manual/en/timezones.php
 	 * )
 	 * ```
 	 * @see SmartDatabase::GetCached() SmartDatabase::GetCached()
@@ -90,7 +100,8 @@ class SmartDatabase implements ArrayAccess, Countable{
 			//'db-manager' => null,
 			'xml-schema-file-path' => $deprecated, //reverse compatibility
 			'dev-mode' => true,
-			'dev-mode-warnings' => true
+			'dev-mode-warnings' => true,
+			'default-timezone' => ''
 		);
 		
 		if(!is_array($options)){ //reverse compatibility. constructor used to be (DbManager $dbManager=null, $xmlSchemaFilePath=null). now it's an array. need to support old versions though
@@ -110,6 +121,9 @@ class SmartDatabase implements ArrayAccess, Countable{
 		
 		//load schema, if given
 		if( $options['xml-schema-file-path'] ) $this->LoadXmlSchema( $options['xml-schema-file-path'] );
+		
+		//use default timezone?
+		if( $options['default-timezone'] ) $this->DefaultTimezone = $options['default-timezone'];
 	}
 
 /////////////////////////////// Table Management ///////////////////////////////////
@@ -274,14 +288,14 @@ class SmartDatabase implements ArrayAccess, Countable{
 					$xml .= ' DisplayName="'.htmlspecialchars($Column->DisplayName).'"';
 				}
 
-				if (stripos($Column->DataType,"enum")===0){ //enum data type
+				if (stripos($Column->DataType,"enum")===0 || stripos($Column->DataType,"set")===0){ //enum and set data types
 					if(count($Column->PossibleValues) <= 0) throw new Exception("'{$Column->DataType}' column type has no PossibleValues set. Column: '{$Column->ColumnName}', Table: '{$Table->TableName}'");
 					$xml .= ' DataType="'.$Column->DataType."('".htmlspecialchars(implode("','", $Column->PossibleValues))."')\"";
 				}
-				else { //non-enum data type
+				else { //non-enum or set data type
 					$xml .= ' DataType="'.$Column->DataType.'"';
 					if( $Column->PossibleValues && ($possibleVals = implode(",", $Column->PossibleValues)) ){ //only print if we need to
-						$xml .= ' PossibleValues="'.htmlspecialchars($possibleVals).'"'; //only save PossibleValues to its own attribute if not an enum data type... otherwise, it's part of the data type
+						$xml .= ' PossibleValues="'.htmlspecialchars($possibleVals).'"'; //only save PossibleValues to its own attribute if not an enum or set data type... otherwise, it's part of the data type
 					}
 				}
 
@@ -457,17 +471,17 @@ class SmartDatabase implements ArrayAccess, Countable{
 						preg_match_all("/'(.*?)'/", $xmlColumn['a']['DataType'], $matches); //parse out the enum values
 						$column->PossibleValues = $matches[1];
 					}
-					else $column->DataType = strtolower($xmlColumn['a']['DataType']); //non-enum data type
-					
-					//add column possible values. if set and the data type is enum, these will be used as the only possible values instead of the enum values (ie you can use a subset of the possible values specified in the enum data type) 
-					if( ($possibleValues = trim($xmlColumn['a']['PossibleValues'])) ){ //if the "PossibleValues" attribute exists..
-						if( ($possibleValues = explode(',', $possibleValues)) ){ //convert CSV string into array or FALSE if it's an empty string
-							$column->PossibleValues = $possibleValues;
-						}
+					else if( stripos($xmlColumn['a']['DataType'], "set") === 0 ){ //set data type
+						$column->DataType = "set";
+						preg_match_all("/'(.*?)'/", $xmlColumn['a']['DataType'], $matches); //parse out the set values
+						$column->PossibleValues = $matches[1];
 					}
+					else $column->DataType = strtolower($xmlColumn['a']['DataType']); //non-enum or set data type
 
 					$column->IsDateColumn = (stripos($column->DataType, "date") !== false || $column->DataType==='timestamp');
+					$column->IsTimezoneColumn = ($column->DataType==='datetime' || $column->DataType==='timestamp');
 					$column->IsSerializedColumn = ($column->DataType==='array' || $column->DataType==='object');
+					$column->IsASet = ($column->DataType==='set');
 					$column->DisplayName = (!empty($xmlColumn['a']['DisplayName']) ? $xmlColumn['a']['DisplayName'] : $xmlColumnName);
 					$column->Collation = $xmlColumn['a']['Collation'];
 					$column->MinSize = $xmlColumn['a']['MinSize'];
@@ -490,6 +504,28 @@ class SmartDatabase implements ArrayAccess, Countable{
 					$column->RegexCheck = $xmlColumn['a']['InputRegexCheck'];
 					$column->RegexFailMessage = $xmlColumn['a']['InputRegexFailError'];
 					$column->SortOrder = $xmlColumn['a']['SortOrder'];
+					
+					//add column possible values. if set and the data type is enum or set, these will be used as the only possible values instead of the enum/set values (ie you can use a subset of the possible values specified in the enum/set data type)
+					if( ($possibleValues = trim($xmlColumn['a']['PossibleValues'])) ){ //if the "PossibleValues" attribute exists..
+						if( ($possibleValues = explode(',', $possibleValues)) ){ //convert CSV string into array or FALSE if it's an empty string
+							$column->PossibleValues = $possibleValues;
+						}
+					}
+					
+					//if the Column is a set data type, we need to verify each of the PossibleValues isn't a subset of a different PossibleValue.
+					//ex: "tree" and "apple tree" will not be accepted because MySQL uses %tree% to search set like a CSV, so %tree% would match the 'apple tree' element as well
+					//well just check for it and not allow it to avoid problems ahead of time
+					//this is the behavior of MySQL - https://dev.mysql.com/doc/refman/5.7/en/set.html
+					if($column->IsASet){
+						if(!$column->PossibleValues) throw new Exception("SET column '".$xmlColumnName."' requires PossibleValues to be defined");
+						foreach($column->PossibleValues as $i=>$possibleVal1){
+							foreach($column->PossibleValues as $j=>$possibleVal2){
+								if($i!=$j && strpos($possibleVal1, $possibleVal2)!==false)
+									throw new Exception('SET column `'.$xmlColumnName.'` requires PossibleValues to be unique (i.e. no value can be a subset of another value. Check PossibleValues "'.$possibleVal1.'" and "'.$possibleVal2.'"');
+							}							
+						}
+					}
+					
 
 					$table->AddColumn($column);
 				}
@@ -707,7 +743,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 				//Type
 				$structure[$tableName][$columnName]["Type"] = $Column->DataType;
 				$dataTypeLower = strtolower($Column->DataType);
-				if (strpos($dataTypeLower,"enum")===0){ //enum.. type
+				if (strpos($dataTypeLower,"enum")===0 || strpos($dataTypeLower,"set")===0){ //enum.. and set.. types
 					if(count($Column->PossibleValues) <= 0) throw new Exception("'{$Column->DataType}' column type has no PossibleValues set. Column: '{$Column->ColumnName}', Table: '{$Table->TableName}'");
 					$structure[$tableName][$columnName]["Type"] .= "('".implode("','", $Column->PossibleValues)."')";
 				}
@@ -955,7 +991,9 @@ class SmartDatabase implements ArrayAccess, Countable{
 				$unsigned = false;
 				$size = "";
 				$possibleValues = array();
-					
+				
+				//check for ENUM and SET data types
+				$isASet = false;
 				if( ($pos = strpos($columnProps['Type'], "(")) !== false) {  //find parenthesis in column type
 					//$pos contains parenthesis position
 					//ex type: "int(1) unsigned"
@@ -963,23 +1001,32 @@ class SmartDatabase implements ArrayAccess, Countable{
 					$extraInfo = substr($columnProps['Type'], $pos); //"(1) unsigned"
 					$size = str_replace(" unsigned","",$extraInfo, $unsigned);//"(1)" - $unsigned will be 0 or 1
 					$size = trim($size, "() "); //1
+					$isASet = ($dataType==='set');
 					
-					if($dataType == "enum"){
-						//parse out the enum values
+					if($dataType==="enum" || $isASet){
+						//parse out the enum/set values
 						preg_match_all("/'(.*?)'/", $size, $matches); 
 						$possibleValues = $matches[1];
 						$size = "";	//size just holds the possible values. dont keep it around
 					}
+					
 				}
-				else{
+				else{ //no parenthesis in column's data type
 					$dataType = $columnProps['Type'];
 				}
 				
+				$isDate = false;
 				if(stripos($dataType, "date") !== false || $dataType==='timestamp'){
 					$isDate = true;
 				}
+
+				$isTimezoneColumn = false;
+				if($dataType==='datetime' || $dataType==='timestamp'){
+					$isTimezoneColumn = true;
+				}
 				
 				//these datatypes will never really be set in SQL, so this IF statement is pretty much worthless
+				$isSerialized = false;
 				if($dataType === 'array' || $dataType === 'object'){
 					$isSerialized = true;
 				}
@@ -996,7 +1043,9 @@ class SmartDatabase implements ArrayAccess, Countable{
 				
 				$column->DataType = $dataType;
 				$column->IsDateColumn = $isDate;
+				$column->IsTimezoneColumn = $isTimezoneColumn;
 				$column->IsSerializedColumn = $isSerialized;
+				$column->IsASet = $isASet;
 				$column->PossibleValues = $possibleValues;
 				$column->MaxSize = $size;
 				
@@ -1125,6 +1174,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 	 * 	$options = array(
 	 * 		'db-manager' => null, //DbManager - The DbManager instance that will be used to perform operations on the actual database. If null, no database operations can be performed (use for 'in-memory' instances)
 	 * 		'xml-schema-file-path' => null, //string - REQUIRED for caching - the database schema file to load. If left null, you will need to either build the database yourself useing ->AddTable() or load a schema from XML using ->LoadSchema()
+	 * 		'default-timezone' => '' //if set, $SmartDb->DefaultTimezone will be set to this value
 	 * 		'dev-mode' => true, //boolean - development mode toggle. When true, does extra verifications (ie data types, columns, etc) that are a must for development, but may slow things down a bit when running in production.
 	 * 		'dev-mode-warnings' => true, //boolean. if true and in $DEV_MODE, warnings will be shown for like missing classes and etc.
 	 * 		'memcached-key' => null, //string. REQUIRED for caching. memcached lookup key
@@ -1144,6 +1194,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 		$defaultOptions = array( //default options
 			//'db-manager' => null,
 			//'xml-schema-file-path' => null, //REQUIRED for caching to work properly!
+			//'default-timezone' => '' //if set, $SmartDb->DefaultTimezone will be set to this value
 			'dev-mode' => true,
 			'dev-mode-warnings' => true,
 			'memcached-key' => null, //REQUIRED for caching to work properly
@@ -1201,6 +1252,12 @@ class SmartDatabase implements ArrayAccess, Countable{
 				){
 					//dates and smartdb version match. valid cached db
 					$cachedDb->DbManager = $options['db-manager']; //update the db manager. this can't be cached
+					
+					//timezone could change from what was cached
+					if($cachedDb->DefaultTimezone != $options['default-timezone']){
+						$cachedDb->DefaultTimezone = $options['default-timezone'];
+					}
+					
 					return $cachedDb;  //set our global to the cached db
 			}
 		}

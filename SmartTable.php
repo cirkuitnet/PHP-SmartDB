@@ -448,7 +448,7 @@ class SmartTable implements ArrayAccess, Countable{
 		$this->_arrayMaxDepth = 0; //INTERNAL GLOBAL! this is determined within VerifyLookupAssocHelper
 
 		try{ 
-			foreach($lookupAssoc as $key=>$val){
+			foreach($lookupAssoc as $key=>&$val){
 				$this->VerifyLookupAssocHelper($val, $key, $lookupAssoc);
 			}
 		}
@@ -468,25 +468,105 @@ class SmartTable implements ArrayAccess, Countable{
      * Recursive function for VerifyLookupAssoc() that verifies all keys in the array are column names or keywords (ie "AND", "OR", "<", "!=", etc)
      * @ignore
      */
-    private function VerifyLookupAssocHelper($val, $key, &$lookupAssoc, $depth=0){
-    	if(++$depth > $this->_arrayMaxDepth) $this->_arrayMaxDepth = $depth; //track array's depth
-		if(is_array($val)){
-			foreach($val as $subKey=>$subVal){
-				$this->VerifyLookupAssocHelper($subVal, $subKey, $lookupAssoc, $depth);
-			}
-		}
+    private function VerifyLookupAssocHelper(&$val, $key, &$lookupAssoc, $depth=0, $currentColumn=null, $condition='=', $operator='AND'){
+    	$depth += 1; //track array's depth internally
+    	if($depth > $this->_arrayMaxDepth) $this->_arrayMaxDepth = $depth;
 		
 		//verify $key is numeric, a column name, or a keyword (ie "AND", "OR", "<", "!=", etc)
-		if( !is_numeric($key) && !$this->Database->DbManager->IsKeyword($key) ){ //not numeric or a keyword. must be a column
-			if(!$this->ColumnExists($key)) throw new Exception("Column '{$key}' does not exist in table {$this->TableName}");
+		if( !is_numeric($key) ){ //not numeric. must be a column or a keyword
 			
-			//check aliases
-			$realColumnName = $this->GetColumn($key)->ColumnName; //gets the real column name in case the $key is a column alias
-			if($key != $realColumnName){ //if these are different, we have a column alias
-				//transfer alias lookup settings to the actual column
-				$lookupAssoc[$realColumnName] = $lookupAssoc[$key];
-				unset($lookupAssoc[$key]); //unset alias
-			}		
+			if( ($op = $this->Database->DbManager->IsOperator($key)) ){
+				$operator = $op; //save to recurse
+			}
+			else if( ($cond = $this->Database->DbManager->IsCondition($key)) ){
+				$condition = $cond; //save to recurse
+			}
+			else{ //not keyword, must be column
+				if(!$this->ColumnExists($key)) throw new Exception("Column '{$key}' does not exist in table {$this->TableName}");
+				
+				//check aliases
+				$currentColumn = $this->GetColumn($key); //save to recurse
+				$realColumnName = $currentColumn->ColumnName; //gets the real column name in case the $key is a column alias
+				if($key != $realColumnName){ //if these are different, we have a column alias
+					//transfer alias lookup settings to the actual column
+					$lookupAssoc[$realColumnName] = $lookupAssoc[$key];
+					unset($lookupAssoc[$key]); //unset alias
+				}
+			}
+		}
+
+		//hack for MySQL database
+		//'SET' data type needs some special data handling for where clauses
+		//	ex: "$lookupAssoc = ['AND'=>['a','c']]" should give us "...WHERE set = 'a,c'" and not "...WHERE set = 'a' AND set = 'c'"
+		//	ex: "$lookupAssoc = ['OR'=>['!='=>['a','c']]]" should give us "...WHERE set != 'a,c'" and not "...WHERE set != 'a' AND set != 'c'"
+		//	ex: "$lookupAssoc = ['LIKE'=>['OR'=>'b,a']] should give us "...WHERE set LIKE '%a%' OR set LIKE '%b%'"
+		//TODO: MOVE THIS INTO MySQL DB MANAGER??? Is this considered database specific...? Or maybe just an "if(mysql){" statement around this logic here.
+		//		The MySQL Db manager has no knowledge over column data types, and this case only applies to SETs.
+		$skipRecurse = false;
+		if(is_array($val) && $currentColumn->IsASet){
+			//look for a sub-array. if none, this particular array is the set of "AND" and "=" values we need to match.
+			$subArrayFound = false;
+			$keywordSubkeyFound = false;
+			foreach($val as $subKey=>&$subVal){
+				//key could be numeric or a keyword
+				if(!is_numeric($subKey)){
+					$keywordSubkeyFound = true;
+				}
+				
+				//value could be an array to recurse on or a CSV of SET values. if either, we need to recurse
+				if(is_array($subVal)){ //recurse?
+					$subArrayFound = true;
+					break;
+				}
+				else if(strpos($subVal,',')!==false){ //if subVal is a CSV of values...
+					//convert CSV to an array so we can recurse as normal
+					$subVal = explode(',',$subVal);
+					$subArrayFound = true;
+					break;
+				}
+			}
+			if(!$subArrayFound && !$keywordSubkeyFound){
+				$skipRecurse = true;
+				if( ($operator==='AND' && $condition==='=') || ($operator==='OR' && $condition==='!=') ){
+					$val = implode(',', $val); //combine array of values into a CSV for this edge case
+				}
+			}
+			//$val will go through VerifyValueType() below to handle sorting and etc. needed for MySQL also
+		}
+		
+		//data handling
+		if(!$skipRecurse && is_array($val)){ //recurse?
+			foreach($val as $subKey=>&$subVal){
+				$this->VerifyLookupAssocHelper($subVal, $subKey, $val, $depth, $currentColumn, $condition, $operator);
+			}
+		}
+		else{
+			//the actual lookup value. normalize data, based on column data type
+			if(!$currentColumn) throw new Exception('No column name found');
+			$val = $currentColumn->VerifyValueType($val, [
+				'skip-serialized-data'=>true, //don't convert serialized objects/arrays so we can do raw string comparisons
+				'skip-force-set-to-csv'=>true
+			]);
+
+			//hack for MySQL database
+			//'SET' data type needs some special data handling for where clauses for "LIKE" to work with sets
+			//	where we need to put the mysql wildcard '%' around all strings.
+			//mysql stores sets as CSV in the database and does basic string searching in WHERE clauses
+			//	to see if a particular value is within the set *along with* other values (ie: "...WHERE set LIKE '%a%,%c%';" to match 'a,b,c,d' set data)
+			//TODO: MOVE THIS INTO MySQL DB MANAGER??? Is this considered database specific...? Or maybe just an "if(mysql){" statement around this logic here.
+			//		The MySQL Db manager has no knowledge over column data types, and this case only applies to SETs.
+			if($currentColumn->IsASet && ($condition==='LIKE' || $condition==='NOT LIKE')){
+				$setIsArray = is_array($val);
+				if(!$setIsArray){
+					$val = explode(',',$val);
+				}
+				$val = array_map(function($i){
+					return '%'.trim($i,'% ').'%';
+				}, $val);
+				if(!$setIsArray){
+					$val = implode(',',$val);
+				}
+			}
 		}
     }
 	
@@ -862,7 +942,6 @@ class SmartTable implements ArrayAccess, Countable{
 		//column may be an alias and/or may need to unserialize the returned data. get the actual column and check if it's serialized
 		$Column = $this->GetColumn($returnColumn);
 		$returnColumn = $Column->ColumnName; //override $returnColumn name. handles aliases
-		$isSerializedColumn = $Column->IsSerializedColumn;
 		
 		//$lookupAssoc is not required. if no $lookupAssoc is given, this will work similar to SmartColumn->GetAllValues().
 		if($lookupAssoc){
@@ -889,18 +968,14 @@ class SmartTable implements ArrayAccess, Countable{
 			if($options['return-assoc']){ //return an assoc array
 				while ($row = $dbManager->FetchAssoc()) {
 					$colValue = $row[$returnColumn];
-					if($isSerializedColumn){ //unserialize serialized values
-						$colValue = $Column->GetUnserializedValue($colValue); 
-					}
+					$colValue = $Column->NormalizeValue($colValue); //depending on the column's data type, we may need to normalize the raw database value for everyday use
 					$returnVals[$row[$keyColumnName]] = $colValue;
 				}
 			}
 			else{ //return a regular array
 				while ($row = $dbManager->FetchAssoc()) {
 					$colValue = $row[$returnColumn];
-					if($isSerializedColumn){ //unserialize serialized values
-						$colValue = $Column->GetUnserializedValue($colValue); 
-					}
+					$colValue = $Column->NormalizeValue($colValue); //depending on the column's data type, we may need to normalize the raw database value for everyday use
 					$returnVals[] = $colValue;
 				}
 			}
@@ -914,9 +989,7 @@ class SmartTable implements ArrayAccess, Countable{
 
 			while ($row = $dbManager->FetchAssoc()) {
 				$colValue = $row[$returnColumn];
-				if($isSerializedColumn){ //unserialize serialized values
-					$colValue = $Column->GetUnserializedValue($colValue); 
-				}
+				$colValue = $Column->NormalizeValue($colValue); //depending on the column's data type, we may need to normalize the raw database value for everyday use
 				$returnVals[] = $colValue;
 			}
 		}

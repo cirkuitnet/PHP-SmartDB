@@ -109,8 +109,16 @@ class JunkExtended extends Junk{
 //--create db manager
 $dbManagerOptions = array(
 	'driver'=>'mysqli',
+	'timezone'=>'+0:00'
 );
 $dbManager = $t['dbManager'] = new DbManager_MySQL('localhost','smartdb','smartdb123','smartdb_test', $dbManagerOptions);
+
+//verify timezone
+$dbManager->Query('SELECT TIMEDIFF(NOW(), UTC_TIMESTAMP)');
+$results = $dbManager->FetchArrayList();
+if($results[0][0] != '00:00:00'){
+	throw new Exception('SELECT TIMEDIFF(NOW(), UTC_TIMESTAMP) result "'.$results[0].'", expected "00:00:00"');
+}
 
 //--build the Database instance
 $database = $t['database'] = new SmartDatabase($dbManager, dirname(__FILE__).'/test.xml');
@@ -192,7 +200,7 @@ $GLOBALS['SQL_DEBUG_MODE'] = false; //set to true to see all SQL commands run th
 		Test11($t);
 		Test12($t);
 		Test13($t);
-		Test14($t); //enumerations
+		Test14($t); //enumerations and sets
 		Test15($t); //0/null
 		Test16($t); //min, max, sum
 		Test17($t); //data types
@@ -200,6 +208,7 @@ $GLOBALS['SQL_DEBUG_MODE'] = false; //set to true to see all SQL commands run th
 		Test19($t); //smart-cell array access
 		Test20($t); //JsonSerializable
 		Test21($t); //lookup-row inline callbacks
+		Test22($t); //dates with timezones
 		TestForm($t,true);
 
 		Msg(true,'Tests passed on '.date('r'),null);
@@ -523,7 +532,7 @@ function Test5($t, $debug=false){
 			AssertCellVal($eventObject['Timestamp'], null);
 			AssertCellVal($GLOBALS['test5']['row']['Timestamp'], $eventArgs['current-value']);
 
-			if($eventArgs['new-value'] === $GLOBALS['test5']['timestamp1']){
+			if($eventArgs['new-value'] === $GLOBALS['test5']['timestamp1']){ //callbacks are RAW values, so won't have timezones 
 				$eventArgs['cancel-event'] = true;
 			}
 
@@ -531,20 +540,33 @@ function Test5($t, $debug=false){
 	}
 	$i['Timestamp']->OnSetValue('ValueSet','TestStaticCallbackClass');
 	Commit($i,$debug);
-	$timestamp = date("Y-m-d H:i:s");
+	$timestamp = gmdate("Y-m-d H:i:s");
 	$GLOBALS['test5']['timestamp1'] = $timestamp;
 	$i['Timestamp'] = $timestamp;
 	Msg($debug,'After timestamp set and cancelled',$i);
 	AssertCellVal($i['Timestamp'], null);
 
-	$timestamp = date("2008-m-d H:i:s");
+	$timestamp = gmdate("2008-m-d H:i:s");
 	$GLOBALS['test5']['timestamp2'] = $timestamp;
 	$i['Timestamp'] = $timestamp;
 	Msg($debug,'After timestamp set',$i);
 	AssertCellVal($i['Timestamp'], $timestamp);
 	Commit($i,$debug);
+	
+	//date_default_timezone_set('America/Los_Angeles'); //test different tz
 
+	$timestamp = gmdate("2008-m-d H:i:s");
+	date_default_timezone_set('America/Chicago'); //test different tz
+	$i->DisableCallbacks (true);
+	$GLOBALS['test5']['timestamp2'] = $timestamp;
+	$i['Timestamp'] = $timestamp;
+	Msg($debug,'After timestamp set',$i);
+	AssertCellVal($i['Timestamp'], $timestamp);
+	Commit($i,$debug);
+	$i->EnableCallbacks (true);
 	Delete($i,$debug);
+	
+	date_default_timezone_set('America/Indiana/Indianapolis'); //test different tz
 }
 /**
  * Array row functions, cloning, lookup by set value
@@ -553,7 +575,7 @@ function Test5($t, $debug=false){
 function Test6($t, $debug=false){
 	$i = new Log($t['database']);
 	$i['Name'] = 'Connection Interrupted';
-	$timestamp = date("2009-m-d H:i:s");
+	$timestamp = gmdate("2009-m-d H:i:s");
 	$i['Timestamp'] = $timestamp;
 	$i['Level'] = 6543.21;
 	Commit($i, $debug);
@@ -564,7 +586,7 @@ function Test6($t, $debug=false){
 	$nonKeys = $i->GetNonKeyColumnValues();
 	if(count($nonKeys['Log']) != 4) Ex('Wrong column count returned');
 	if($nonKeys['Log']['Name'] !== 'Connection Interrupted') Ex('Log Name not equal');
-	if($nonKeys['Log']['Timestamp'] !== $timestamp) Ex('Log timestamp not equal');
+	if($nonKeys['Log']['Timestamp'] !== $timestamp) Ex('Log timestamp ('.$nonKeys['Log']['Timestamp'].') not equal ('.$timestamp.')');
 	if($nonKeys['Log']['Level'] !== 6543.21) Ex('Log level not equal');
 
 	$keys = $i->GetKeyColumnValues();
@@ -1336,10 +1358,32 @@ function Test13($t, $debug=false){
 }
 
 /**
- * enumerations
+ * enumerations + sets
  * @ignore
  */
 function Test14($t, $debug=false){
+	$t['database']['User']->DeleteAllRows();
+	
+	//create some SET rows for testing
+	$row = $t['database']['User']();	$row['UserTypeSet'] = ['A'];	Commit($row, $debug);
+	$row = $t['database']['User']();	$row['UserTypeSet'] = ['B '];	Commit($row, $debug);
+	$row = $t['database']['User']();	$row['UserTypeSet'] = ' b';	Commit($row, $debug);
+	$row = $t['database']['User']();	$row['UserTypeSet'] = 'c/d';	Commit($row, $debug);
+	$row = $t['database']['User']();	$row['UserTypeSet'] = [' a ',' B '];	Commit($row, $debug);
+	$row = $t['database']['User']();	$row['UserTypeSet'] = 'a,b';	Commit($row, $debug);
+	$row = $t['database']['User']();	$row['UserTypeSet'] = ['B  ',' C/d   '];	Commit($row, $debug);
+	$row = $t['database']['User']();	$row['UserTypeSet'] = ' c/d ,B';	Commit($row, $debug);
+	$row = $t['database']['User']();	$row['UserTypeSet'] = 'c/D, a ';	Commit($row, $debug);
+	$row = $t['database']['User']();	$row['UserTypeSet'] = [' a ',' b ','c/d'];	Commit($row, $debug);
+	$row = $t['database']['User']();	$row['UserTypeSet'] = ' a , b ,c/d';	Commit($row, $debug);
+	$row = $t['database']['User']();	$row['UserTypeSet'] = [' a ','c/D '];	Commit($row, $debug);
+	$row = $t['database']['User']();	$row['UserTypeSet'] = ['B ','c/d '];	Commit($row, $debug);
+	$row = $t['database']['User']();	$row['UserTypeSet'] = ['B ','C/D '];	Commit($row, $debug);
+	$row = $t['database']['User']();	$row['UserTypeSet'] = [''];	Commit($row, $debug);
+	$row = $t['database']['User']();	$row['UserTypeSet'] = '   ';	Commit($row, $debug);
+	$row = $t['database']['User']();	$row['UserTypeSet'] = null;		Commit($row, $debug);
+	$row = $t['database']['User']();	$row['UserTypeSet'] = [null];	Commit($row, $debug);
+	
 	$row = new SmartRow('User', $t['database']);
 	Msg($debug,'Before set values:',$row);
 	$row['UserType'] = 'a'; //valid enum type
@@ -1358,8 +1402,218 @@ function Test14($t, $debug=false){
 	}
 	$hasErrors = $row['UserType']->HasErrors();
 	if(!$hasErrors && !$exceptionHit) Ex("Was able to set enum column to invalid enum value");
+	
+	$row['UserType'] = 'a'; //valid enum type so we can commit again. spaces auto trimmed
+	
+	Msg($debug,'Before set values:',$row);
+	$row['UserTypeSet'] = [' a ',' b ']; //valid enum type. spaces should get auto-trimmed (as mysql does by default)
+	Msg($debug,'After set UserType:',$row);
 
-	Delete($row, $debug);
+	Commit($row, $debug);
+	//Delete($row, $debug);
+
+	$exceptionHit = false;
+	try{
+		$row['UserTypeSet'] = 'aa'; //invalid enum type
+	} catch (Exception $e){
+		$exceptionHit = true;
+	}
+	$hasErrors = $row['UserType']->HasErrors();
+	if(!$hasErrors && !$exceptionHit) Ex("Was able to set enum column to invalid set value");
+
+	//ONLY a AND c
+	//	$lookupAssoc = "a,c"
+	//	$lookupAssoc = "AND"=>['a','c']
+	//		...WHERE set = 'a,c' 
+	$row['UserTypeSet'] = 'c/d,b'; //valid type
+	Commit($row, $debug);
+	if($row['UserTypeSet']() != ['b','c/d']) Ex('set array doesnt match expected');
+	//echo '1: '.json_encode($row).'<br>';
+	
+	$row['UserTypeSet'] = ['c/d','a']; //valid type
+	Commit($row, $debug);
+	if($row['UserTypeSet']() != ['a','c/d']) Ex('set array doesnt match expected');
+	//echo '2: '.json_encode($row).'<br>';
+
+	$rows = $t['database']['User']->LookupRows([
+		'UserTypeSet' => 'c/D ,a '
+	]);
+	if(count($rows)!=3 || $rows[2]['UserTypeSet']() != ['a','c/d']) Ex('set array doesnt match expected');
+	//echo '2.5: '.json_encode($rows).'<br>';
+
+	$rows = $t['database']['User']->LookupRows([
+		'UserTypeSet' => ['c/D ','a ']
+	]);
+	if(count($rows)!=3 || $rows[1]['UserTypeSet']() != ['a','c/d']) Ex('set array doesnt match expected');
+	//echo '3: '.json_encode($rows).'<br>';
+	
+	$row['UserTypeSet'] = ['b','a']; //valid type
+	Commit($row, $debug);
+	if($row['UserTypeSet']() != ['a','b']) Ex('set array doesnt match expected');
+	//echo '3: '.json_encode($row).'<br>';
+	
+	$row['UserTypeSet'] = ['a']; //valid type
+	Commit($row, $debug);
+	if($row['UserTypeSet']() != ['a']) Ex('set array doesnt match expected');
+	//echo '4: '.json_encode($row).'<br>';
+	
+	$row2 = new SmartRow('User', $t['database']);
+	$row2['UserTypeSet'] = 'C/d '; //valid type
+	Commit($row2, $debug);
+	if($row2['UserTypeSet']() != ['c/d']) Ex('set array doesnt match expected');
+	//echo '5: '.json_encode($row2).'<br>';
+
+	//ONLY a OR ONLY c
+	//	$lookupAssoc = "OR"=>['a','c']
+	//		...WHERE set = 'a' OR set = 'c'
+	$rows = $t['database']['User']->LookupRows([
+		'UserTypeSet' => ['OR'=>['c/D ','a ']]
+	]);
+	if(count($rows)!=4) Ex('set array doesnt match expected');
+	//echo '6: '.json_encode($rows).'<br>';
+	
+	//ANY WITH a AND c
+	//	$lookupAssoc = "LIKE"=>'%a%,%c%'	//BETTER OPTION
+	//		...WHERE set LIKE '%a%,%c%'; 	//BETTER OPTION
+	//	$lookupAssoc = "LIKE"=>["AND"=>['%a%','%c%']]
+	//		...WHERE set LIKE '%a%' and set LIKE '%c%'
+	$rows = $t['database']['User']->LookupRows([
+		'UserTypeSet' => ['like'=>'c/D ,a ']
+	]);
+	if(count($rows)!=4) Ex('set array doesnt match expected');
+	//echo '7: '.json_encode($rows).'<br>';
+	
+	//invalid lookup assoc  with no column name set (this wa an accident, but it's not a test)
+	$exceptionHit = false;
+	try{
+		$rows = $t['database']['User']->LookupRows([
+			"LIKE"=>["OR"=>['a']]
+		]);
+	} catch (Exception $e){
+		$exceptionHit = true;
+	}
+	if(!$exceptionHit) Ex("Was able to set a lookup assoc with no column name set");
+	
+	//ANY WITH a OR c
+	//	...WHERE set LIKE '%a%' OR set LIKE '%c%';
+	$rows = $t['database']['User']->LookupRows([
+		'UserTypeSet' => ["LIKE"=>["OR"=>['a','b']]]
+	]);
+	//echo '8: '.json_encode($rows).'<br>';
+	if(count($rows)!=14) Ex('set array doesnt match expected');
+	
+	//	...WHERE set LIKE '%a%' OR set LIKE '%c%';
+	$rows = $t['database']['User']->LookupRows([
+		'UserTypeSet' => ["LIKE"=>["OR"=>'b,a ']]
+	]);
+	//echo '8: '.json_encode($rows).'<br>';
+	if(count($rows)!=14) Ex('set array doesnt match expected');
+	
+	//null set 
+	$rows = $t['database']['User']->LookupRows([
+		'UserTypeSet' => null
+	]);
+	//echo '9: '.json_encode($rows).'<br>';
+	if(count($rows)!=4 || $rows[3]['UserTypeSet']() != []) Ex('set array doesnt match expected');
+	
+	//null set 
+	$rows = $t['database']['User']->LookupRows([
+		'UserTypeSet' => ''
+	]);
+	//echo '10: '.json_encode($rows).'<br>';
+	if(count($rows)!=4 || $rows[3]['UserTypeSet']()) Ex('set array doesnt match expected');
+	
+	//null set
+	$rows = $t['database']['User']->LookupRows([
+		'UserTypeSet' => ['',null]
+	]);
+	//echo '11: '.json_encode($rows).'<br>';
+	if(count($rows)!=4 || $rows[3]['UserTypeSet']()) Ex('set array doesnt match expected');
+	
+	//delete null
+	//$deleted = $t['database']['User']->DeleteRows([
+	//	'UserTypeSet' => '' //or null
+	//]);
+	//if($deleted!=4)Ex('set deleted wrong number of rows: '.(int)$deleted);
+	
+	$rows = $t['database']['User']->LookupRows([
+		'UserTypeSet' => ['!=' => 'a']
+	]);
+	if(count($rows)!=18) Ex('wrong rowcount returned for lookup');
+
+	//UserTypeSet is not null / empty set
+	$rows = $t['database']['User']->LookupRows([
+		'UserTypeSet' => ['!=' => []]
+	]);
+	if(count($rows)!=16) Ex('wrong rowcount returned for lookup');
+	
+	$exceptionHit = false;
+	try{
+		$rows = $t['database']['User']->LookupRows([
+			'UserTypeSet' => ['!=' => ['a',null]]
+		]);
+	} catch (Exception $e){
+		$exceptionHit = true;
+	}
+	if(!$exceptionHit) Ex("Was able to use a set with a null value");
+
+	$rows = $t['database']['User']->LookupRows([
+		'UserTypeSet' => ['not like' => 'a']
+	]);
+	if(count($rows)!=12) Ex('wrong rowcount returned for lookup');
+
+	$rows = $t['database']['User']->LookupRows([
+		'UserTypeSet' => ['not like' => ['a']]
+	]);
+	if(count($rows)!=12) Ex('wrong rowcount returned for lookup');
+
+	$rows = $t['database']['User']->LookupRows([
+		'UserTypeSet' => ["AND"=>['!=' => ['a','b']]]
+	]);
+	if(count($rows)!=16) Ex('set array doesnt match expected');
+	
+	$rows = $t['database']['User']->LookupRows([
+		'UserTypeSet' => ["OR"=>['!=' => ['a','b']]]
+	]);
+	if(count($rows)!=18) Ex('set array doesnt match expected');
+	
+	$rows = $t['database']['User']->LookupRows([
+		'UserTypeSet' => ["AND"=>['NOT LIKE' => ['a','b']]]
+	]);
+	if(count($rows)!=6) Ex('set array doesnt match expected');
+	
+		$rows = $t['database']['User']->LookupRows([
+		'UserTypeSet' => ["OR"=>['NOT LIKE' => ['a','b']]]
+	]);
+	if(count($rows)!=16) Ex('set array doesnt match expected');
+	
+
+	//required sets	
+	$t['database']['User']['UserTypeSet']->IsRequired = true;
+	$row = $t['database']['User']();
+	$row['UserTypeSet'] = [''];
+	$exceptionHit = false;
+	try{
+		Commit($row, $debug);
+	} catch (Exception $e){
+		$exceptionHit = true;
+	}
+	$hasErrors = $row['UserTypeSet']->HasErrors();
+	if(!$hasErrors || !$exceptionHit) Ex("Was able to set SET column to null value when required");
+	
+	$t['database']['User']['UserTypeSet']->IsRequired = true;
+	$row = $t['database']['User']();
+	$row['UserTypeSet'] = '';
+	$exceptionHit = false;
+	try{
+		Commit($row, $debug);
+	} catch (Exception $e){
+		$exceptionHit = true;
+	}
+	$hasErrors = $row['UserTypeSet']->HasErrors();
+	if(!$hasErrors || !$exceptionHit) Ex("Was able to set SET column to null value when required");
+	
+
 }
 
 /**
@@ -2221,6 +2475,982 @@ function Test21($t, $debug=false){
 
 }
 
+//fun with dates and timestamps
+function Test22($t, $debug=false){
+	$db = $t['database'];
+	
+	//just some cleanup
+	$db['TimeLog']->DeleteAllRows();
+	$savedTimestamps = [];
+	$savedDatetimes = [];
+
+	$singleDate = '2012-12-12';
+	$singleTime = '12:12:12';
+	
+	//INDY TIME
+	date_default_timezone_set('America/Indiana/Indianapolis');
+	
+		//----- test1 - with no timezones in use anywhere, dates should be completely untouched. date() used everywhere
+		//test with no timezone set. server time assumed
+		$db->DefaultTimezone = '';
+	
+		$row = $db['TimeLog']();
+		$date = date("Y-m-d H:i:s"); //no timezone
+		
+		//commit a row
+		$row['Timestamp'] = $date;
+		$row['Datetime'] = $date;
+		$row['Date'] = $singleDate;
+		$row['Time'] = $singleTime;
+	
+		$row->Commit();
+		$id = $row['TimeLogId']();
+		if(!$id) Ex('New row not added');
+		
+		//lookup that row
+		$row = $db['TimeLog']($id);
+		AssertCellVal($row['Timestamp'], $date);
+		AssertCellVal($row['Datetime'], $date);
+		AssertCellVal($row['Date'], $singleDate);
+		AssertCellVal($row['Time'], $singleTime);
+		
+		$savedTimestamps[] = $savedTimestamp = $row['Timestamp']();
+		$savedDatetimes[] = $savedDatetime = $row['Datetime']();
+		$savedDate = $row['Date']();
+		$savedTime = $row['Time']();
+		
+		//lookup that row again
+		$row = $db['TimeLog']->LookupRow(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$savedTimestamp, 'Datetime'=>$savedDatetime, 'Date'=>$savedDate, 'Time'=>$savedTime]]);
+		AssertExists($row);
+		
+		$row = $db['TimeLog']->LookupRow(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$date, 'Datetime'=>$date, 'Date'=>$singleDate, 'Time'=>$singleTime]]);
+		AssertExists($row);
+		
+		$row = $db['TimeLog']->LookupRows(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$savedTimestamp, 'Datetime'=>$savedDatetime, 'Date'=>$savedDate, 'Time'=>$savedTime]]);
+		AssertExists($row[0]);
+		
+		$row = $db['TimeLog']->LookupRows(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$date, 'Datetime'=>$date, 'Date'=>$singleDate, 'Time'=>$singleTime]]);
+		AssertExists($row[0]);
+		
+		
+		//----- test1.5  - using time(). should be completely untouched
+		$row = $db['TimeLog']();
+		
+		$time = time();
+		$row['Timestamp'] = $time;
+		$row['Datetime'] = $time;
+		$row['Date'] = $singleDate;
+		$row['Time'] = $singleTime;
+	
+		$row->Commit();
+		$id = $row['TimeLogId']();
+		if(!$id) Ex('New row not added');
+		
+		//lookup that row
+		$row = $db['TimeLog']($id);
+		if($row['Timestamp'](true) != $time) Ex("Timestamp '".$row['Timestamp'](true)."' does not match submitted time '".$time."'");
+		if($row['Datetime'](true) != $time) Ex("Timestamp '".$row['Timestamp'](true)."' does not match submitted time '".$time."'");
+		AssertCellVal($row['Date'], $singleDate);
+		AssertCellVal($row['Time'], $singleTime);
+		
+		$savedTimestamps[] = $savedTimestamp = $row['Timestamp']();
+		$savedDatetimes[] = $savedDatetime = $row['Datetime']();
+		$savedDate = $row['Date']();
+		$savedTime = $row['Time']();
+		
+		//lookup that row again
+		$row = $db['TimeLog']->LookupRow(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$savedTimestamp, 'Datetime'=>$savedDatetime, 'Date'=>$savedDate, 'Time'=>$savedTime]]);
+		AssertExists($row);
+		
+		$row = $db['TimeLog']->LookupRow(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$time, 'Datetime'=>$time, 'Date'=>$singleDate, 'Time'=>$singleTime]]);
+		AssertExists($row);
+		
+		$row = $db['TimeLog']->LookupRows(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$savedTimestamp, 'Datetime'=>$savedDatetime, 'Date'=>$savedDate, 'Time'=>$savedTime]]);
+		AssertExists($row[0]);
+		
+		$row = $db['TimeLog']->LookupRows(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$time, 'Datetime'=>$time, 'Date'=>$singleDate, 'Time'=>$singleTime]]);
+		AssertExists($row[0]);
+		
+		
+		
+		//----- test2 - with default timezone
+		$row = $db['TimeLog']();
+		$date = date("Y-m-d H:i:s T"); //with timezone
+		$dateWithoutTz = str_replace(' '.date('T'), '', $date);
+		
+		//commit a row
+		$row['Timestamp'] = $date;
+		$row['Datetime'] = $date;
+		$row['Date'] = $singleDate;
+		$row['Time'] = $singleTime;
+	
+		$row->Commit();
+		$id = $row['TimeLogId']();
+		if(!$id) Ex('New row not added');
+		
+		//lookup that row
+		$row = $db['TimeLog']($id);
+		AssertCellVal($row['Timestamp'], $dateWithoutTz);
+		AssertCellVal($row['Datetime'], $dateWithoutTz);
+		AssertCellVal($row['Date'], $singleDate);
+		AssertCellVal($row['Time'], $singleTime);
+
+		$savedTimestamps[] = $savedTimestamp = $row['Timestamp']();
+		$savedDatetimes[] = $savedDatetime = $row['Datetime']();
+		$savedDate = $row['Date']();
+		$savedTime = $row['Time']();
+		
+		//lookup that row again
+		$row = $db['TimeLog']->LookupRow(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$savedTimestamp, 'Datetime'=>$savedDatetime, 'Date'=>$savedDate, 'Time'=>$savedTime]]);
+		AssertExists($row);
+		
+		$row = $db['TimeLog']->LookupRow(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$date, 'Datetime'=>$date, 'Date'=>$singleDate, 'Time'=>$singleTime]]);
+		AssertExists($row);
+		
+		$row = $db['TimeLog']->LookupRows(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$savedTimestamp, 'Datetime'=>$savedDatetime, 'Date'=>$savedDate, 'Time'=>$savedTime]]);
+		AssertExists($row[0]);
+		
+		$row = $db['TimeLog']->LookupRows(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$date, 'Datetime'=>$date, 'Date'=>$singleDate, 'Time'=>$singleTime]]);
+		AssertExists($row[0]);
+		
+		//$row->Delete();
+
+	
+	//CHI TIME
+	date_default_timezone_set('America/Chicago');
+	//no timezones in use anywhere
+		//----- test1 -  dates should be completely untouched. date() used everywhere
+		//test with no timezone set. server time assumed
+		$db->DefaultTimezone = '';
+	
+		$row = $db['TimeLog']();
+		$date = date("Y-m-d H:i:s"); //no timezone
+		
+		//commit a row
+		$row['Timestamp'] = $date;
+		$row['Datetime'] = $date;
+		$row['Date'] = $singleDate;
+		$row['Time'] = $singleTime;
+	
+		$row->Commit();
+		$id = $row['TimeLogId']();
+		if(!$id) Ex('New row not added');
+		
+		//lookup that row
+		$row = $db['TimeLog']($id);
+		AssertCellVal($row['Timestamp'], $date);
+		AssertCellVal($row['Datetime'], $date);
+		AssertCellVal($row['Date'], $singleDate);
+		AssertCellVal($row['Time'], $singleTime);
+		
+		$savedTimestamps[] = $savedTimestamp = $row['Timestamp']();
+		$savedDatetimes[] = $savedDatetime = $row['Datetime']();
+		$savedDate = $row['Date']();
+		$savedTime = $row['Time']();
+		
+		//lookup that row again
+		$row = $db['TimeLog']->LookupRow(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$savedTimestamp, 'Datetime'=>$savedDatetime, 'Date'=>$savedDate, 'Time'=>$savedTime]]);
+		AssertExists($row);
+		
+		$row = $db['TimeLog']->LookupRow(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$date, 'Datetime'=>$date, 'Date'=>$singleDate, 'Time'=>$singleTime]]);
+		AssertExists($row);
+		
+		$row = $db['TimeLog']->LookupRows(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$savedTimestamp, 'Datetime'=>$savedDatetime, 'Date'=>$savedDate, 'Time'=>$savedTime]]);
+		AssertExists($row[0]);
+		
+		$row = $db['TimeLog']->LookupRows(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$date, 'Datetime'=>$date, 'Date'=>$singleDate, 'Time'=>$singleTime]]);
+		AssertExists($row[0]);
+		
+		//$row->Delete();
+		
+		//----- test1.5  - using time(). should be completely untouched
+		$row = $db['TimeLog']();
+		
+		$time = time();
+		$row['Timestamp'] = $time;
+		$row['Datetime'] = $time;
+		$row['Date'] = $singleDate;
+		$row['Time'] = $singleTime;
+	
+		$row->Commit();
+		$id = $row['TimeLogId']();
+		if(!$id) Ex('New row not added');
+		
+		//lookup that row
+		$row = $db['TimeLog']($id);
+		if($row['Timestamp'](true) != $time) Ex("Timestamp '".$row['Timestamp'](true)."' does not match submitted time '".$time."'");
+		if($row['Datetime'](true) != $time) Ex("Timestamp '".$row['Timestamp'](true)."' does not match submitted time '".$time."'");
+		AssertCellVal($row['Date'], $singleDate);
+		AssertCellVal($row['Time'], $singleTime);
+
+		$savedTimestamps[] = $savedTimestamp = $row['Timestamp']();
+		$savedDatetimes[] = $savedDatetime = $row['Datetime']();
+		$savedDate = $row['Date']();
+		$savedTime = $row['Time']();
+		
+		//lookup that row again
+		$row = $db['TimeLog']->LookupRow(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$savedTimestamp, 'Datetime'=>$savedDatetime, 'Date'=>$savedDate, 'Time'=>$savedTime]]);
+		AssertExists($row);
+		
+		$row = $db['TimeLog']->LookupRow(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$time, 'Datetime'=>$time, 'Date'=>$singleDate, 'Time'=>$singleTime]]);
+		AssertExists($row);
+		
+		$row = $db['TimeLog']->LookupRows(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$savedTimestamp, 'Datetime'=>$savedDatetime, 'Date'=>$savedDate, 'Time'=>$savedTime]]);
+		AssertExists($row[0]);
+		
+		$row = $db['TimeLog']->LookupRows(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$time, 'Datetime'=>$time, 'Date'=>$singleDate, 'Time'=>$singleTime]]);
+		AssertExists($row[0]);
+		
+		
+		
+		//----- test2 - with default timezone
+		$row = $db['TimeLog']();
+		$date = date("Y-m-d H:i:s T"); //with timezone
+		$dateWithoutTz = str_replace(' '.date('T'), '', $date); //will this fail wien it's CDT and not CST?
+		
+		//commit a row
+		$row['Timestamp'] = $date;
+		$row['Datetime'] = $date;
+		$row['Date'] = $singleDate;
+		$row['Time'] = $singleTime;
+	
+		$row->Commit();
+		$id = $row['TimeLogId']();
+		if(!$id) Ex('New row not added');
+		
+		//lookup that row
+		$row = $db['TimeLog']($id);
+		AssertCellVal($row['Timestamp'], $dateWithoutTz);
+		AssertCellVal($row['Datetime'], $dateWithoutTz);
+		AssertCellVal($row['Date'], $singleDate);
+		AssertCellVal($row['Time'], $singleTime);
+
+		$savedTimestamps[] = $savedTimestamp = $row['Timestamp']();
+		$savedDatetimes[] = $savedDatetime = $row['Datetime']();
+		$savedDate = $row['Date']();
+		$savedTime = $row['Time']();
+		
+		//lookup that row again
+		$row = $db['TimeLog']->LookupRow(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$savedTimestamp, 'Datetime'=>$savedDatetime, 'Date'=>$savedDate, 'Time'=>$savedTime]]);
+		AssertExists($row);
+		
+		$row = $db['TimeLog']->LookupRow(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$date, 'Datetime'=>$date, 'Date'=>$singleDate, 'Time'=>$singleTime]]);
+		AssertExists($row);
+		
+		$row = $db['TimeLog']->LookupRows(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$savedTimestamp, 'Datetime'=>$savedDatetime, 'Date'=>$savedDate, 'Time'=>$savedTime]]);
+		AssertExists($row[0]);
+		
+		$row = $db['TimeLog']->LookupRows(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$date, 'Datetime'=>$date, 'Date'=>$singleDate, 'Time'=>$singleTime]]);
+		AssertExists($row[0]);
+		
+
+	
+	//INDY TIME
+	date_default_timezone_set('America/Indiana/Indianapolis');
+	$db->DefaultTimezone = 'America/Indiana/Indianapolis';
+		//----- test3 - with no timezones in use anywhere, dates should be completely untouched. date() used everywhere
+		//test with no timezone set. server time assumed
+	
+		$row = $db['TimeLog']();
+		$date = date("Y-m-d H:i:s T");
+		
+		//commit a row
+		$row['Timestamp'] = $date;
+		$row['Datetime'] = $date;
+		$row['Date'] = $singleDate;
+		$row['Time'] = $singleTime;
+	
+		$row->Commit();
+		$id = $row['TimeLogId']();
+		if(!$id) Ex('New row not added');
+		
+		//lookup that row
+		$row = $db['TimeLog']($id);
+		AssertCellVal($row['Timestamp'], $date);
+		AssertCellVal($row['Datetime'], $date);
+		AssertCellVal($row['Date'], $singleDate);
+		AssertCellVal($row['Time'], $singleTime);
+		
+		$savedTimestamps[] = $savedTimestamp = $row['Timestamp']();
+		$savedDatetimes[] = $savedDatetime = $row['Datetime']();
+		$savedDate = $row['Date']();
+		$savedTime = $row['Time']();
+		
+		//lookup that row again
+		$row = $db['TimeLog']->LookupRow(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$savedTimestamp, 'Datetime'=>$savedDatetime, 'Date'=>$savedDate, 'Time'=>$savedTime]]);
+		AssertExists($row);
+		
+		$row = $db['TimeLog']->LookupRow(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$date, 'Datetime'=>$date, 'Date'=>$singleDate, 'Time'=>$singleTime]]);
+		AssertExists($row);
+		
+		//lookup that row again
+		$row = $db['TimeLog']->LookupRows(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$savedTimestamp, 'Datetime'=>$savedDatetime, 'Date'=>$savedDate, 'Time'=>$savedTime]]);
+		AssertExists($row[0]);
+		
+		$row = $db['TimeLog']->LookupRows(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$date, 'Datetime'=>$date, 'Date'=>$singleDate, 'Time'=>$singleTime]]);
+		AssertExists($row[0]);
+		
+		
+		
+		$row = $db['TimeLog']();
+		$date = date("Y-m-d H:i:s");
+		
+		//commit a row
+		$row['Timestamp'] = $date;
+		$row['Datetime'] = $date;
+		$row['Date'] = $singleDate;
+		$row['Time'] = $singleTime;
+	
+		$row->Commit();
+		$id = $row['TimeLogId']();
+		if(!$id) Ex('New row not added');
+		
+		//lookup that row
+		$row = $db['TimeLog']($id);
+		AssertCellVal($row['Timestamp'], $date.' '.date('T'));
+		AssertCellVal($row['Datetime'], $date.' '.date('T'));
+		AssertCellVal($row['Date'], $singleDate);
+		AssertCellVal($row['Time'], $singleTime);
+
+		$savedTimestamps[] = $savedTimestamp = $row['Timestamp']();
+		$savedDatetimes[] = $savedDatetime = $row['Datetime']();
+		$savedDate = $row['Date']();
+		$savedTime = $row['Time']();
+		
+		//lookup that row again
+		$row = $db['TimeLog']->LookupRow(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$savedTimestamp, 'Datetime'=>$savedDatetime, 'Date'=>$savedDate, 'Time'=>$savedTime]]);
+		AssertExists($row);
+		
+		$row = $db['TimeLog']->LookupRow(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$date, 'Datetime'=>$date, 'Date'=>$singleDate, 'Time'=>$singleTime]]);
+		AssertExists($row);
+		
+		$row = $db['TimeLog']->LookupRows(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$savedTimestamp, 'Datetime'=>$savedDatetime, 'Date'=>$savedDate, 'Time'=>$savedTime]]);
+		AssertExists($row[0]);
+		
+		$row = $db['TimeLog']->LookupRows(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$date, 'Datetime'=>$date, 'Date'=>$singleDate, 'Time'=>$singleTime]]);
+		AssertExists($row[0]);
+	
+	
+	//INDY TIME
+	$db->DefaultTimezone = 'America/Indiana/Indianapolis';	
+		//----- test3 - with no timezones in use anywhere, dates should be completely untouched. date() used everywhere
+		//test with no timezone set. server time assumed
+	
+		$row = $db['TimeLog']();
+		$date = date("Y-m-d H:i:s T");
+		
+		//commit a row
+		$row['Timestamp'] = $date;
+		$row['Datetime'] = $date;
+		$row['Date'] = $singleDate;
+		$row['Time'] = $singleTime;
+	
+		$row->Commit();
+		$id = $row['TimeLogId']();
+		if(!$id) Ex('New row not added');
+		
+		//lookup that row
+		$row = $db['TimeLog']($id);
+		AssertCellVal($row['Timestamp'], $date);
+		AssertCellVal($row['Datetime'], $date);
+		AssertCellVal($row['Date'], $singleDate);
+		AssertCellVal($row['Time'], $singleTime);
+
+		$savedTimestamps[] = $savedTimestamp = $row['Timestamp']();
+		$savedDatetimes[] = $savedDatetime = $row['Datetime']();
+		$savedDate = $row['Date']();
+		$savedTime = $row['Time']();
+		
+		//lookup that row again
+		$row = $db['TimeLog']->LookupRow(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$savedTimestamp, 'Datetime'=>$savedDatetime, 'Date'=>$savedDate, 'Time'=>$savedTime]]);
+		AssertExists($row);
+		
+		$row = $db['TimeLog']->LookupRow(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$date, 'Datetime'=>$date, 'Date'=>$singleDate, 'Time'=>$singleTime]]);
+		AssertExists($row);
+		
+		$row = $db['TimeLog']->LookupRows(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$savedTimestamp, 'Datetime'=>$savedDatetime, 'Date'=>$savedDate, 'Time'=>$savedTime]]);
+		AssertExists($row[0]);
+		
+		$row = $db['TimeLog']->LookupRows(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$date, 'Datetime'=>$date, 'Date'=>$singleDate, 'Time'=>$singleTime]]);
+		AssertExists($row[0]);
+		
+		
+		
+		$row = $db['TimeLog']();
+		date_default_timezone_set('America/Chicago');
+		$tz = date('T');
+		date_default_timezone_set('America/Indiana/Indianapolis');
+		$cstdate = date("Y-m-d H:i:s").' '.$tz;
+		
+		//commit a row
+		$row['Timestamp'] = $cstdate;
+		$row['Datetime'] = $cstdate;
+		$row['Date'] = $singleDate;
+		$row['Time'] = $singleTime;
+	
+		$row->Commit();
+		$id = $row['TimeLogId']();
+		if(!$id) Ex('New row not added');
+		
+		//lookup that row
+		$db->DefaultTimezone = 'America/Chicago';
+		$row = $db['TimeLog']($id);
+		AssertCellVal($row['Timestamp'], $cstdate);
+		AssertCellVal($row['Datetime'], $cstdate);
+		AssertCellVal($row['Date'], $singleDate);
+		AssertCellVal($row['Time'], $singleTime);
+
+		$savedTimestamps[] = $savedTimestamp = $row['Timestamp']();
+		$savedDatetimes[] = $savedDatetime = $row['Datetime']();
+		$savedDate = $row['Date']();
+		$savedTime = $row['Time']();
+		
+		//lookup that row again
+		$row = $db['TimeLog']->LookupRow(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$savedTimestamp, 'Datetime'=>$savedDatetime, 'Date'=>$savedDate, 'Time'=>$savedTime]]);
+		AssertExists($row);
+		
+		$row = $db['TimeLog']->LookupRow(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$cstdate, 'Datetime'=>$cstdate, 'Date'=>$singleDate, 'Time'=>$singleTime]]);
+		AssertExists($row);
+		
+		$row = $db['TimeLog']->LookupRows(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$savedTimestamp, 'Datetime'=>$savedDatetime, 'Date'=>$savedDate, 'Time'=>$savedTime]]);
+		AssertExists($row[0]);
+		
+		$row = $db['TimeLog']->LookupRows(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$cstdate, 'Datetime'=>$cstdate, 'Date'=>$singleDate, 'Time'=>$singleTime]]);
+		AssertExists($row[0]);
+		
+		
+	
+	//INDY TIME
+	$db->DefaultTimezone = 'UTC';	
+		//----- test3 - with no timezones in use anywhere, dates should be completely untouched. date() used everywhere
+		//test with no timezone set. server time assumed
+	
+		$row = $db['TimeLog']();
+		$date = date("Y-m-d H:i:s T");
+		$gmdate = gmdate("Y-m-d H:i:s ").'UTC'; //for comparison of current timezone
+		
+		//commit a row
+		$row['Timestamp'] = $date;
+		$row['Datetime'] = $date;
+		$row['Date'] = $singleDate;
+		$row['Time'] = $singleTime;
+	
+		$row->Commit();
+		$id = $row['TimeLogId']();
+		if(!$id) Ex('New row not added');
+		
+		//lookup that row
+		$row = $db['TimeLog']($id);
+		AssertCellVal($row['Timestamp'], $gmdate);
+		AssertCellVal($row['Datetime'], $gmdate);
+		AssertCellVal($row['Date'], $singleDate);
+		AssertCellVal($row['Time'], $singleTime);
+
+		$savedTimestamps[] = $savedTimestamp = $row['Timestamp']();
+		$savedDatetimes[] = $savedDatetime = $row['Datetime']();
+		$savedDate = $row['Date']();
+		$savedTime = $row['Time']();
+		
+		//lookup that row again
+		$row = $db['TimeLog']->LookupRow(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$savedTimestamp, 'Datetime'=>$savedDatetime, 'Date'=>$savedDate, 'Time'=>$savedTime]]);
+		AssertExists($row);
+		
+		$row = $db['TimeLog']->LookupRow(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$date, 'Datetime'=>$date, 'Date'=>$singleDate, 'Time'=>$singleTime]]);
+		AssertExists($row);
+		
+		$row = $db['TimeLog']->LookupRows(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$savedTimestamp, 'Datetime'=>$savedDatetime, 'Date'=>$savedDate, 'Time'=>$savedTime]]);
+		AssertExists($row[0]);
+		
+		$row = $db['TimeLog']->LookupRows(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$date, 'Datetime'=>$date, 'Date'=>$singleDate, 'Time'=>$singleTime]]);
+		AssertExists($row[0]);
+		
+		
+		
+		$row = $db['TimeLog']();		
+		date_default_timezone_set('America/Chicago');
+		$tz = date('T');
+		date_default_timezone_set('America/Indiana/Indianapolis');
+		$cstdate = date("Y-m-d H:i:s").' '.$tz;
+		
+		//commit a row
+		$row['Timestamp'] = $cstdate;
+		$row['Datetime'] = $cstdate;
+		$row['Date'] = $singleDate;
+		$row['Time'] = $singleTime;
+	
+		$row->Commit();
+		$id = $row['TimeLogId']();
+		if(!$id) Ex('New row not added');
+		
+		//lookup that row
+		$db->DefaultTimezone = 'America/Chicago';
+		$row = $db['TimeLog']($id);
+		AssertCellVal($row['Timestamp'], $cstdate);
+		AssertCellVal($row['Datetime'], $cstdate);
+		AssertCellVal($row['Date'], $singleDate);
+		AssertCellVal($row['Time'], $singleTime);
+
+		$savedTimestamps[] = $savedTimestamp = $row['Timestamp']();
+		$savedDatetimes[] = $savedDatetime = $row['Datetime']();
+		$savedDate = $row['Date']();
+		$savedTime = $row['Time']();
+		
+		//lookup that row again
+		$row = $db['TimeLog']->LookupRow(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$savedTimestamp, 'Datetime'=>$savedDatetime, 'Date'=>$savedDate, 'Time'=>$savedTime]]);
+		AssertExists($row);
+		
+		$row = $db['TimeLog']->LookupRow(['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$cstdate, 'Datetime'=>$cstdate, 'Date'=>$singleDate, 'Time'=>$singleTime]]);
+		AssertExists($row);
+		
+		
+		
+	//COMPARE saved datetimes with GetAllValues()
+		//print_r($savedDatetimes);
+		date_default_timezone_set('America/Indiana/Indianapolis');
+		
+		$db->DefaultTimezone = '';	
+		$datetimes = $db['TimeLog']['Datetime']->GetAllValues(['sort-by'=>['TimeLogId'=>'ASC']]);
+		for($i=0; $i<=5; $i++){
+			if($datetimes[$i] != $savedDatetimes[$i]) throw new Exception('Date mismatch: '.$datetimes[$i].' != '.$savedDatetimes[$i]);
+		}
+	
+		$db->DefaultTimezone = 'America/Indiana/Indianapolis';	
+		$estDatetimes = $db['TimeLog']['Datetime']->GetAllValues(['sort-by'=>['TimeLogId'=>'ASC']]);
+		if($estDatetimes[6] != $savedDatetimes[6]) throw new Exception('Date mismatch: '.$estDatetimes[6].' != '.$savedDatetimes[6]);
+		if($estDatetimes[7] != $savedDatetimes[7]) throw new Exception('Date mismatch: '.$estDatetimes[7].' != '.$savedDatetimes[7]);
+		if($estDatetimes[8] != $savedDatetimes[8]) throw new Exception('Date mismatch: '.$estDatetimes[8].' != '.$savedDatetimes[8]);
+		
+		$db->DefaultTimezone = 'America/Chicago';	
+		$cstDatetimes = $db['TimeLog']['Datetime']->GetAllValues(['sort-by'=>['TimeLogId'=>'ASC']]);
+		if($cstDatetimes[9] != $savedDatetimes[9]) throw new Exception('Date mismatch: '.$cstDatetimes[9].' != '.$savedDatetimes[9]);
+		if($cstDatetimes[11] != $savedDatetimes[11]) throw new Exception('Date mismatch: '.$cstDatetimes[11].' != '.$savedDatetimes[11]);
+		
+		$db->DefaultTimezone = 'UTC';	
+		$gmtDatetimes = $db['TimeLog']['Datetime']->GetAllValues(['sort-by'=>['TimeLogId'=>'ASC']]);
+		if($gmtDatetimes[10] != $savedDatetimes[10]) throw new Exception('Date mismatch: '.$gmtDatetimes[10].' != '.$savedDatetimes[10]);
+		
+		date_default_timezone_set('America/Chicago');
+		$db->DefaultTimezone = 'America/Indiana/Indianapolis';	
+		$estDatetimes = $db['TimeLog']['Datetime']->GetAllValues(['sort-by'=>['TimeLogId'=>'ASC']]);
+		if($estDatetimes[6] != $savedDatetimes[6]) throw new Exception('Date mismatch: '.$estDatetimes[6].' != '.$savedDatetimes[6]);
+		if($estDatetimes[7] != $savedDatetimes[7]) throw new Exception('Date mismatch: '.$estDatetimes[7].' != '.$savedDatetimes[7]);
+		if($estDatetimes[8] != $savedDatetimes[8]) throw new Exception('Date mismatch: '.$estDatetimes[8].' != '.$savedDatetimes[8]);
+		
+		$db->DefaultTimezone = 'America/Chicago';	
+		$cstDatetimes = $db['TimeLog']['Datetime']->GetAllValues(['sort-by'=>['TimeLogId'=>'ASC']]);
+		if($cstDatetimes[9] != $savedDatetimes[9]) throw new Exception('Date mismatch: '.$cstDatetimes[9].' != '.$savedDatetimes[9]);
+		if($cstDatetimes[11] != $savedDatetimes[11]) throw new Exception('Date mismatch: '.$cstDatetimes[11].' != '.$savedDatetimes[11]);
+		
+		$db->DefaultTimezone = 'UTC';	
+		$gmtDatetimes = $db['TimeLog']['Datetime']->GetAllValues(['sort-by'=>['TimeLogId'=>'ASC']]);
+		if($gmtDatetimes[10] != $savedDatetimes[10]) throw new Exception('Date mismatch: '.$gmtDatetimes[10].' != '.$savedDatetimes[10]);
+
+	
+	//COMPARE saved timestamps with GetAllValues()
+		date_default_timezone_set('America/Indiana/Indianapolis');
+		
+		$db->DefaultTimezone = '';	
+		$timestamps = $db['TimeLog']['Timestamp']->GetAllValues(['sort-by'=>['TimeLogId'=>'ASC']]);
+		for($i=0; $i<=5; $i++){
+			if($timestamps[$i] != $savedTimestamps[$i]) throw new Exception('Date mismatch: '.$timestamps[$i].' != '.$savedTimestamps[$i]);
+		}
+	
+		$db->DefaultTimezone = 'America/Indiana/Indianapolis';	
+		$estTimestamps = $db['TimeLog']['Timestamp']->GetAllValues(['sort-by'=>['TimeLogId'=>'ASC']]);
+		if($estTimestamps[6] != $savedTimestamps[6]) throw new Exception('Date mismatch: '.$estTimestamps[6].' != '.$savedTimestamps[6]);
+		if($estTimestamps[7] != $savedTimestamps[7]) throw new Exception('Date mismatch: '.$estTimestamps[7].' != '.$savedTimestamps[7]);
+		if($estTimestamps[8] != $savedTimestamps[8]) throw new Exception('Date mismatch: '.$estTimestamps[8].' != '.$savedTimestamps[8]);
+		
+		$db->DefaultTimezone = 'America/Chicago';	
+		$cstTimestamps = $db['TimeLog']['Timestamp']->GetAllValues(['sort-by'=>['TimeLogId'=>'ASC']]);
+		if($cstTimestamps[9] != $savedTimestamps[9]) throw new Exception('Date mismatch: '.$cstTimestamps[9].' != '.$savedTimestamps[9]);
+		if($cstTimestamps[11] != $savedTimestamps[11]) throw new Exception('Date mismatch: '.$cstTimestamps[11].' != '.$savedTimestamps[11]);
+		
+		$db->DefaultTimezone = 'UTC';	
+		$gmtTimestamps = $db['TimeLog']['Timestamp']->GetAllValues(['sort-by'=>['TimeLogId'=>'ASC']]);
+		if($gmtTimestamps[10] != $savedTimestamps[10]) throw new Exception('Date mismatch: '.$gmtTimestamps[10].' != '.$savedTimestamps[10]);
+		
+		date_default_timezone_set('America/Chicago');
+		$db->DefaultTimezone = 'America/Indiana/Indianapolis';	
+		$estTimestamps = $db['TimeLog']['Timestamp']->GetAllValues(['sort-by'=>['TimeLogId'=>'ASC']]);
+		if($estTimestamps[6] != $savedTimestamps[6]) throw new Exception('Date mismatch: '.$estTimestamps[6].' != '.$savedTimestamps[6]);
+		if($estTimestamps[7] != $savedTimestamps[7]) throw new Exception('Date mismatch: '.$estTimestamps[7].' != '.$savedTimestamps[7]);
+		if($estTimestamps[8] != $savedTimestamps[8]) throw new Exception('Date mismatch: '.$estTimestamps[8].' != '.$savedTimestamps[8]);
+		
+		$db->DefaultTimezone = 'America/Chicago';	
+		$cstTimestamps = $db['TimeLog']['Timestamp']->GetAllValues(['sort-by'=>['TimeLogId'=>'ASC']]);
+		if($cstTimestamps[9] != $savedTimestamps[9]) throw new Exception('Date mismatch: '.$cstTimestamps[9].' != '.$savedTimestamps[9]);
+		if($cstTimestamps[11] != $savedTimestamps[11]) throw new Exception('Date mismatch: '.$cstTimestamps[11].' != '.$savedTimestamps[11]);
+		
+		$db->DefaultTimezone = 'UTC';	
+		$gmtTimestamps = $db['TimeLog']['Timestamp']->GetAllValues(['sort-by'=>['TimeLogId'=>'ASC']]);
+		if($gmtTimestamps[10] != $savedTimestamps[10]) throw new Exception('Date mismatch: '.$gmtTimestamps[10].' != '.$savedTimestamps[10]);
+
+	
+	$times = $db['TimeLog']['Time']->GetAllValues();
+	foreach($times as $time){
+		if($time != $singleTime) throw new Exception('Time mismatch: '.$time.' != '.$singleTime);
+	}
+	
+	$dates = $db['TimeLog']['Date']->GetAllValues();
+	foreach($dates as $date){
+		if($date != $singleDate) throw new Exception('Time mismatch: '.$date.' != '.$singleDate);
+	}
+		
+	//LOOKUP ROWS with dates
+	date_default_timezone_set('America/Indiana/Indianapolis');
+
+	$db->DefaultTimezone = '';
+		$rows = $db['TimeLog']->LookupRows([
+			'Datetime' => $savedDatetimes[0],
+			'Date'=>$singleDate,
+			'Time'=>$singleTime
+		]);
+		$rowcount1 = count($rows);
+		if($rowcount1==0) throw new Exception('Dates not found using LookupRows');
+
+		$rows = $db['TimeLog']->LookupRows([
+			'Datetime' => $savedDatetimes[6],
+			'Date'=>$singleDate,
+			'Time'=>$singleTime
+		]);
+		$rowcount2 = count($rows);
+		if($rowcount2 != $rowcount1) throw new Exception('Different rowcount returned when searching with timezone set');
+
+	$db->DefaultTimezone = 'America/Indiana/Indianapolis';
+		$rows = $db['TimeLog']->LookupRows([
+			'Datetime' => $savedDatetimes[0], //assumes this is an EST date, but assumes UTC dates in the db.
+			'Date'=>$singleDate,
+			'Time'=>$singleTime
+		]);
+		$rowcount3 = count($rows);
+		if($rowcount3 == $rowcount1) throw new Exception('Same rowcount found when timezone set.');
+
+		$rows = $db['TimeLog']->LookupRows([
+			'Datetime' => $savedDatetimes[6],
+			'Date'=>$singleDate,
+			'Time'=>$singleTime
+		]);
+		$rowcount4 = count($rows);
+		if($rowcount3 != $rowcount4) throw new Exception('Different rowcount returned when searching with timezone set');
+		
+	$db->DefaultTimezone = 'America/Chicago';
+		$rows = $db['TimeLog']->LookupRows([
+			'Datetime' => $savedDatetimes[0], //assumes this is an EST date, but assumes UTC dates in the db.
+			'Date'=>$singleDate,
+			'Time'=>$singleTime
+		]);
+		$rowcount3 = count($rows);
+		if($rowcount3 == $rowcount1) throw new Exception('Same rowcount found when timezone set.');
+
+		$rows = $db['TimeLog']->LookupRows([
+			'Datetime' => $savedDatetimes[6],
+			'Date'=>$singleDate,
+			'Time'=>$singleTime
+		]);
+		$rowcount4 = count($rows);
+		if($rowcount3 != $rowcount4) throw new Exception('Different rowcount returned when searching with timezone set');
+	
+
+	
+	
+	//LOOKUP COL VALUES
+	date_default_timezone_set('America/Chicago');
+	$db->DefaultTimezone = '';
+	$date = "2000-01-01 00:00:00";
+	$expectedRetDate = $date;
+		$row = $db['TimeLog']();
+		$row['Timestamp'] = $date;
+		$row['Datetime'] = $date;
+		$row['Date'] = $singleDate;
+		$row['Time'] = $singleTime;
+		$row->Commit();
+		$id = $row['TimeLogId']();
+		
+		$foundVals = $db['TimeLog']->LookupColumnValue('Datetime',['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$date, 'Datetime'=>$date, 'Date'=>$singleDate, 'Time'=>$singleTime]]);
+		if($foundVals !== $expectedRetDate) throw new Exception('$foundVals ('.$foundVals.') !== $expectedRetDate ('.$expectedRetDate.')');
+		
+	date_default_timezone_set('America/Indiana/Indianapolis');
+	$db->DefaultTimezone = '';
+	$date = "2000-01-01 00:00:00";
+	$expectedRetDate = $date;
+		$row = $db['TimeLog']();
+		$row['Timestamp'] = $date;
+		$row['Datetime'] = $date;
+		$row['Date'] = $singleDate;
+		$row['Time'] = $singleTime;
+		$row->Commit();
+		$id = $row['TimeLogId']();
+		
+		$foundVals = $db['TimeLog']->LookupColumnValue('Datetime',['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$date, 'Datetime'=>$date, 'Date'=>$singleDate, 'Time'=>$singleTime]]);
+		if($foundVals !== $expectedRetDate) throw new Exception('$foundVals ('.$foundVals.') !== $expectedRetDate ('.$expectedRetDate.')');
+		
+	date_default_timezone_set('UTC'); 
+	$db->DefaultTimezone = '';
+	$date = "2000-01-01 00:00:00";
+	$expectedRetDate = $date;
+		$row = $db['TimeLog']();
+		$row['Timestamp'] = $date;
+		$row['Datetime'] = $date;
+		$row['Date'] = $singleDate;
+		$row['Time'] = $singleTime;
+		$row->Commit();
+		$id = $row['TimeLogId']();
+		
+		$foundVals = $db['TimeLog']->LookupColumnValue('Datetime',['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$date, 'Datetime'=>$date, 'Date'=>$singleDate, 'Time'=>$singleTime]]);
+		if($foundVals !== $expectedRetDate) throw new Exception('$foundVals ('.$foundVals.') !== $expectedRetDate ('.$expectedRetDate.')');
+
+		
+		
+	date_default_timezone_set('America/Chicago');
+	$db->DefaultTimezone = 'America/Chicago';
+	$date = "2000-01-01 00:00:00"; //CST IS ASSUMED WITH NO GIVEN because it's JANUARY (NOT CDT) 
+	$expectedRetDate = $date." CST";
+		$row = $db['TimeLog']();
+		$row['Timestamp'] = $date;
+		$row['Datetime'] = $date;
+		$row['Date'] = $singleDate;
+		$row['Time'] = $singleTime;
+		$row->Commit();
+		$id = $row['TimeLogId']();
+		
+		$foundVals = $db['TimeLog']->LookupColumnValue('Datetime',['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$date, 'Datetime'=>$date, 'Date'=>$singleDate, 'Time'=>$singleTime]]);
+		if($foundVals !== $expectedRetDate) throw new Exception('$foundVals ('.$foundVals.') !== $expectedRetDate ('.$expectedRetDate.')');
+	
+	date_default_timezone_set('America/Chicago');
+	$db->DefaultTimezone = 'America/Indiana/Indianapolis';
+	$date = "2000-01-01 00:00:00"; //EST IS ASSUMED WITH NO GIVEN because it's JANUARY (NOT EDT) 
+	$expectedRetDate = "2000-01-01 01:00:00 EST";
+		$row = $db['TimeLog']();
+		$row['Timestamp'] = $date;
+		$row['Datetime'] = $date;
+		$row['Date'] = $singleDate;
+		$row['Time'] = $singleTime;
+		$row->Commit();
+		$id = $row['TimeLogId']();
+		
+		$foundVals = $db['TimeLog']->LookupColumnValue('Datetime',['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$date, 'Datetime'=>$date, 'Date'=>$singleDate, 'Time'=>$singleTime]]);
+		if($foundVals !== $expectedRetDate) throw new Exception('$foundVals ('.$foundVals.') !== $expectedRetDate ('.$expectedRetDate.')');
+	
+	date_default_timezone_set('America/Chicago');
+	$db->DefaultTimezone = 'UTC';
+	$date = "2000-01-01 00:00:00"; //CST IS ASSUMED WITH NO GIVEN because it's JANUARY (NOT CDT) 
+	$expectedRetDate = "2000-01-01 06:00:00 UTC";
+		$row = $db['TimeLog']();
+		$row['Timestamp'] = $date;
+		$row['Datetime'] = $date;
+		$row['Date'] = $singleDate;
+		$row['Time'] = $singleTime;
+		$row->Commit();
+		$id = $row['TimeLogId']();
+		
+		$foundVals = $db['TimeLog']->LookupColumnValue('Datetime',['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$date, 'Datetime'=>$date, 'Date'=>$singleDate, 'Time'=>$singleTime]]);
+		if($foundVals !== $expectedRetDate) throw new Exception('$foundVals ('.$foundVals.') !== $expectedRetDate ('.$expectedRetDate.')');
+	
+	
+	
+	date_default_timezone_set('America/Chicago');
+	$db->DefaultTimezone = 'America/Chicago';
+	$date = "2000-01-01 00:00:00"; //CST IS ASSUMED WITH NO GIVEN because it's JANUARY (NOT CDT) 
+	$expectedRetDate = $date." CST";
+		$row = $db['TimeLog']();
+		$row['Timestamp'] = $date;
+		$row['Datetime'] = $date;
+		$row['Date'] = $singleDate;
+		$row['Time'] = $singleTime;
+		$row->Commit();
+		$id = $row['TimeLogId']();
+		
+		$foundVals = $db['TimeLog']->LookupColumnValue('Datetime',['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$date, 'Datetime'=>$date, 'Date'=>$singleDate, 'Time'=>$singleTime]]);
+		if($foundVals !== $expectedRetDate) throw new Exception('$foundVals ('.$foundVals.') !== $expectedRetDate ('.$expectedRetDate.')');
+	
+	date_default_timezone_set('America/Indiana/Indianapolis');
+	$db->DefaultTimezone = 'America/Indiana/Indianapolis';
+	$date = "2000-01-01 00:00:00"; //EST IS ASSUME WITH NO GIVEN TZ SET because it's JANUARY (NOT EDT) 
+	$expectedRetDate = $date." EST";
+		$row = $db['TimeLog']();
+		$row['Timestamp'] = $date;
+		$row['Datetime'] = $date;
+		$row['Date'] = $singleDate;
+		$row['Time'] = $singleTime;
+		$row->Commit();
+		$id = $row['TimeLogId']();
+		
+		$foundVals = $db['TimeLog']->LookupColumnValue('Datetime',['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$date, 'Datetime'=>$date, 'Date'=>$singleDate, 'Time'=>$singleTime]]);
+		if($foundVals !== $expectedRetDate) throw new Exception('$foundVals ('.$foundVals.') !== $expectedRetDate ('.$expectedRetDate.')');
+	
+	date_default_timezone_set('UTC'); 
+	$db->DefaultTimezone = 'UTC';
+	$date = "2000-01-01 00:00:00"; //UTC IS ASSUME WITH NO GIVEN TZ SET
+	$expectedRetDate = $date." UTC";
+		$row = $db['TimeLog']();
+		$row['Timestamp'] = $date;
+		$row['Datetime'] = $date;
+		$row['Date'] = $singleDate;
+		$row['Time'] = $singleTime;
+		$row->Commit();
+		$id = $row['TimeLogId']();
+		
+		$foundVals = $db['TimeLog']->LookupColumnValue('Datetime',['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$date, 'Datetime'=>$date, 'Date'=>$singleDate, 'Time'=>$singleTime]]);
+		if($foundVals !== $expectedRetDate) throw new Exception('$foundVals ('.$foundVals.') !== $expectedRetDate ('.$expectedRetDate.')');
+	
+	
+	
+	date_default_timezone_set('America/Chicago');
+	$db->DefaultTimezone = 'America/Chicago';
+	$date = "2000-01-01 00:00:00 CST"; 
+	$expectedRetDate = "2000-01-01 00:00:00 CST"; //CST IS ASSUMED WITH NO GIVEN because it's JANUARY (NOT CDT) 
+		$row = $db['TimeLog']();
+		$row['Timestamp'] = $date;
+		$row['Datetime'] = $date;
+		$row['Date'] = $singleDate;
+		$row['Time'] = $singleTime;
+		$row->Commit();
+		$id = $row['TimeLogId']();
+		
+		$foundVals = $db['TimeLog']->LookupColumnValue('Datetime',['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$date, 'Datetime'=>$date, 'Date'=>$singleDate, 'Time'=>$singleTime]]);
+		if($foundVals !== $expectedRetDate) throw new Exception('$foundVals ('.$foundVals.') !== $expectedRetDate ('.$expectedRetDate.')');
+	
+	date_default_timezone_set('America/Indiana/Indianapolis');
+	$db->DefaultTimezone = 'America/Indiana/Indianapolis';
+	$date = "2000-01-01 00:00:00 CST"; 
+	$expectedRetDate = "2000-01-01 01:00:00 EST"; //EST IS ASSUMED WITH NO GIVEN because it's JANUARY (NOT EDT) 
+		$row = $db['TimeLog']();
+		$row['Timestamp'] = $date;
+		$row['Datetime'] = $date;
+		$row['Date'] = $singleDate;
+		$row['Time'] = $singleTime;
+		$row->Commit();
+		$id = $row['TimeLogId']();
+		
+		$foundVals = $db['TimeLog']->LookupColumnValue('Datetime',['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$date, 'Datetime'=>$date, 'Date'=>$singleDate, 'Time'=>$singleTime]]);
+		if($foundVals !== $expectedRetDate) throw new Exception('$foundVals ('.$foundVals.') !== $expectedRetDate ('.$expectedRetDate.')');
+	
+	date_default_timezone_set('UTC'); 
+	$db->DefaultTimezone = 'UTC';
+	$date = date("2000-01-01 00:00:00 T"); 
+	$expectedRetDate = "2000-01-01 00:00:00 UTC";
+		$row = $db['TimeLog']();
+		$row['Timestamp'] = $date;
+		$row['Datetime'] = $date;
+		$row['Date'] = $singleDate;
+		$row['Time'] = $singleTime;
+		$row->Commit();
+		$id = $row['TimeLogId']();
+		
+		$foundVals = $db['TimeLog']->LookupColumnValue('Datetime',['AND'=>['TimeLogId'=>$id, 'Timestamp'=>$date, 'Datetime'=>$date, 'Date'=>$singleDate, 'Time'=>$singleTime]]);
+		if($foundVals !== $expectedRetDate) throw new Exception('$foundVals ('.$foundVals.') !== $expectedRetDate ('.$expectedRetDate.')');
+	
+	
+	
+	
+	//AGGREGATE VALUES
+	$biggerDate = '2020-02-02';
+	$biggerTime = '20:20:20';
+	$row = $db['TimeLog']();
+		$row['Timestamp'] = gmdate("2030-01-01 00:00:00"); 
+		$row['Datetime'] = gmdate("2030-01-01 00:00:00");
+		$row['Date'] = $biggerDate;
+		$row['Time'] = $biggerTime;
+		$row->Commit();
+		
+	date_default_timezone_set('UTC'); 
+	$db->DefaultTimezone = 'UTC';
+		$maxDatetime = $db['TimeLog']['Datetime']->GetMaxValue();
+		$maxTimestamp = $db['TimeLog']['Timestamp']->GetMaxValue();
+		$maxDate = $db['TimeLog']['Date']->GetMaxValue();
+		$maxTime = $db['TimeLog']['Time']->GetMaxValue();
+		$expectedVal = '2030-01-01 00:00:00 UTC';
+		if($maxDatetime != $expectedVal) throw new Exception('$maxDatetime ('.$maxDatetime.') != $expectedVal ('.$expectedVal.')');
+		if($maxTimestamp != $expectedVal) throw new Exception('$maxDatetime ('.$maxDatetime.') != $expectedVal ('.$expectedVal.')');
+		if($maxDate != $biggerDate) throw new Exception('$maxDate ('.$maxDate.') != $biggerDate ('.$biggerDate.')');
+		if($maxTime != $biggerTime) throw new Exception('$maxDatetime ('.$maxTime.') != $expectedVal ('.$biggerTime.')');
+
+	//date_default_timezone_set('America/Chicago');
+	$db->DefaultTimezone = 'America/Chicago';
+		$maxDatetime = $db['TimeLog']['Datetime']->GetMaxValue();
+		$maxTimestamp = $db['TimeLog']['Timestamp']->GetMaxValue();
+		$maxDate = $db['TimeLog']['Date']->GetMaxValue();
+		$maxTime = $db['TimeLog']['Time']->GetMaxValue();
+		date_default_timezone_set('America/Chicago');
+		$expectedVal = '2029-12-31 18:00:00 CST'; //expected CST not CDT because december
+		if($maxDatetime != $expectedVal) throw new Exception('$maxDatetime ('.$maxDatetime.') != $expectedVal ('.$expectedVal.')');
+		if($maxTimestamp != $expectedVal) throw new Exception('$maxDatetime ('.$maxDatetime.') != $expectedVal ('.$expectedVal.')');
+		if($maxDate != $biggerDate) throw new Exception('$maxDate ('.$maxDate.') != $biggerDate ('.$biggerDate.')');
+		if($maxTime != $biggerTime) throw new Exception('$maxDatetime ('.$maxTime.') != $expectedVal ('.$biggerTime.')');
+		
+	date_default_timezone_set('America/Indiana/Indianapolis');
+	$db->DefaultTimezone = 'America/Indiana/Indianapolis';
+		$maxDatetime = $db['TimeLog']['Datetime']->GetMaxValue();
+		$maxTimestamp = $db['TimeLog']['Timestamp']->GetMaxValue();
+		$maxDate = $db['TimeLog']['Date']->GetMaxValue();
+		$maxTime = $db['TimeLog']['Time']->GetMaxValue();
+		$expectedVal = '2029-12-31 19:00:00 EST'; //expected EST not EDT because december
+		if($maxDatetime != $expectedVal) throw new Exception('$maxDatetime ('.$maxDatetime.') != $expectedVal ('.$expectedVal.')');
+		if($maxTimestamp != $expectedVal) throw new Exception('$maxDatetime ('.$maxDatetime.') != $expectedVal ('.$expectedVal.')');
+		if($maxDate != $biggerDate) throw new Exception('$maxDate ('.$maxDate.') != $biggerDate ('.$biggerDate.')');
+		if($maxTime != $biggerTime) throw new Exception('$maxDatetime ('.$maxTime.') != $expectedVal ('.$biggerTime.')');
+	
+	date_default_timezone_set('America/Indiana/Indianapolis');
+	$db->DefaultTimezone = 'America/Indiana/Indianapolis';
+		$maxDatetime = $db['TimeLog']['Datetime']->GetMaxValue(['Datetime' => ['!=' => '2029-12-31 19:00:00 EST']]);
+		$maxTimestamp = $db['TimeLog']['Timestamp']->GetMaxValue(['Timestamp' => ['!=' => '2029-12-31 19:00:00 EST']]);
+		$maxDate = $db['TimeLog']['Date']->GetMaxValue(['Date' => ['!=' => $biggerDate]]);
+		$maxTime = $db['TimeLog']['Time']->GetMaxValue(['Time' => ['!=' => $biggerTime]]);
+		$UNexpectedVal = '2029-12-31 19:00:00 EST'; //expected EST not EDT because december
+		if($maxDatetime == $UNexpectedVal) throw new Exception('$maxDatetime ('.$maxDatetime.') == $UNexpectedVal ('.$UNexpectedVal.')');
+		if($maxTimestamp == $UNexpectedVal) throw new Exception('$maxDatetime ('.$maxDatetime.') == $UNexpectedVal ('.$UNexpectedVal.')');
+		if($maxDate == $biggerDate) throw new Exception('$maxDate ('.$maxDate.') == $UNbiggerDate ('.$biggerDate.')');
+		if($maxTime == $biggerTime) throw new Exception('$maxDatetime ('.$maxTime.') == $UNexpectedVal ('.$biggerTime.')');
+		
+	
+	
+	//CALLBACKS VALUES
+	date_default_timezone_set('America/Chicago'); 
+	$db->DefaultTimezone = 'America/Chicago';
+	$row = $db['TimeLog']();
+	$obcCallbacksCount = 0;
+	$osvCallbacksCount = 0;
+	$oacCallbacksCount = 0;
+	$row->OnBeforeColumnValueChanged(function($eventObject, $eventArgs) use (&$obcCallbacksCount){
+		//echo 'OnBeforeColumnValueChanged<br>';
+		//echo $eventArgs['current-value'].'<br>';
+		//echo $eventArgs['new-value'].'<br>';
+		$obcCallbacksCount++;
+	});
+	$row->OnSetColumnValue(function($eventObject, $eventArgs) use (&$osvCallbacksCount){
+		//echo 'OnSetColumnValue<br>';
+		//echo $eventArgs['current-value'].'<br>';
+		//echo $eventArgs['new-value'].'<br>';
+		$osvCallbacksCount++;
+	});
+	$row->OnAfterColumnValueChanged(function($eventObject, $eventArgs) use (&$oacCallbacksCount){
+		//echo 'OnAfterColumnValueChanged<br>';
+		//echo $eventArgs['current-value'].'<br>';
+		//echo $eventArgs['old-value'].'<br>';
+		$oacCallbacksCount++;
+	});	
+	$row['Datetime'] = "2006-06-06 00:00:00 UTC";
+	$row['Datetime'] = "2006-06-06 00:00:00 UTC";
+	$row['Datetime'] = "2006-06-05 19:00:00 EST"; 
+	if($osvCallbacksCount != 3) throw new Exception('OnSetColumnValue not called 3 times');
+	if($obcCallbacksCount != 1) throw new Exception('OnBeforeColumnValueChanged not called 1 times');
+	if($oacCallbacksCount != 1) throw new Exception('OnAfterColumnValueChanged not called 1 times');
+	
+	$obcCallbacksCount = 0;
+	$osvCallbacksCount = 0;
+	$oacCallbacksCount = 0;
+	$row['Timestamp'] = "2006-06-06 00:00:00 UTC";
+	$row['Timestamp'] = "2006-06-06 00:00:00 UTC";
+	$row['Timestamp'] = "2006-06-05 19:00:00 EST"; 
+	if($osvCallbacksCount != 3) throw new Exception('OnSetColumnValue not called 3 times');
+	if($obcCallbacksCount != 1) throw new Exception('OnBeforeColumnValueChanged not called 1 times');
+	if($oacCallbacksCount != 1) throw new Exception('OnAfterColumnValueChanged not called 1 times');
+}
+	
+
+
+
 /**
  * forms
  * @ignore
@@ -2281,15 +3511,32 @@ function TestForm($t, $debug=false){
 				echo $Cell->GetFormObjectLabel().' '.$Cell->GetTextFormObject(array('disabled'=>'disabled') )."<br>\n";
 				echo $Cell->GetFormObject();
 			}
+			if($Cell->IsDateColumn){
+				echo $Cell->GetFormObjectLabel().' '.$Cell->GetFormObject()."<br>\n";
+			}
 			else if(strtolower($Cell->DefaultFormType) === "select"){
-				echo $Cell->GetFormObjectLabel().' '.$Cell->GetFormObject('select',array("over18"=>"Over 18","under18"=>"Under 18"))."<br>\n";
+				if($Cell->Column->ColumnName == 'AgeGroup'){
+					echo $Cell->GetFormObjectLabel().' '.$Cell->GetFormObject('select',array("over18"=>"Over 18","under18"=>"Under 18"))."<br>\n";
+				}
+				else if($Cell->Column->ColumnName == 'Hobbies'){
+					echo $Cell->GetFormObjectLabel().' '.$Cell->GetSelectFormObject(true);
+				}
 			}
 			else if(strtolower($Cell->DefaultFormType) === "radio"){
-				echo $Cell->GetFormObjectLabel().' ';
-				echo $Cell->GetRadioFormObject("None","")."<br>\n";
-				echo $Cell->GetRadioFormObject("Male","M")."<br>\n";
-				echo $Cell->GetRadioFormObject("Female","F", null, ['checked-if-null'=>true])."<br>\n";
-				echo $Cell->GetRadioFormObject("Invalid","I")."<br>\n";
+				if($Cell->PossibleValues){
+					echo $Cell->GetFormObjectLabel().' ';
+					if(!$Cell->Column->IsRequired) echo $Cell->GetRadioFormObject("- not set -","")."<br>\n";
+					foreach($Cell->PossibleValues as $possibleValue){
+						echo $Cell->GetRadioFormObject($possibleValue,$possibleValue)."<br>\n";
+					}
+				}
+				else{
+					echo $Cell->GetFormObjectLabel().' ';
+					echo $Cell->GetRadioFormObject("None","")."<br>\n";
+					echo $Cell->GetRadioFormObject("Male","M")."<br>\n";
+					echo $Cell->GetRadioFormObject("Female","F")."<br>\n";
+					echo $Cell->GetRadioFormObject("Invalid","I")."<br>\n";
+				}
 			}
 			else if(strtolower($Cell->DefaultFormType) === "password"){
 				function formatPassword($value){

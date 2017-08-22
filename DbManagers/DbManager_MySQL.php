@@ -56,6 +56,7 @@ class DbManager_MySQL implements DbManager {
 	 * 	'charset'=>'utf8mb4',	//if set, OpenConnection does a mysql_set_charset() with the given option (ie 'utf8mb4'). ref: http://dev.mysql.com/doc/refman/5.7/en/charset-connection.html
 	 * 	'collation'=>'utf8mb4_unicode_ci',	//if set with charset, OpenConnection does a "SET NAMES..." with the given option (ie 'utf8mb4_unicode_ci'). ref: http://dev.mysql.com/doc/refman/5.7/en/charset-connection.html
 	 * 	'driver'=>'mysqli'		//can be 'mysql' or 'mysqli' - the PHP extension to use for sql interaction. note- PHP v5.5+ deprecates 'mysql' driver
+	 * 	'timezone'=>'',			//TODO: make default '+0:00'. empty will use system default time (not recommended). use hard numbers like '+0:00' cause timezone abbreviations must be defined in mysql otherwise, otherwise they may take no effect 
 	 * );
 	 * ```	
 	 * @var array
@@ -66,7 +67,8 @@ class DbManager_MySQL implements DbManager {
 		'client_flags'=>null,	//for mysql driver only- this is the 5th parameters for mysql_connect. see mysql_connect documentation
 		'charset'=>'utf8mb4',	//if set, OpenConnection does a mysqli_set_charset() with the given option (ie 'utf8mb4'). ref: http://dev.mysql.com/doc/refman/5.7/en/charset-connection.html
 		'collation'=>'utf8mb4_unicode_ci',	//if set with charset, OpenConnection does a "SET NAMES..." with the given option (ie 'utf8mb4_unicode_ci'). ref: http://dev.mysql.com/doc/refman/5.7/en/charset-connection.html
-		'driver'=>'mysqli'		//can be 'mysql' or 'mysqli' - the PHP extension to use for sql interaction. note- PHP v5.5+ deprecates 'mysql' driver
+		'driver'=>'mysqli',		//can be 'mysql' or 'mysqli' - the PHP extension to use for sql interaction. note- PHP v5.5+ deprecates 'mysql' driver
+		'timezone'=>''			//TODO: make default '+0:00'. empty will use system default time (not recommended). use hard numbers like '+0:00' cause timezone abbreviations must be defined in mysql otherwise, otherwise they may take no effect
 	);
 
 	/**
@@ -80,6 +82,7 @@ class DbManager_MySQL implements DbManager {
 	 * 	'charset'=>'utf8mb4',	//if set, OpenConnection does a mysql_set_charset() with the given option (ie 'utf8mb4'). ref: http://dev.mysql.com/doc/refman/5.7/en/charset-connection.html
 	 * 	'collation'=>'utf8mb4_unicode_ci',	//if set with charset, OpenConnection does a "SET NAMES..." with the given option (ie 'utf8mb4_unicode_ci'). ref: http://dev.mysql.com/doc/refman/5.7/en/charset-connection.html
 	 * 	'driver'=>'mysqli',		//can be 'mysql' or 'mysqli' - the PHP extension to use for sql interaction
+	 * 	'timezone'=>'',			//recommended this is set to '+0:00'. empty will use system default time (not recommended). use hard numbers like '+0:00' cause timezone abbreviations must be defined in mysql otherwise, otherwise they may take no effect
 	 * );
 	 * ```
 	 * @see DbManager_MySQL::$DefaultOptions DbManager_MySQL::$DefaultOptions
@@ -130,6 +133,27 @@ class DbManager_MySQL implements DbManager {
 				break;
 			default:
 				throw new Exception("Invalid Driver - ".$driver);
+		}
+	}
+	
+	/**
+	 * Sets the timezone for the connection. Default is empty which is system time (not recommended. store as UTC).
+	 * @param string $timezone a valid mysql timezone. can use hard numbers like '+0:00' cause timezone abbreviations must be defined in mysql otherwise, otherwise they may take no effect 
+	 * @throws Exception if invalid $driver is in use
+	 * @returns true on success, false if connection is not open
+	 */
+	private function SetTimezone($timezone){
+		if(!$this->_isConnected) return false;
+		
+		if($this->_driver == self::MYSQLI_DRIVER){ 
+			//query MySQL to set client charset & collation. ref: http://dev.mysql.com/doc/refman/5.7/en/charset-connection.html
+			
+			$query = "SET time_zone = '".$timezone."'";
+			mysqli_query($this->_connection, $query);
+			return true;
+		}
+		else if($this->_driver == self::MYSQL_DRIVER){
+			throw new Exception("Timezones not implemented for MYSQL_DRIVER");
 		}
 	}
 	
@@ -193,6 +217,8 @@ class DbManager_MySQL implements DbManager {
 					if(!$this->_connection) throw new Exception("Error opening new connection. MySQLi Error No: ".mysqli_connect_errno()." - ".mysqli_connect_error());
 				}
 			}
+
+			$this->_isConnected = true;
 			
 			//see if a charset is set (ie "utf8mb4");
 			if($this->_connectParams['charset']){
@@ -200,7 +226,7 @@ class DbManager_MySQL implements DbManager {
 				//get options
 				$charset = $this->_connectParams['charset'];
 				$collation = $this->_connectParams['collation'];
-				
+			
 				if($this->_driver == self::MYSQL_DRIVER){ //-- mysql
 					//set PHP driver charset
 					mysql_set_charset($charset, $this->_connection);
@@ -220,12 +246,15 @@ class DbManager_MySQL implements DbManager {
 					mysqli_query($this->_connection, $query);
 				}
 			}
+			
+			if( ($timezone = $this->_connectParams['timezone']) ){
+				$this->SetTimezone($timezone);
+			}
 
 			if(!$options['skip-select-db']){
 				$this->SelectDatabase();
 			}
 
-			$this->_isConnected = true;
 			return true;
 		}
 		catch (Exception $e){
@@ -1080,7 +1109,7 @@ class DbManager_MySQL implements DbManager {
 
 		$castQuoteVal = $this->CastQuoteValue($table, $cleanColumnName, $val, $options);
 		if($castQuoteVal === null){ //null is special
-			if($condition == "!=" || $condition == "IS NOT"){
+			if($condition === "!=" || $condition === "IS NOT"){
 				$ret = $column." is not null"; //'is not null' for null
 			}
 			else $ret = $column." is null"; //'is null' for null
@@ -1088,7 +1117,7 @@ class DbManager_MySQL implements DbManager {
 		else{ //value is not null
 			//SPECIAL CASES FOR "LIKE" CONDITION
 			//See: http://stackoverflow.com/questions/3683746/escaping-mysql-wild-cards
-			if($condition == "LIKE" || $condition == "NOT LIKE"){
+			if($condition === "LIKE" || $condition === "NOT LIKE"){
 				//to make sure we don't over-escape single quotes, we'll escape single quotes as "''" instead of "\'"
 				//underscore ('_') is a wildcard in LIKE matching one character. need to escape it to match the actual underscore
 				//see http://dev.mysql.com/doc/refman/5.1/en/string-literals.html 
@@ -1103,8 +1132,9 @@ class DbManager_MySQL implements DbManager {
 			$ret = "$column $condition ".$castQuoteVal;
 		}
 		
-		//HACK-ish: MySQL doesn't recognize NULL as '!=' some value. we have to force null checking.
-		if($condition == "!=" && $castQuoteVal !== null){
+		//HACK-ish: MySQL doesn't recognize NULL as '!=' a value or 'not like' a value.
+		//so we have to force null checking for operators that negate.
+		if(($condition === "!=" || $condition === "NOT LIKE") && $castQuoteVal !== null){
 			$ret = "($ret OR $column is null)";
 		}
 		

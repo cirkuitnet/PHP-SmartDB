@@ -68,11 +68,11 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 	 * Deprecated - Allows access to the value without having to explicitly use GetRawValue(). Example: echo $smartrow['columnname']
 	 * 
 	 * NOTE- Cell must be used in a string context so the value is returned as a string, otherwise you will be accessing the Cell directly.
-	 * @return string The value of this cell through GetRawValue() as a string (PHP requires a string be returned)
+	 * @return string The value of this cell through GetValue() as a string (PHP requires a string be returned)
 	 * @see SmartCell::GetValue() SmartCell::GetValue()
 	 */
 	public function __toString(){
-		return (string)$this->GetRawValue();
+		return (string)$this->GetValue();
 	}
 
 	/**
@@ -131,7 +131,7 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 	 * ```
 	 * 
 	 * Once PHP allows overriding operators or __toInt()/__toFloat()/__toBool() etc., we will be able to handle this situation automatically so you don't need to worry about the above anymore, and won't need to even do the shorthand invoke on the Column/Cell. We may be able to look in to the SPL_Types php package for some of this stuff down the road?
-	 * @param bool $returnOption1 [optional] If this parameter is true, htmlspecialchars() will be executed before returning. If this column is a date column, this will run strtotime() before returning. If this column is an Array or Object column type, this parameter does nothing at all... you get the array/object as is.
+	 * @param bool $returnOption1 [optional] If this parameter is true, htmlspecialchars() will be executed before returning. If this column is a date column, this will run strtotime() before returning (with an optional DefaultTimezone value appended to the database value for use in strtotime(). See SmartColumn and SmartDatabase for setting defaults). If this column is an Array or Object column type, this parameter does nothing at all... you get the array/object as is.
 	 * @return mixed The value of the cell
 	 */
 	public function GetValue($returnOption1=false){
@@ -140,18 +140,17 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 
 		$value = $this->_value;
 		
-		//may need to transform the value to it's original type for array and object types
-		if($this->Column->IsSerializedColumn){
-			return $this->Column->GetUnserializedValue($value); //NO return options for this type, so return now
-		}
+		//depending on the column's data type, we may need to normalize the raw database value for everyday use
+		$value = $this->Column->NormalizeValue($value);
 		
 		//handle special return options (as described in the function comments)
-		if($returnOption1){
+		//note- serialized columns (arrays, objects) do not have special return options, so ignore that parameter for those types. 
+		if($returnOption1 && !$this->Column->IsSerializedColumn){
 			if($this->Column->IsDateColumn){ //is a date column
-				if( strcmp($value, '0000-00-00 00:00:00')==0 ){ //match. special check for "0000-00-00 00:00:00". different OS's and PHP versions handle strtotim("0000-00-00 00:00:00") differently
-					$value = 0;
+				if( $value ){
+					$value = strtotime($value);
+					if($value === false) $value = null; //if false, strtotime failed and couldn't parse a date
 				}
-				$value = strtotime($value);
 			}
 			else{ //not a date column
 				$value = htmlspecialchars($value);
@@ -187,7 +186,7 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 	 */
 	public function SetValue($value){
 		if(!$this->Column->AllowSet) throw new Exception("AllowSet is set to false for column '{$this->Column->ColumnName}' on table '{$this->Column->Table->TableName}'");
-		$this->VerifyValueType($value);
+		$value = $this->Column->VerifyValueType($value);
 
 		if($this->Column->IsPrimaryKey){ //changing a primary key column value?
 			if($this->Column->IsAutoIncrement) throw new Exception("Setting an auto-increment key column is not allowed: column '{$this->Column->ColumnName}', table '{$this->Column->Table->TableName}'");
@@ -205,15 +204,6 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 
 			if($this->Column->TrimAndStripTagsOnSet && $value!==null){
 				$value = strip_tags(trim($value));
-			}
-
-			if($this->Column->IsDateColumn && $value!==null){
-				if($this->Column->DataType == "date") $dateFormat = "Y-m-d"; //"date" DataType has a slightly different format than other DateColumns
-				else $dateFormat = "Y-m-d H:i:s";
-				
-				if(!$value) $value = null; //must set to null since there is no "0" date (i.e. TIMESTAMP has a range of '1970-01-01 00:00:01' UTC to '2038-01-19 03:14:07' UTC)
-				else if( is_int($value) ) $value = date($dateFormat, $value); // strtotime( <int> ) returns false. if <int> data type, we assume $value is the raw timestamp value we should use, and skip strtotime
-				else $value = date($dateFormat, strtotime($value));
 			}
 
 			if( (!isset($this->_value) && isset($value)) || $this->ValueDiffers($value)){
@@ -243,7 +233,7 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 	 * @ignore
 	 */
 	public function ForceValue($value){
-		$this->VerifyValueType($value);
+		$value = $this->Column->VerifyValueType($value);
 		$this->_value = $value;
 	}
 	/**
@@ -252,99 +242,6 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 	 */
 	public function ForceUnset(){
 		$this->_value = null; //do this instead of unset. unset loses our private $_value and forces the value to be set on the Column level next time through, thanks to magic functions
-	}
-
-	/**
-	 * Anytime we set the value of this cell, we need to fix boolean types to '1' and '0' and make sure we're not setting to an object.
-	 * @param object $value
-	 * @return bool
-	 */
-	private function VerifyValueType(&$value){
-		$columnDataType = $this->Column->DataType;
-
-		//handle special type conversions
-		if($this->Row->Database->DEV_MODE){ //development mode
-			//convert objects to strings if the column type is not an object
-			if($columnDataType !== "object" && is_object($value)){
-				if(method_exists($value, "__toString")){
-					$value = $value->__toString();
-					return;
-				}
-				else{
-					$type = gettype($value);
-					throw new Exception("Cannot set this Cell's value to an object of type $type. Table: '{$this->Column->Table->TableName}', Column: '{$this->Column->ColumnName}' ");
-				}
-			}
-			else if( ($columnDataType !== "array" && is_array($value)) || is_resource($value)){
-				$type = gettype($value);
-				throw new Exception("Cannot set a Cell's value to a '$type' type. You can only set Cell values with simple types (ie string, int, etc.). Table: '{$this->Column->Table->TableName}', Column: '{$this->Column->ColumnName}' ");
-			}
-		}
-		else { //production mode
-			//convert objects to strings if the column type is not an object
-			if($columnDataType !== "object" && is_object($value)) $value = $value->__toString();
-		}
-
-		if($value === null){
-			return; //null is null. let it go
-		}
-
-		//handle booleans.
-		$isBool = is_bool($value);
-		if($isBool){ //boolean false is '\0'. make booleans default to 1 and 0
-			if($value) $value = 1;
-			else $value = 0;
-		}
-		
-		//handle date columns
-		if($this->Column->IsDateColumn){ //can be a string of a date format or an int timestamp value since 1970
-			if(!is_int($value)) $value = (string)$value; //keep ints as they are... do not cast. everything else should be a string
-			return;
-		}
-
-		//strongly type the data
-		switch($columnDataType){
-			//dont quote numbers
-			case 'tinyint':
-			case 'smallint':
-			case 'mediumint':
-			case 'int':
-			case 'bigint':
-				if(is_string($value)){ //trim leading $ before the hard cast to int (PHP will cast something like "$3.50" to 0 otherwise)
-					$value = ltrim($value, " \t\n\r\0\x0B\$"); //regular whitespace trim PLUS dollar sign. ref: http://php.net/manual/en/function.trim.php
-				}
-				if($value === "") $value = null;
-				else $value = (int)$value;
-				break;
-
-			case 'float':
-			case 'double':
-			case 'decimal':
-				if(is_string($value)){ //trim leading $ before the hard cast to float (PHP will cast something like "$3.50" to 0 otherwise)
-					$value = ltrim($value, " \t\n\r\0\x0B\$"); //regular whitespace trim PLUS dollar sign. ref: http://php.net/manual/en/function.trim.php
-				}
-				if($value === "") $value = null;
-				else $value = (float)$value;
-				break;
-
-			case 'binary': //needs quotes. this data type stores binary strings that have no character set or collation (it is NOT strictly ones and zeros)
-				if(!$value || $value == "\0") $value = '0'; //force binary to be 0 if nothing is set
-				else $value = (string)$value;
-				break;
-					
-			case 'array':
-				$value = SmartColumn::SerializeArray($value);
-				break;
-
-			case 'object':
-				$value = SmartColumn::SerializeObject($value);
-				break;
-
-			default:
-				if($isBool && !$value) $value = ""; //false should evalute to empty string
-				else $value = (string)$value;
-				break;
-		}
 	}
 	
 	//TODO: may need these Compress() and Uncompress() functions at that point?
@@ -403,6 +300,7 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 			case("char"):
 			case("text"):
 			case("enum"):
+			case("set"): //$compareValues will be a CSV at this point, as is _value
 			case("array"): //$compareValue will be serialized at this point, as is _value
 			case("object"): //$compareValue will be serialized at this point, as is _value
 				return ((string)$this->_value !== (string)$compareValue);
@@ -643,8 +541,14 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 		}
 		else $options = $defaultOptions;
 
-		//get $currentValue (BuildAttribsHtml() does htmlspecialchars)
-		$currentValue = $this->GetRawValue(); 
+		//get $currentValue (note: BuildAttribsHtml() does htmlspecialchars)
+		$currentValue = $this->GetValue();
+		if($this->Column->IsSerializedColumn){ //serialized columns should present the 'raw' serialized text data
+			$currentValue = $this->GetSerializedValue($currentValue);
+		}
+		if($this->Column->IsASet){ //set columns should present the 'raw' csv text data
+			$currentValue = implode(',', $currentValue);
+		}
 
 		//ATTRIBS
 		$defaultAttribs = array(
@@ -704,9 +608,15 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 		}
 		else $options = $defaultOptions;
 
-
-		//get formatted value
+		//get $currentValue (note: BuildAttribsHtml() does htmlspecialchars)
 		$pwd = $this->GetValue();
+		if($this->Column->IsSerializedColumn){ //serialized columns should present the 'raw' serialized text data
+			$pwd = $this->GetSerializedValue($pwd);
+		}
+		if($this->Column->IsASet){ //set columns should present the 'raw' csv text data
+			$currentValue = implode(',', $currentValue);
+		}
+		
 		if ($pwd) $pwd = $this->FakePasswordFormObjectValue;
 		else $pwd = "";
 
@@ -767,15 +677,29 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 		}
 		else $options = $defaultOptions;
 
-
-		//get formatted $value
-		$currentValue = $this->GetValue(); //don't get the raw value
-		$checked = null;
-		if($currentValue && ($currentValue!=="\0")){
-			$checked = 'checked';
-			$currentValue = $this->GetRawValue();
+		//get $currentValue (note: BuildAttribsHtml() does htmlspecialchars)
+		$currentValue = $this->GetValue();
+		if($this->Column->IsSerializedColumn){ //serialized columns should present the 'raw' serialized text data
+			$currentValue = $this->GetSerializedValue($currentValue);
 		}
-		else $currentValue = "1";
+		
+		if($this->Column->IsASet){ //set columns should present the 'raw' csv text data
+			$currentValue = implode(',', $currentValue);
+		}
+		
+		$checked = null;
+		if(!$currentValue || ($currentValue==="\0")){
+			//not checked. but need a value for the checkbox in case user checks it
+			if($this->Column->PossibleValues){ //set columns should present the 'raw' csv text data
+				$currentValue = (string)$this->Column->PossibleValues[0]; //use first item, if we have one
+			}
+			else{
+				$currentValue = "1";
+			}
+		}
+		else{ //current value is set
+			$checked = 'checked';
+		}
 
 
 		//ATTRIBS
@@ -862,47 +786,84 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 		if($keyValuePairs===true){ //set the 'use-possible-values' option to true if this parameter is true. it's a shortcut
 			$options['use-possible-values'] = true;
 		}
+		
+		$multiple = ($this->Column->IsASet || $customAttribs['multiple'] ? 'multiple' : null);
 
+		//add brackets (array notation) for multi-selects going into php
+		$defaultName = $this->GetDefaultFormObjectName();
+		$defaultName .= ($multiple ? '[]' : '');
+		
 		//ATTRIBS
 		$defaultAttribs = array(
 			'id'=>$this->GetDefaultFormObjectId(),
-			'name'=>$this->GetDefaultFormObjectName(),
+			'name'=>$defaultName,
 			'class'=>'inputSelect',
-			'disabled'=>(!$this->Column->AllowSet ? 'disabled' : null)
+			'disabled'=>(!$this->Column->AllowSet ? 'disabled' : null),
+			'multiple'=>$multiple //sets allow multiple select
 		);
 		if(is_array($customAttribs)){ //overwrite $defaultAttribs with any $customAttribs specified
 			$customAttribs = array_change_key_case($customAttribs, CASE_LOWER);
 			$customAttribs = array_merge($defaultAttribs, $customAttribs);
 		}
 		else $customAttribs = $defaultAttribs;
-
+		
 		//SELECT TAG
 		$attribsHtml = $this->BuildAttribsHtml($customAttribs);
 		$formObjHtml = '<select'.$attribsHtml.'>';
 
-		//OPTIONS
-		if($options['print-empty-option']){
-			$formObjHtml .= '<option value=""';
-			$value = $this->GetRawValue();
-			if( !$value && !$options['force-selected-key'] ) { $formObjHtml .= ' selected="selected"'; }
-			$formObjHtml.='> </option>';
+		//get $currentValue
+		$currentValue = $this->GetValue();
+		if($this->Column->IsSerializedColumn){ //serialized columns should present the 'raw' serialized text data
+			$currentValue = $this->GetSerializedValue($currentValue);
 		}
 		
-		//get formatted $currentValue
-		$currentValue = htmlspecialchars($this->GetRawValue()); 
+		//OPTIONS		
+		if($options['print-empty-option']){
+			$formObjHtml .= '<option value=""';
+			if( !$currentValue && !$options['force-selected-key'] ) { $formObjHtml .= ' selected="selected"'; }
+			$formObjHtml.='> </option>';
+		}
 		
 		if($options['use-possible-values']){
 			$keyValuePairs = array_combine(($pv=$this->Column->PossibleValues), $pv);	//populate select values from xml
 		}
 
 		if($keyValuePairs){
-			foreach ($keyValuePairs as $key => $value){
-				$key = htmlspecialchars($key);
-				$value = htmlspecialchars($value);
-				$formObjHtml .= '<option value="'.$key.'"';
+			if($multiple){
+				//multi select (multiple current values)
+				if(!is_array($currentValue)){ //currentValue should be array here, but might be a CSV
+					$currentValue = explode(',', $currentValue);
+				}
 
-				if( (!$options['force-selected-key'] && $key==$currentValue) || ($options['force-selected-key']==$key) ) $formObjHtml .= ' selected="selected"';
-				$formObjHtml .= '>'.$value.'</option>';
+				foreach ($keyValuePairs as $key => $value){
+					$key = htmlspecialchars($key);
+					$value = htmlspecialchars($value);
+					$formObjHtml .= '<option value="'.$key.'"';
+					foreach ($currentValue as $thisCurrentValue){
+						//get formatted $currentValue
+						$thisCurrentValue = htmlspecialchars($thisCurrentValue);
+						
+						if( (!$options['force-selected-key'] && $key==$thisCurrentValue) || ($options['force-selected-key']==$key) ){
+							$formObjHtml .= ' selected="selected"';
+							break;
+						}
+					}
+					$formObjHtml .= '>'.$value.'</option>';
+				}
+			}
+			else{
+				//get formatted $currentValue
+				$currentValue = htmlspecialchars($currentValue);
+				
+				//non-multi select (1 current value)
+				foreach ($keyValuePairs as $key => $value){
+					$key = htmlspecialchars($key);
+					$value = htmlspecialchars($value);
+					$formObjHtml .= '<option value="'.$key.'"';
+				
+					if( (!$options['force-selected-key'] && $key==$currentValue) || ($options['force-selected-key']==$key) ) $formObjHtml .= ' selected="selected"';
+					$formObjHtml .= '>'.$value.'</option>';
+				}
 			}
 		}
 		$formObjHtml .= '</select>';
@@ -927,8 +888,17 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 	 * @return string string of HTML representing a form textarea input object for this cell
 	 */
 	public function GetTextareaFormObject(array $customAttribs=null, array $options=null){
+		//get $currentValue
+		$currentValue = $this->GetValue();
+		if($this->Column->IsSerializedColumn){ //serialized columns should present the 'raw' serialized text data
+			$currentValue = $this->GetSerializedValue($currentValue);
+		}
+		if($this->Column->IsASet){ //set columns should present the 'raw' csv text data
+			$currentValue = implode(',', $currentValue);
+		}
+		
 		//get formatted $currentValue
-		$currentValue = htmlspecialchars($this->GetRawValue()); 
+		$currentValue = htmlspecialchars($currentValue); 
 
 		//OPTIONS
 		$defaultOptions = array( //default options
@@ -987,12 +957,18 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 		 );
 		 if(is_array($options)){ //overwrite $defaultOptions with any $options specified
 			$options = array_merge($defaultOptions, $options);
-			}
-			else $options = $defaultOptions;
-			*/
+		 }
+		 else $options = $defaultOptions;
+		*/
 
-		//get $currentValue (BuildAttribsHtml() does htmlspecialchars)
-		$currentValue = $this->GetRawValue(); 
+		//get $currentValue (note: BuildAttribsHtml() does htmlspecialchars)
+		$currentValue = $this->GetValue();
+		if($this->Column->IsSerializedColumn){ //serialized columns should present the 'raw' serialized text data
+			$currentValue = $this->GetSerializedValue($currentValue);
+		}
+		if($this->Column->IsASet){ //set columns should present the 'raw' csv text data
+			$currentValue = implode(',', $currentValue);
+		}
 
 		//ATTRIBS
 		$defaultAttribs = array(
@@ -1055,8 +1031,20 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 		}
 		else $options = $defaultOptions;
 		
-		$currentValue = htmlspecialchars($this->GetRawValue()); 
-		$formValue = htmlspecialchars($formValue);
+		//get $currentValue (note: BuildAttribsHtml() does htmlspecialchars)
+		$currentValue = $this->GetValue();
+		if($this->Column->IsSerializedColumn){ //serialized columns should present the 'raw' serialized text data
+			$currentValue = $this->GetSerializedValue($currentValue);
+		}
+		
+		
+		if($this->Column->IsASet){ //set columns need to check if this $formValue is part of the active set
+			//$currentValue is an array 
+			$foundAtKey = array_search($formValue,$currentValue); 
+			if( $foundAtKey !== false && $currentValue ){
+				$options['force-checked'] = true;
+			}
+		}
 		
 		//"checked-if-null" radio option should default to true if the current value is 0 or empty string
 		//if(!$formValue && ($currentValue === 0 || $currentValue === '')){
@@ -1139,8 +1127,14 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 		}
 		else $options = $defaultOptions;
 
-		//get $currentValue (BuildAttribsHtml() does htmlspecialchars)
-		$currentValue = $this->GetRawValue(); 
+		//get $currentValue (note: BuildAttribsHtml() does htmlspecialchars)
+		$currentValue = $this->GetValue();
+		if($this->Column->IsSerializedColumn){ //serialized columns should present the 'raw' serialized text data
+			$currentValue = $this->GetSerializedValue($currentValue);
+		}
+		if($this->Column->IsASet){ //set columns should present the 'raw' csv text data
+			$currentValue = implode(',', $currentValue);
+		}
 
 		//ATTRIBS
 		$defaultAttribs = array(
@@ -1196,8 +1190,14 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 		}
 		else $options = $defaultOptions;
 
-		//get formatted $currentValue
-		$currentValue = $this->GetRawValue();
+		//get $currentValue (note: BuildAttribsHtml() does htmlspecialchars)
+		$currentValue = $this->GetValue();
+		if($this->Column->IsSerializedColumn){ //serialized columns should present the 'raw' serialized text data
+			$currentValue = $this->GetSerializedValue($currentValue);
+		}
+		if($this->Column->IsASet){ //set columns should present the 'raw' csv text data
+			$currentValue = implode(',', $currentValue);
+		}
 
 		//ATTRIBS
 		$defaultAttribs = array(
@@ -1253,8 +1253,14 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 		}
 		else $options = $defaultOptions;
 
-		//get formatted $currentValue
-		$currentValue = $this->GetRawValue();
+		//get $currentValue (note: BuildAttribsHtml() does htmlspecialchars)
+		$currentValue = $this->GetValue();
+		if($this->Column->IsSerializedColumn){ //serialized columns should present the 'raw' serialized text data
+			$currentValue = $this->GetSerializedValue($currentValue);
+		}
+		if($this->Column->IsASet){ //set columns should present the 'raw' csv text data
+			$currentValue = implode(',', $currentValue);
+		}
 
 		//ATTRIBS
 		$defaultAttribs = array(
@@ -1372,17 +1378,31 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 
 		$errors = false;
 
-		if($this->Column->PossibleValues){ //need to validate that the value is valid (mostly for enumerations)
+		if($this->Column->PossibleValues){ //need to validate that the value is valid (mostly for enumerations and sets)
 			//for mysql, enum has null and "" as separate valid values and "" is ALWAYS valid... wtf? make it so "" and null are equal and always valid. will be caught later if null is not allowed
 			if($value !== '0' && !$value){
 				$value = null;
 			}
-			else { //non-null value
-				//for mysql, enums are case-insensetitive! "AAA"=="aAa" as valid enum values
-				$isValidValue = in_array(strtolower($value), array_map('strtolower', $this->Column->PossibleValues)); //case-insensitive array search
-				if(!$isValidValue){
-					$errorMsg = "Invalid value '$value' specified for Table: '{$this->Column->Table->TableName}', Column: '{$this->Column->ColumnName}'";
-					$errors .= $errorMsg . $options['error-message-suffix'];
+			else{ //non-null value
+				if($this->Column->IsASet){ //all set values must be within the list of PossibleValues
+					$isValidValue = $this->Column->VerifySet($value);
+					if(!$isValidValue){
+						//invalid. show error message
+						$displayValue = $value;
+						if(is_array($displayValue)){
+							$displayValue = implode(',', $displayValue);
+						}
+						$errorMsg = "Invalid value '$displayValue' specified for this column. Table: '{$this->Column->Table->TableName}', Column: '{$this->Column->ColumnName}'";
+						$errors .= $errorMsg . $options['error-message-suffix'];
+					}
+				}
+				else{ //enum (and other types thta might have PossibleValues set, but why would you do that?)
+					//for mysql, enums are case-insensetitive! "AAA"=="aAa" as valid enum values
+					$isValidValue = in_array(strtolower($value), array_map('strtolower', $this->Column->PossibleValues)); //case-insensitive array search
+					if(!$isValidValue){
+						$errorMsg = "Invalid value '$value' specified for Table: '{$this->Column->Table->TableName}', Column: '{$this->Column->ColumnName}'";
+						$errors .= $errorMsg . $options['error-message-suffix'];
+					}
 				}
 			}
 		}
@@ -1452,7 +1472,7 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 							$row = $dbManager->FetchArray();
 							$keyColumns = $this->Column->Table->GetKeyColumns();
 							foreach($keyColumns as $columnName=>$Column){
-								if($row[$columnName] != $this->Row->Cell($columnName)->GetValue()){
+								if($row[$columnName] != $this->Row->Cell($columnName)->GetRawValue()){
 									//found row is not $this row, so found value is in use in another row
 									
 									//get formatted $currentValue

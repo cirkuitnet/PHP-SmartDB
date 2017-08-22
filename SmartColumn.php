@@ -30,6 +30,8 @@ class SmartColumn{
 				'DataType',
 				'Collation',
 				'IsDateColumn',
+				'IsTimezoneColumn',
+				'DefaultTimezone',
 				'IsSerializedColumn',
 				'PossibleValues',
 				'MinSize',
@@ -79,7 +81,7 @@ class SmartColumn{
 	 * @var string The SQL data type of this column. Check XmlSchema.xsd for all possible values of this column.
 	 * Last I checked, it was:
 	 * 
-	 * "char|varchar|text|mediumtext|longtext|blob|mediumblob|longblob|tinyint|smallint|mediumint|int|bigint|float|double|decimal|date|datetime|timestamp|time|binary|enum\((\s*'[ a-zA-Z0-9/_-]+'\s*,)*(\s*'[ a-zA-Z0-9/_-]+'\s*)\)|array|object";
+	 * "char|varchar|text|mediumtext|longtext|blob|mediumblob|longblob|tinyint|smallint|mediumint|int|bigint|float|double|decimal|date|datetime|timestamp|time|binary|enum\((\s*'[ a-zA-Z0-9/_-]+'\s*,)*(\s*'[ a-zA-Z0-9/_-]+'\s*)\)|set\((\s*'[ a-zA-Z0-9/_-]+'\s*,)*(\s*'[ a-zA-Z0-9/_-]+'\s*)\)|array|object";
 	 */
 	public $DataType;
 	/**
@@ -87,15 +89,30 @@ class SmartColumn{
 	 */
 	public $Collation;
 	/**
-	 * @var bool True if this is a date column, false otherwise. Should be computed based of the $DataType
+	 * @var bool True if this is a date column, false otherwise. Should be computed based of the $DataType at Database initialization
 	 */
 	public $IsDateColumn;
+	/**
+	 * @var bool True Mostly for internal use, if this is a date column that supports timezones, false otherwise. Should be computed based of the $DataType at Database initialization.
+	 */
+	public $IsTimezoneColumn;
+	/**
+	 * @var string If this is a date column and a TimeZone is set on this column (or the database-level), then ALL dates values stored in this column will be converted to UTC time for storing in the DB, then returned in the set timezone.
+	 * Empty will use system time and won't touch dates (not recommended)
+	 * There is a SmartDatabase level $DefaultTimezone, and also a SmartColumn $DefaultTimezone. If both values are set, the column's default will take precedence.
+	 * NOTE: Use LONG timezone names here, not shortened values like "EST". You can use "date_default_timezone_get()" to get current system timezone. Ref: http://php.net/manual/en/timezones.php
+	 */
+	public $DefaultTimezone;
 	/**
 	 * @var bool True if this is a serialized or compressed column, false otherwise. Should be computed based of the $DataType
 	 */
 	public $IsSerializedColumn;
 	/**
-	 * @var array An array of all possible values that this column accepts. null or empty array means no values are restricted. In theory, the column does NOT have to be an 'enum' data type for this to work... it will work with any column data type... but why would you do that?
+	 * @var bool True if this is a 'set' datatype column, false otherwise. Should be computed based of the $DataType
+	 */
+	public $IsASet;
+	/**
+	 * @var array An array of all possible values that this column accepts. null or empty array means no values are restricted. In theory, the column does NOT have to be an 'enum' or 'set' data type for this to work... it will work with any column data type... but why would you do that?
 	 */
 	public $PossibleValues;
 	/**
@@ -372,6 +389,63 @@ class SmartColumn{
 	}
 
 /////////////////////////////// Column Data Functions ///////////////////////////////////
+
+	/**
+	 * If the column is a special data type, the value from the database may need to be normalized for use.
+	 * Serialized Columns are unserialized.
+	 * 'Set' datatype columns are converted from CSV (internal) to a PHP array 
+	 * Timestamp Columns will have the timestamp abbreviation appended to the database value (only if a $DefaultTimezone is set on the Database or Column level).
+	 * @param mixed $value
+	 * @return mixed the normalized value based on the Column's data type
+	 * @see SmartColumn::$IsSerializedColumn SmartColumn::$IsSerializedColumn
+	 * @see SmartColumn::$IsASet SmartColumn::$IsASet
+	 * @see SmartDatabase::$DefaultTimezone SmartDatabase::$DefaultTimezone
+	 * @see SmartColumn::$DefaultTimezone SmartColumn::$DefaultTimezone
+	 */
+	public function NormalizeValue($value){
+		//may need to transform the value to it's original type for array and object types
+		if($this->IsSerializedColumn){
+			$value = $this->GetUnserializedValue($value);
+		}
+		
+		if($this->IsASet){ //'set' type is CSV internally, but we work with arrays
+			if(!$value) $value = []; //empty array if not set
+			else if(!is_array($value)) $value = explode(',', $value);
+		}
+		
+		//is a date column
+		if($value && $this->IsDateColumn){
+			//match. special check for "0000-00-00...". different OS's and PHP versions handle strtotim("0000-00-00 00:00:00") differently
+			if( strcmp($value, '0000-00-00 00:00:00')==0 || strcmp($value, '0000-00-00')==0 ){
+				$value = null;
+			}
+		}
+		
+		//is a timezone column
+		if($value && $this->IsTimezoneColumn){
+			$value = $this->AppendTimezone($value);
+		}
+		
+		return $value;
+	}
+	
+	public function AppendTimezone($value){
+		//is a date column
+		if($this->IsTimezoneColumn){
+			//check for a default timezone
+			if($value && strcmp($value, '0000-00-00 00:00:00')!=0){ //if value is set...
+				//column level defaults take precedence over database level, if both defaults are set.
+				$defaultTimezone = $this->DefaultTimezone ?: $this->Table->Database->DefaultTimezone;
+				if($defaultTimezone){
+					$dt = new DateTime($value, new DateTimeZone('UTC')); //always stored as UTC when timezone in use
+					$dt->setTimezone(new DateTimeZone($defaultTimezone)); //convert to that timezone
+					$value = $dt->format('Y-m-d H:i:s T');
+				}
+			}
+		}
+		return $value;
+	}
+	
 	/**
 	 * Gets all values in all rows for this column, optionally unique and sorted. Optionally in an assoc with the primary key column value as the assoc's key value. Alternatively, if the option 'return-count-only'=true, returns an integer of number of rows selected.
 	 * Options are as follows:
@@ -456,7 +530,9 @@ class SmartColumn{
 		}
 		else{
 			$row = $dbManager->FetchAssoc();
-			return $row['val'];			
+			$val = $row['val'];
+			$val = $this->NormalizeValue($val); //may need to normalize the raw data for use. depends on the column's data type (mostly dates, in this case)
+			return $val;
 		}
 	}
 
@@ -549,7 +625,7 @@ class SmartColumn{
 			if(!$dbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
 	
 			//normalize serialized data
-			if($this->IsSerializedColumn) $value = $this->GetSerializedValue($value);
+			$value = $this->VerifyValueType($value);
 			
 			return $dbManager->Delete($this->Table, array(array($this->ColumnName=>$value)), '', array('add-column-quotes'=>true, 'add-dot-notation'=>true));
 		}
@@ -593,10 +669,8 @@ class SmartColumn{
 			$dbManager = $this->Table->Database->DbManager;
 			if(!$dbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
 			
-			//may need to serialize the $value data
-			if($this->IsSerializedColumn){
-				$value = $this->GetSerializedValue($value);
-			}
+			//normalize serialized data
+			$value = $this->VerifyValueType($value);
 			
 			return $dbManager->Update($this->Table, array($this->ColumnName=>$value), '', '', array('add-column-quotes'=>true, 'add-dot-notation'=>true));
 		}
@@ -605,11 +679,171 @@ class SmartColumn{
 			$skipErrorChecking = $options['skip-error-checking'];
 			while($Row = $this->Table->GetAllRows( array('return-next-row'=>&$curCount) )){
 				//update row and increase count if successful
-				$Row[ $this->ColumnName ] = $value;
+				$Row[ $this->ColumnName ] = $value; //note: this will call VerifyValueType(), so no need to here.
 				if( $Row->Commit($skipErrorChecking) === 1 ) $updatedCount++;
 			}
 			return $updatedCount;
 		}
+	}
+
+
+/////////////////////////////// Data Normalization ///////////////////////////////////
+	/**
+	 * Anytime we set the value of this cell, we need to fix boolean types to '1' and '0' and make sure we're not setting to an object.
+	 * Options are as follows:
+	 * ``` php
+	 * $options = array(
+	 * 	'skip-serialized-data'=>false, //If true, serialized data will be left as-is (i.e. for using strings in lookup assocs)
+	 * 	'skip-force-set-to-csv'=>false	//if true, SET data is returned as a CSV. SmartDb uses a CSV internally, as MySQL does basically.
+	 * }
+	 * ```
+	 * @param object $value modifies this value BY REFERENCE
+	 * @return nothing.
+	 */
+	public function VerifyValueType($value, $options=null){
+		$columnDataType = $this->DataType;
+	
+		//handle special type conversions
+		if($this->Table->Database->DEV_MODE){ //development mode
+			//convert objects to strings if the column type is not an object
+			if($columnDataType !== "object" && is_object($value)){
+				if(method_exists($value, "__toString")){
+					$value = $value->__toString();
+					return $value;
+				}
+				else{
+					$type = gettype($value);
+					throw new Exception("Cannot set this Cell's value to an object of type $type. Table: '{$this->Table->TableName}', Column: '{$this->ColumnName}' ");
+				}
+			}
+			else if( ($columnDataType !== "array" && !$this->IsASet && is_array($value)) || is_resource($value)){
+				//"set" can be an array of all selected values, or a csv of selected values
+				$type = gettype($value);
+				throw new Exception("Cannot set a Cell's value to a '$type' type. You can only set Cell values with simple types (ie string, int, etc.). Table: '{$this->Table->TableName}', Column: '{$this->ColumnName}' ");
+			}
+		}
+		else { //production mode
+			//convert objects to strings if the column type is not an object
+			if($columnDataType !== "object" && is_object($value)) $value = $value->__toString();
+		}
+	
+		if($value === null){
+			return null; //null is null. let it go
+		}
+	
+		//handle booleans.
+		$isBool = is_bool($value);
+		if($isBool){ //boolean false is '\0'. make booleans default to 1 and 0
+			if($value) $value = 1;
+			else $value = 0;
+		}
+	
+		//handle date columns
+		if($this->IsDateColumn){ //can be a string of a date format or an int timestamp value since 1970
+			
+			if($value) {
+				//match. special check for "0000-00-00...". different OS's and PHP versions handle strtotim("0000-00-00 00:00:00") differently
+				if( strcmp($value, '0000-00-00 00:00:00')==0 || strcmp($value, '0000-00-00')==0 ){
+					return null;
+				}
+				
+				//value is set. if a timezone is in use, use gmdate(). otherwise use date()
+				//"date" DataType has a slightly different format than other DateColumns
+				if($this->DataType == "date") $dateFormat = "Y-m-d";
+				else $dateFormat = "Y-m-d H:i:s";
+								
+				//column level defaults take precedence over database level, if both defaults are set.
+				$defaultTimezone = $this->DefaultTimezone ?: $this->Table->Database->DefaultTimezone;
+				if($this->IsTimezoneColumn && $defaultTimezone){ //a timezone is in use, always store a gmdate (not system time)
+					//if value is int and < 100000000, we'll assume it's not a raw timestamp (100000000 puts us in 1970s somewhere)
+					if( (is_int($value) && $value > 100000000) || (is_numeric($value) && (int)$value > 100000000) ){
+						$value = gmdate($dateFormat, $value); // strtotime( <int> ) returns false. if <int> data type, we assume $value is the raw timestamp value we should use, and skip strtotime
+					}
+					else{
+						$strtotime = strtotime( (string)$value ); //try to parse string. might return false if invalid
+						if($strtotime === false){
+							//invalid date format
+							$value = null; 
+						}
+						else{
+							//parsed successfully
+							$value = gmdate($dateFormat, $strtotime);
+						}
+					}
+				}
+				else{ //no timezone in use, use date (system time)
+					//if value is int and < 100000000, we'll assume it's not a raw timestamp (100000000 puts us in 1970s somewhere)
+					if( (is_int($value) && $value > 100000000) || (is_numeric($value) && (int)$value > 100000000) ){
+						$value = date($dateFormat, $value); // strtotime( <int> ) returns false. if <int> data type, we assume $value is the raw timestamp value we should use, and skip strtotime
+					}
+					else $value = date($dateFormat, strtotime( (string)$value ));
+				}
+			}
+			
+			if(!$value) $value = null; //must set to null since there is no "0" date (i.e. TIMESTAMP has a range of '1970-01-01 00:00:01' UTC to '2038-01-19 03:14:07' UTC)
+			return $value;
+		}
+		
+		if($this->IsASet){
+			//set needs to be sorted accordingly (for mysql WHERE clauses)
+			//also if $value is an array, make it a CSV
+			$forceCsv = ($options['skip-force-set-to-csv']==false ? true : false);
+			$value = $this->GetSortedSet($value, $forceCsv);
+			return $value;
+		}
+	
+		//strongly type the data
+		switch($columnDataType){
+			//dont quote numbers
+			case 'tinyint':
+			case 'smallint':
+			case 'mediumint':
+			case 'int':
+			case 'bigint':
+				if(is_string($value)){ //trim leading $ before the hard cast to int (PHP will cast something like "$3.50" to 0 otherwise)
+					$value = ltrim($value, " \t\n\r\0\x0B\$"); //regular whitespace trim PLUS dollar sign. ref: http://php.net/manual/en/function.trim.php
+				}
+				if($value === "") $value = null;
+				else $value = (int)$value;
+				break;
+	
+			case 'float':
+			case 'double':
+			case 'decimal':
+				if(is_string($value)){ //trim leading $ before the hard cast to float (PHP will cast something like "$3.50" to 0 otherwise)
+					$value = ltrim($value, " \t\n\r\0\x0B\$"); //regular whitespace trim PLUS dollar sign. ref: http://php.net/manual/en/function.trim.php
+				}
+				if($value === "") $value = null;
+				else $value = (float)$value;
+				break;
+	
+			case 'binary': //needs quotes. this data type stores binary strings that have no character set or collation (it is NOT strictly ones and zeros)
+				if(!$value || $value == "\0") $value = '0'; //force binary to be 0 if nothing is set
+				else $value = (string)$value;
+				break;
+			
+			//case 'set':
+				//handled above since we already have a bool if this is true
+					
+			case 'array':
+				if(!$options['skip-serialized-data']){
+					$value = self::SerializeArray($value);
+				}
+				break;
+	
+			case 'object':
+				if(!$options['skip-serialized-data']){
+					$value = self::SerializeObject($value);
+				}
+				break;
+	
+			default:
+				if($isBool && !$value) $value = ""; //false should evalute to empty string
+				else $value = (string)$value;
+				break;
+		}
+		
+		return $value;
 	}
 	
 /////////////////////////////// Serialize/Unserialize Array/Object functions ///////////////////////////////////
@@ -708,6 +942,100 @@ class SmartColumn{
 		if(!$serializedObject) return null;
 		$objValue = @unserialize($serializedObject);
 		return $objValue; 
+	}
+	
+/////////////////////////////// "SET" data type functions ///////////////////////////////////
+	/**
+	 * Orders the given $setData according to the column's PossibleValues array because
+	 * SET ordering matters for mysql in WHERE clauses and etc. see mysql doc https://dev.mysql.com/doc/refman/5.7/en/set.html
+	 * An EMPTY array set or empty string always becomes NULL!
+	 * SETs are case-insensitive and auto-trim!
+	 * @param mixed $setData can be an array of all selected values or a CSV of selected values from our PossibleValues
+	 * @param bool $forceCsv if true, a CSV will be returned instead of array. smart db works with a CSV internally (as does MySQL)
+	 * @throws \Exception if invalid set data is provided that is not in the column's PossibleValues array
+	 * @return mixed the sorted set data as array or csv
+	 */
+	private $_possibleValuesCache;
+	public function GetSortedSet($setData, $forceCsv=false){
+	
+		//simple cache
+		if(!$this->_possibleValuesCache){
+			foreach($this->PossibleValues as $i=>$possibleValue){
+				$this->_possibleValuesCache[$i] = strtolower(trim($possibleValue));
+			}
+		}
+		
+		//turn a CSV to array so we can sort the data
+		$inputDataIsArray = is_array($setData);
+		if(!$inputDataIsArray){
+			$setData = explode(',', $setData);
+		}
+		
+		//sort (trimmed and case-insensitive just as mysql does with SETs)
+		$finalArr = array();
+		$emptyElementFound = false;
+		foreach($setData as $i=>$thisVal){
+			$thisValLower = strtolower(trim($thisVal));
+			if(!$thisValLower) {
+				$emptyElementFound = true;
+				continue; //empty element. remove. consider it null
+			}
+			$foundAtKey = array_search($thisValLower, $this->_possibleValuesCache);
+			
+			if($foundAtKey === false){ //not found
+				throw new \Exception("Invalid value: '$thisVal' for SET data column (table: {$this->Table->TableName}, column: {$this->ColumnName})");
+			}
+			$finalArr[$foundAtKey] = $this->PossibleValues[$foundAtKey]; //use the actual "PossibleValue"
+		}
+
+		//don't remove this case. handle the empty elemenet it in your app.
+		if($emptyElementFound && $finalArr) throw new \Exception("SET data column cannot contain set data AND null/empty in same set (table: {$this->Table->TableName}, column: {$this->ColumnName})");
+		
+		ksort($finalArr); //array values need to be sorted. i thought php did this by default when working with <int> array keys, but that doesn't seem to be the case. so we sort.
+
+		//sorted
+		
+		if(!$finalArr) return null; //if the array is empty, equate this to null across the board. null/not set is either allowed or not... it's all or nothing  
+
+		if($forceCsv || !$inputDataIsArray){ //return csv if forced or if input data is in CSV format (keep it the same)
+			return implode( ',',  $finalArr);
+		}
+		else return $finalArr;
+	}
+	/**
+	 * Returns boolean, true if the passed $setData is in the column's PossibleValues array, false otherwise. These are case-insensitive and auto-trim!
+	 * @param mixed $setData either an array of SET values to check, or a CSV of the values. These are case-insensitive and auto-trim!
+	 * @return bool true if passed $setData is in the column's PossibleValues array, false otherwise.
+	 */
+	public function VerifySet($setData){
+		//simple cache
+		if(!$this->_possibleValuesCache){
+			foreach($this->PossibleValues as $i=>$possibleValue){
+				$this->_possibleValuesCache[$i] = strtolower(trim($possibleValue));
+			}
+		}
+		
+		//turn a CSV to array so we can sort the data
+		if(!is_array($setData)){
+			$setData = explode(',', $setData);
+		}
+		
+		//sort (trimmed and case-insensitive just as mysql does with SETs)
+		$emptyElementFound = false;
+		$foundAtKey = false;
+		foreach($setData as $i=>$thisVal){
+			$thisValLower = strtolower(trim($thisVal));
+			if(!$thisValLower) {
+				$emptyElementFound = true;
+				continue; //empty element. remove. consider it null
+			}
+			$foundAtKey = array_search($thisValLower, $this->_possibleValuesCache);
+			if($foundAtKey === false){ //not found
+				return false;
+			}
+		}
+		if($emptyElementFound && $foundAtKey) return false; //SET data column cannot contain set data AND null/empty in same set
+		return true;
 	}
 
 //////////////////////////// FORM STUFF //////////////////////////////////

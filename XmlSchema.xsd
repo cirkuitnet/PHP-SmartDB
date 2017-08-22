@@ -23,7 +23,7 @@
                         <xs:attribute name="DataType" use="required">
                           <xs:simpleType>
                             <xs:restriction base="xs:string">
-                              <xs:pattern value="char|varchar|text|mediumtext|longtext|blob|mediumblob|longblob|tinyint|smallint|mediumint|int|bigint|float|double|decimal|date|datetime|timestamp|time|binary|enum\((\s*'[ a-zA-Z0-9/_-]+'\s*,)*(\s*'[ a-zA-Z0-9/_-]+'\s*)\)|array|object"/>
+                              <xs:pattern value="char|varchar|text|mediumtext|longtext|blob|mediumblob|longblob|tinyint|smallint|mediumint|int|bigint|float|double|decimal|date|datetime|timestamp|time|binary|enum\((\s*'[ a-zA-Z0-9/_-]+'\s*,)*(\s*'[ a-zA-Z0-9/_-]+'\s*)\)|set\((\s*'[ a-zA-Z0-9/_-]+'\s*,)*(\s*'[ a-zA-Z0-9/_-]+'\s*)\)|array|object"/>
                             </xs:restriction>
                           </xs:simpleType>
                         </xs:attribute>

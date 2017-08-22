@@ -547,40 +547,34 @@ class SmartRow implements ArrayAccess, JsonSerializable{
 	/**
 	 * Returns an array of all KEY columns and thier current values: array("TableName"=>array("ColumnName"=>currentValue,...))
 	 * @param array $assocArray [optional] If provided, the column values will be added to this array and returned. Will be populated as such: array("TableName"=>array("ColumnName"=>currentValue,...))
-	 * @param bool $onlyAddSetColumns [optional] <b>If false</b>, populates the provided assoc-array with ALL get-able key columns.<br><b>If true</b>, populates the provided assoc-array with only the get-able columns that have been set (i.e. isset()==true)
+	 * @param array $options [optional] see $options for self::GetColumnValues();
 	 * @return array columns and values from this Row as an assoc array
 	 */
-	public function GetKeyColumnValues(array &$assocArray=null, $onlyAddSetColumns=false){
-		if($assocArray == null){ $assocArray=array(); }
-		foreach($this->Table->GetKeyColumns() as $Column){
-			if($Column->AllowGet == false) continue;
-			
-			$columnName = $Column->ColumnName;
-			$Cell = $this->_cells[$columnName];
-			if(!$onlyAddSetColumns || ($onlyAddSetColumns && $Cell->IsValueSet())) $assocArray[$this->Table->TableName][$columnName] = $Cell->GetValue();
+	public function GetKeyColumnValues(array &$assocArray=null, $options=null){
+		if($options && !is_array($options)){ //for reverse compatibility. the $options variable used to be a variable for $onlyAddSetColumns. false by default.
+			$options = array();
+			$options['only-add-set-columns'] = true;
 		}
-		return $assocArray;
+		$options['get-key-columns'] = true;
+		$options['get-non-key-columns'] = false;
+		return $this->GetColumnValues($assocArray, $options);
 	}
 
 	/**
 	 * Returns an array of all NON-KEY columns and thier current values: array("TableName"=>array("ColumnName"=>currentValue,...))
-	 * 
 	 * Internally: forces initialization
 	 * @param array $assocArray [optional] If provided, the column values will be added to this array and returned. Will be populated as such: array("TableName"=>array("ColumnName"=>currentValue,...))
-	 * @param bool $onlyAddSetColumns [optional] <b>If false</b>, populates the provided assoc-array with ALL get-able columns.<br><b>If true</b>, populates the provided assoc-array with only the get-able key columns that have been set (i.e. isset()==true)
+	 * @param array $options [optional] see $options for self::GetColumnValues();
 	 * @return array columns and values from this Row as an assoc array
 	 */
-	public function GetNonKeyColumnValues(array &$assocArray=null, $onlyAddSetColumns=false){
-		if($assocArray == null){ $assocArray=array(); }
-		if($this->_initialized == false) $this->TryGetDatabaseValues();
-		foreach($this->Table->GetNonKeyColumns() as $Column){
-			if($Column->AllowGet == false) continue;
-			
-			$columnName = $Column->ColumnName;
-			$Cell = $this->_cells[$columnName];
-			if(!$onlyAddSetColumns || ($onlyAddSetColumns && $Cell->IsValueSet())) $assocArray[$this->Table->TableName][$columnName] = $Cell->GetValue();
+	public function GetNonKeyColumnValues(array &$assocArray=null, $options=null){
+		if($options && !is_array($options)){ //for reverse compatibility. the $options variable used to be a variable for $onlyAddSetColumns. false by default.
+			$options = array();
+			$options['only-add-set-columns'] = true;
 		}
-		return $assocArray;
+		$options['get-key-columns'] = false;
+		$options['get-non-key-columns'] = true;
+		return $this->GetColumnValues($assocArray, $options);
 	}
 
 	/**
@@ -594,6 +588,7 @@ class SmartRow implements ArrayAccess, JsonSerializable{
 	 * 	'only-add-set-columns'=>false, //If false, populates the provided assoc-array with ALL get-able key columns. If true, populates the provided assoc-array with only the get-able columns that have been set (i.e. isset()==true)
 	 * 	'get-key-columns'=>true, //if true, key columns are returned in the array. if false, key columns are not returned in the array
 	 * 	'get-non-key-columns'=>true, //if true, non-key columns are returned in the array. if false, non-key columns are not returned in the array
+	 *  'date-format'=>'' // set this to auto-format date columns. ref formarts that work with php's date() function (http://php.net/date)
 	 * )
 	 * ```
 	 * @param array $assocArray [optional] If provided, the column values will be added to this array and returned. Will be populated as such: array("TableName"=>array("ColumnName"=>currentValue,...))
@@ -603,11 +598,12 @@ class SmartRow implements ArrayAccess, JsonSerializable{
 	public function GetColumnValues(array &$assocArray=null, $options=null){
 		if($options && !is_array($options)){ //for reverse compatibility. the $options variable used to be a variable for $onlyAddSetColumns. false by default.
 			$options = array();
-			$options['only-add-set-columns'] = true;;
+			$options['only-add-set-columns'] = true;
 		}
 		$defaultOptions = array( //default options
 			'get-key-columns'=>true,
 			'get-non-key-columns'=>true,
+			'date-format'=>'' // set this to auto-format date columns. ref formarts that work with php's date() function (http://php.net/date)
 		);
 		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
 			$options = array_merge($defaultOptions, $options);
@@ -621,14 +617,29 @@ class SmartRow implements ArrayAccess, JsonSerializable{
 			if($Column->AllowGet == false) continue;
 			if($options['get-key-columns'] == false && $Column->IsPrimaryKey) continue; //ignore key columns
 			if($options['get-non-key-columns'] == false && !$Column->IsPrimaryKey) continue; //ignore non-key columns
-			if(!$options['only-add-set-columns'] || ($options['only-add-set-columns'] && $Cell->IsValueSet())) $assocArray[$this->Table->TableName][$columnName] = $Cell->GetValue();
+			if(!$options['only-add-set-columns'] || ($options['only-add-set-columns'] && $Cell->IsValueSet())){
+				//normalize dates?
+				if($Cell->Column->IsDateColumn && $options['date-format']){
+					$timestamp = $Cell->GetValue(true); //true so value goes through strtotime() 
+					if($timestamp){ //strtotime could have failed to parse for some reason
+						$finalValue = date($options['date-format'], $timestamp); //using "date()" instead of "gmdate()" will return timestamp in whatever LOCAL time in, so be sure to include a timezone indicator in the date format
+					}
+					else{
+						$finalValue = null;
+					}
+				}
+				else{ //do not normalize dates
+					$finalValue = $Cell->GetValue();
+				}
+				$assocArray[$this->Table->TableName][$columnName] = $finalValue;
+			}
 		}
 		return $assocArray;
 	}
 
 
 	/**
-	 * Looks up any column values that has been set on this row and returns an array of the key values that matched, or if the option 'return-count-only'=true, returns an integer of number of rows selected
+	 * Looks up any column values that have been set on this row and returns an array of the key values that matched, or if the option 'return-count-only'=true, returns an integer of number of rows selected
 	 * 
 	 * $options are as follows:
 	 * ``` php
@@ -686,7 +697,8 @@ class SmartRow implements ArrayAccess, JsonSerializable{
 					$this->SetKeyColumnValues(array($this->Table->TableName=>$resultArray), true, false);
 				} else {
 					foreach($keyColumns as $columnName=>$Cell){
-						$Cell->ForceValue($resultArray[$columnName]);
+						$value = $resultArray[$columnName];
+						$Cell->ForceValue($value);
 					}
 					$this->_isDirty = false;
 					$this->_initialized = false;
@@ -772,7 +784,12 @@ class SmartRow implements ArrayAccess, JsonSerializable{
 
 				foreach($this->Table->GetNonKeyColumns() as $Column){
 					$columnName = $Column->ColumnName;
-					$this->_cells[$columnName]->ForceValue($row[$columnName]);
+					$value = $row[$columnName];
+					
+					//value coming out of DB does not have timezone by default. it will assume LOCAL time unless specified.
+					if($Column->IsTimezoneColumn) $value = $Column->AppendTimezone($value);					
+					
+					$this->_cells[$columnName]->ForceValue($value);
 				}
 
 				$this->_initialized = true;
@@ -1324,7 +1341,7 @@ class SmartRow implements ArrayAccess, JsonSerializable{
 	 * @ignore
 	 */
 	public function OnSetCellValue($eventObject, $eventArgs){
-		if($this->_onSetAnyCellValue) $this->FireCallback($this->_onAnyCellValueSet, $eventArgs);
+		if($this->_onSetAnyCellValue) $this->FireCallback($this->_onSetAnyCellValue, $eventArgs);
 	}
 	/**
 	 * Internal use only. Wraps callbacks from the each of this row's cells into this callback.
@@ -1409,7 +1426,7 @@ class SmartRow implements ArrayAccess, JsonSerializable{
 	public function OnBeforeColumnValueChanged($callbackFunction, $functionScope=null){
 		if(!$this->_onBeforeAnyCellValueChangedCallbackInitialized){
 			foreach($this->_cells as $columnName=>$Cell){
-				$Cell->OnSetValue('OnBeforeCellValueChanged', $this);
+				$Cell->OnBeforeValueChanged('OnBeforeCellValueChanged', $this);
 			}
 			$this->_onBeforeAnyCellValueChangedCallbackInitialized = true;
 		}
@@ -1453,7 +1470,7 @@ class SmartRow implements ArrayAccess, JsonSerializable{
 	public function OnAfterColumnValueChanged($callbackFunction, $functionScope=null){
 		if(!$this->_onAfterAnyCellValueChangedCallbackInitialized){
 			foreach($this->_cells as $columnName=>$Cell){
-				$Cell->OnSetValue('OnAfterCellValueChanged', $this);
+				$Cell->OnAfterValueChanged('OnAfterCellValueChanged', $this);
 			}
 			$this->_onAfterAnyCellValueChangedCallbackInitialized = true;
 		}
