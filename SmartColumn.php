@@ -33,6 +33,7 @@ class SmartColumn{
 				'IsTimezoneColumn',
 				'DefaultTimezone',
 				'IsSerializedColumn',
+				'IsASet',
 				'PossibleValues',
 				'MinSize',
 				'MaxSize',

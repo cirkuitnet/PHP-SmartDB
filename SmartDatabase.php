@@ -25,7 +25,7 @@ require_once(dirname(__FILE__).'/SmartRow.php');
  * @package SmartDatabase
  */
 class SmartDatabase implements ArrayAccess, Countable{
-	const Version = "1.45"; //should update this for ANY change to structure at least. used for determining if a serialized SmartDatabase object is invalid/out of date
+	const Version = "1.46"; //should update this for ANY change to structure at least. used for determining if a serialized SmartDatabase object is invalid/out of date
 	
 	/////////////////////////////// SERIALIZATION - At top so we don't forget to update these when we add new vars //////////////////////////
 		/**
