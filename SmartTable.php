@@ -238,7 +238,7 @@ class SmartTable implements ArrayAccess, Countable{
 
 			//handle columns with aliases
 			foreach($Column->GetAliases() as $alias=>$nothing){
-				if($this->_columnAliases[$alias] && $this->_columnAliases[$alias] != $columnName)
+				if(isset($this->_columnAliases[$alias]) && $this->_columnAliases[$alias] != $columnName)
 					throw new Exception("Column alias '$alias' is used more than once on table '{$this->TableName}': Columns: '$columnName' and '{$this->_columnAliases[$alias]}'.");
 
 				$this->_columnAliases[$alias] = $columnName;
@@ -250,7 +250,7 @@ class SmartTable implements ArrayAccess, Countable{
 		$this->_primaryKeyIsNonComposite = (count($this->_keyColumns) == 1);
 
 		$keyColumnNamesInArray = array_keys($this->_keyColumns);
-		$keyColumnName = $keyColumnNamesInArray[0];
+		$keyColumnName = $keyColumnNamesInArray[0] ?? '';
 		$this->_primaryKeyIsNonCompositeAutoIncrement = (count($this->_keyColumns) == 1 && $this->_keyColumns[$keyColumnName]->IsAutoIncrement );
 		$this->_primaryKeyIsNonCompositeNonAutoIncrement = (count($this->_keyColumns) == 1 && !($this->_keyColumns[$keyColumnName]->IsAutoIncrement));
 
@@ -286,10 +286,10 @@ class SmartTable implements ArrayAccess, Countable{
 	 * @return SmartColumn The column requested.
 	 */
 	public function GetColumn($columnName){
-		if($this->_columns[$columnName]){ //the actual column exists
+		if(!empty($this->_columns[$columnName])){ //the actual column exists
 			return $this->_columns[$columnName];
 		}
-		else if($this->_columnAliases[$columnName]){ //a column alias exists
+		else if(!empty($this->_columnAliases[$columnName])){ //a column alias exists
 			$realColumnName = $this->_columnAliases[$columnName];
 			return $this->_columns[$realColumnName];
 		}
@@ -306,7 +306,7 @@ class SmartTable implements ArrayAccess, Countable{
 	 * @see SmartTable::ColumnExists() SmartTable::ColumnExists()
 	 */
 	public function RemoveColumn($columnName){
-		if(!$this->_columns[$columnName]) throw new Exception("Invalid column: '$columnName'");
+		if(empty($this->_columns[$columnName])) throw new Exception("Invalid column: '$columnName'");
 
 		$this->_columns[$columnName]->Table = null; //$this table is no longer the column's table
 		unset($this->_columns[$columnName]);
@@ -320,7 +320,7 @@ class SmartTable implements ArrayAccess, Countable{
 	 * @return bool true if the column exists, false otherwise.
 	 */
 	public function ColumnExists($columnName){
-		return ($this->_columns[$columnName] != null || $this->_columnAliases[$columnName] != null);
+		return ( !empty($this->_columns[$columnName]) || !empty($this->_columnAliases[$columnName]) );
 	}
 
 /////////////////////////////// Table Inheritance ///////////////////////////////////
@@ -503,7 +503,7 @@ class SmartTable implements ArrayAccess, Countable{
 		//TODO: MOVE THIS INTO MySQL DB MANAGER??? Is this considered database specific...? Or maybe just an "if(mysql){" statement around this logic here.
 		//		The MySQL Db manager has no knowledge over column data types, and this case only applies to SETs.
 		$skipRecurse = false;
-		if(is_array($val) && $currentColumn->IsASet){
+		if(is_array($val) && !empty($currentColumn->IsASet)){
 			//look for a sub-array. if none, this particular array is the set of "AND" and "=" values we need to match.
 			$subArrayFound = false;
 			$keywordSubkeyFound = false;
@@ -577,7 +577,7 @@ class SmartTable implements ArrayAccess, Countable{
 	 */
 	private function CheckReturnNextRow(array $options=null, $storedDbManager, $functionName){
 		//check that the 'return-next-row' option is set
-		if(!$options || !array_key_exists('return-next-row', $options)){
+		if(empty($options) || !array_key_exists('return-next-row', $options)){
 			return false; //option not not set
 		}
 		
@@ -641,18 +641,21 @@ class SmartTable implements ArrayAccess, Countable{
 		if(!$dbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
 
 		//check for the 'return-next-row' option to return 1 row at a time
-		$returnNextRow = $this->CheckReturnNextRow($options, $this->_storedDbManagers['LookupRows'], __FUNCTION__); //returns INT >= 0 or FALSE
+		$returnNextRow = $this->CheckReturnNextRow($options, $this->_storedDbManagers['LookupRows'] ?? null, __FUNCTION__); //returns INT >= 0 or FALSE
 		
 		//check the 'callback' option
-		$callback = $options['callback'];
+		$callback = $options['callback'] ?? null;
 		if($callback && !is_callable($callback)){
 			//verify we have an anonymous function or a function name in global scope
 			throw new Exception("Callback function '$callback' does not exist.");
 		}
+		
+		//explicitly set return-assoc option to avoid php8 undefined array key
+		$options['return-assoc'] = $options['return-assoc'] ?? false;
 
 		//do the query if we're not returning the next row from our result set
 		if(!$returnNextRow || $returnNextRow==0){ //spelling out both cases for clarity - $returnNextRow could be 0 or false here. both should run the new query
-			if($this->_storedDbManagers['LookupRows']){  //clear any cached result sets we may have
+			if(!empty($this->_storedDbManagers['LookupRows'])){  //clear any cached result sets we may have
 				$this->_storedDbManagers['LookupRows']->FlushResults();
 				unset($this->_storedDbManagers['LookupRows']);
 			}
@@ -663,13 +666,13 @@ class SmartTable implements ArrayAccess, Countable{
 			}
 			
 			//do the new query
-			$limit = trim($options['limit']);
-			$sortByFinal = $this->BuildSortArray($options['sort-by']);
+			$limit = trim($options['limit'] ?? '');
+			$sortByFinal = $this->BuildSortArray($options['sort-by'] ?? '');
 			$numRowsSelected = $dbManager->Select(array($keyColumnName), $this, $lookupAssoc, $sortByFinal, $limit, array('add-column-quotes'=>true, 'add-dot-notation'=>true));
 			$options['return-count'] = $numRowsSelected;
 	
 			//check the 'return-count-only' option
-			if($options['return-count-only']) return $numRowsSelected;
+			if(!empty($options['return-count-only'])) return $numRowsSelected;
 		}
 
 		//fetch SQL results
@@ -723,7 +726,7 @@ class SmartTable implements ArrayAccess, Countable{
 			$sqlResult = $dbManager->FetchAssocList(); //get an array of all of the rows
 			
 			//take SQL results and return SmartRows
-			return $this->ReturnSmartRows($sqlResult, $keyColumnName, $options['return-assoc'], $returnNextRow);
+			return $this->ReturnSmartRows($sqlResult, $keyColumnName, $options['return-assoc'] ?? false, $returnNextRow);
 		}
 		
 	}
@@ -948,13 +951,13 @@ class SmartTable implements ArrayAccess, Countable{
 			$lookupAssoc = $this->VerifyLookupAssoc($lookupAssoc, __FUNCTION__);
 		}
 
-		$limit = trim($options['limit']);
-		$sortByFinal = $this->BuildSortArray($options['sort-by']);
+		$limit = trim($options['limit'] ?? '');
+		$sortByFinal = $this->BuildSortArray($options['sort-by'] ?? '');
 		$dbManager = $this->Database->DbManager;
 		if(!$dbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
 
 		$returnVals = array();
-		if($this->PrimaryKeyIsNonComposite() && !$options['get-unique']){
+		if($this->PrimaryKeyIsNonComposite() && empty($options['get-unique'])){
 			//table must have a single primary key column
 			$keyColumnNames = array_keys($this->GetKeyColumns());
 			$keyColumnName = $keyColumnNames[0];
@@ -963,9 +966,9 @@ class SmartTable implements ArrayAccess, Countable{
 			$options['return-count'] = $numRowsSelected;
 
 			//check the 'return-count-only' option
-			if($options['return-count-only']) return $numRowsSelected;
+			if(!empty($options['return-count-only'])) return $numRowsSelected;
 
-			if($options['return-assoc']){ //return an assoc array
+			if(!empty($options['return-assoc'])){ //return an assoc array
 				while ($row = $dbManager->FetchAssoc()) {
 					$colValue = $row[$returnColumn];
 					$colValue = $Column->NormalizeValue($colValue); //depending on the column's data type, we may need to normalize the raw database value for everyday use
@@ -985,7 +988,7 @@ class SmartTable implements ArrayAccess, Countable{
 			$options['return-count'] = $numRowsSelected;
 
 			//check the 'return-count-only' option
-			if($options['return-count-only']) return $numRowsSelected;
+			if(!empty($options['return-count-only'])) return $numRowsSelected;
 
 			while ($row = $dbManager->FetchAssoc()) {
 				$colValue = $row[$returnColumn];
@@ -1035,7 +1038,7 @@ class SmartTable implements ArrayAccess, Countable{
 		if(!$this->PrimaryKeyExists()) throw new Exception("Function '".__FUNCTION__."' only works on Tables that contain a primary key");
 
 		//skipping delete callbacks on the row-level will delete rows directly on the DB level for efficiency
-		if($options['skip-callbacks']){ //yes, skip callbacks. faster.
+		if(!empty($options['skip-callbacks'])){ //yes, skip callbacks. faster.
 			//handle $lookupAssoc as a non-array... only works if column is a non-composite primary key
 			if($lookupAssoc && !is_array($lookupAssoc)){ // NON-ARRAY. special case where $lookupAssoc is just the key column value
 				if($this->PrimaryKeyIsComposite()) throw new Exception('$lookupAssoc can only be a non-array if the table contains a single primary key column.');
@@ -1088,7 +1091,7 @@ class SmartTable implements ArrayAccess, Countable{
 	 */
 	public function DeleteRows(array $lookupAssoc, array $options=null){
 		//skipping delete callbacks on the row-level will delete rows directly on the DB level for efficiency
-		if($options['skip-callbacks']){ //yes, skip callbacks. faster.
+		if(!empty($options['skip-callbacks'])){ //yes, skip callbacks. faster.
 			$lookupAssoc = $this->VerifyLookupAssoc($lookupAssoc, __FUNCTION__);
 	
 			$dbManager = $this->Database->DbManager;
@@ -1123,7 +1126,7 @@ class SmartTable implements ArrayAccess, Countable{
 	 */
 	public function DeleteAllRows(array $options=null){
 		//skipping delete callbacks on the row-level will delete rows directly on the DB level for efficiency
-		if($options['skip-callbacks']){ //yes, skip callbacks. faster.
+		if(!empty($options['skip-callbacks'])){ //yes, skip callbacks. faster.
 			$dbManager = $this->Database->DbManager;
 			if(!$dbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
 			return $dbManager->Delete($this, '', '', array('add-column-quotes'=>true, 'add-dot-notation'=>true));

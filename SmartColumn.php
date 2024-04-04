@@ -29,6 +29,7 @@ class SmartColumn{
 				'DisplayName',
 				'DataType',
 				'Collation',
+				'IsStringColumn',
 				'IsDateColumn',
 				'IsTimezoneColumn',
 				'DefaultTimezone',
@@ -89,6 +90,10 @@ class SmartColumn{
 	 * @var string The SQL collation for this column (ie "latin1_swedish_ci", "utf8_general_ci", "utf8mb4_unicode_ci", etc)
 	 */
 	public $Collation;
+	/**
+	 * @var bool True if this is a string/text column, false otherwise. Should be computed based of the $DataType at Database initialization
+	 */
+	public $IsStringColumn;
 	/**
 	 * @var bool True if this is a date column, false otherwise. Should be computed based of the $DataType at Database initialization
 	 */
@@ -265,7 +270,7 @@ class SmartColumn{
 		if(!$this->Table->Database->TableExists($tableName)) throw new Exception("Related table '$tableName' does not exist");
 		if(!$this->Table->Database->GetTable($tableName)->ColumnExists($columnName)) throw new Exception("Related column '$columnName' does not exist on table $tableName");
 
-		if(!$this->_relations[$tableName][$columnName]){
+		if(empty($this->_relations[$tableName][$columnName])){
 			//set relation on $this column
 			$this->_relations[$tableName][$columnName] = true;
 
@@ -338,7 +343,7 @@ class SmartColumn{
 	 * @return array All aliases of this Column
 	 */
 	public function GetAliases($options=null){
-		if($options['names-only']){
+		if(!empty($options['names-only'])){
 			return array_keys($this->_aliases);
 		}
 		else return $this->_aliases;
@@ -354,7 +359,7 @@ class SmartColumn{
 	public function AddAlias($alias){
 		if(!$alias) throw new Exception('$alias must be set');
 
-		if(!$this->_aliases[$alias]){
+		if(empty($this->_aliases[$alias])){
 			//set relation on $this column
 			$this->_aliases[$alias] = true;
 			return true;
@@ -621,7 +626,7 @@ class SmartColumn{
 	 */
 	public function DeleteRows($value, array $options=null){
 		//skipping delete callbacks on the row-level will delete rows directly on the DB level for efficiency
-		if($options['skip-callbacks']){ //yes, skip callbacks. faster.
+		if(!empty($options['skip-callbacks'])){ //yes, skip callbacks. faster.
 			$dbManager = $this->Table->Database->DbManager;
 			if(!$dbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
 	
@@ -663,6 +668,16 @@ class SmartColumn{
 	 * @return int the number of rows affected
 	 */
 	public function SetAllValues($value, array $options=null){
+		//OPTIONS
+		$defaultOptions = [ //default options
+			'skip-callbacks' => false,
+			'skip-error-checking' => false
+		];
+		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
+			$options = array_merge($defaultOptions, $options);
+		}
+		else $options = $defaultOptions;
+		
 		if($this->IsUnique || $this->IsPrimaryKey) throw new Exception("Cannot set all values for a column specified as Unique or Primary Key (table: {$this->Table->TableName}, column: {$this->ColumnName})");
 		
 		//skipping callbacks on the row-level will update rows directly on the DB level for efficiency
@@ -738,6 +753,17 @@ class SmartColumn{
 			if($value) $value = 1;
 			else $value = 0;
 		}
+		
+		if ($this->IsStringColumn && $this->IsUnique && !$this->IsRequired){ //unique string column data, but data is NOT required.
+			//note that MySQL does not allow multiple empty string values in the DB if the column is set as 'umique', but NULL is allowed
+			//so if we have an empty string "" in this case, set it to NULL
+			if($this->TrimAndStripTagsOnSet){
+				$value = strip_tags(trim($value));
+			}
+			if($value === ''){
+				return null;
+			}
+		}
 	
 		//handle date columns
 		if($this->IsDateColumn){ //can be a string of a date format or an int timestamp value since 1970
@@ -788,13 +814,30 @@ class SmartColumn{
 		if($this->IsASet){
 			//set needs to be sorted accordingly (for mysql WHERE clauses)
 			//also if $value is an array, make it a CSV
-			$forceCsv = ($options['skip-force-set-to-csv']==false ? true : false);
+			$forceCsv = ( !empty($options['skip-force-set-to-csv']) ? false : true);
 			$value = $this->GetSortedSet($value, $forceCsv);
 			return $value;
 		}
-	
+
+		if($this->PossibleValues){
+			//for older mysql, enum has null and "" as separate valid values and "" is ALWAYS valid... wtf? make it so "" and null are equal. will be caught later if null is not allowed
+			//newer mysql now throws a "data truncated" error if you try to set an enum as "" and it's not a valid value of the enum
+			if($value !== '0' && !$value){
+				return null;
+			}
+		}
+		
 		//strongly type the data
 		switch($columnDataType){
+			case 'bool': //aka tinyint with different casting rules
+				if($value === "\0") $value = 0; //for converting from (incorrectly) typed "binary" to "bool", handle this case
+				if($value === "" || $value === null) $value = null; //keep null when null. will evaluate to false ultimately
+				else {
+					$value = (bool)$value; //use php casting rules to determine the boolean value
+					$value = (int)$value; //then cast to int (should be 0 or 1) for db storage
+				}
+				break;
+			
 			//dont quote numbers
 			case 'tinyint':
 			case 'smallint':
@@ -819,7 +862,7 @@ class SmartColumn{
 				break;
 	
 			case 'binary': //needs quotes. this data type stores binary strings that have no character set or collation (it is NOT strictly ones and zeros)
-				if(!$value || $value == "\0") $value = '0'; //force binary to be 0 if nothing is set
+				if(empty($value) || $value == "\0") $value = '0'; //force binary to be 0 if nothing is set
 				else $value = (string)$value;
 				break;
 			
@@ -827,13 +870,13 @@ class SmartColumn{
 				//handled above since we already have a bool if this is true
 					
 			case 'array':
-				if(!$options['skip-serialized-data']){
+				if(empty($options['skip-serialized-data'])){
 					$value = self::SerializeArray($value);
 				}
 				break;
 	
 			case 'object':
-				if(!$options['skip-serialized-data']){
+				if(empty($options['skip-serialized-data'])){
 					$value = self::SerializeObject($value);
 				}
 				break;
@@ -946,6 +989,7 @@ class SmartColumn{
 	}
 	
 /////////////////////////////// "SET" data type functions ///////////////////////////////////
+	private $_possibleValuesCache;
 	/**
 	 * Orders the given $setData according to the column's PossibleValues array because
 	 * SET ordering matters for mysql in WHERE clauses and etc. see mysql doc https://dev.mysql.com/doc/refman/5.7/en/set.html
@@ -956,7 +1000,6 @@ class SmartColumn{
 	 * @throws \Exception if invalid set data is provided that is not in the column's PossibleValues array
 	 * @return mixed the sorted set data as array or csv
 	 */
-	private $_possibleValuesCache;
 	public function GetSortedSet($setData, $forceCsv=false){
 	
 		//simple cache
@@ -1050,11 +1093,11 @@ class SmartColumn{
 	}
 	/**
 	 * Returns the default html ID attribute that will be used when getting a form object for this cell
-	 * @param string $nameSuffix [optional] A suffix to add the the end of the column name
+	 * @param string $idSuffix [optional] A suffix to add the the end of the default form object id
 	 * @return string The default name html ID attribute that will be used when getting a form object for this cell
 	 */
-	public function GetDefaultFormObjectId($nameSuffix=''){
-		return $this->Table->TableName.'_'.$this->ColumnName.$nameSuffix;
+	public function GetDefaultFormObjectId($idSuffix=''){
+		return $this->Table->TableName.'_'.$this->ColumnName.$idSuffix;
 	}
 	
 /////////////////////////////// Invoke ///////////////////////////////////

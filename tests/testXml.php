@@ -24,7 +24,7 @@ class Setting extends SmartRow{
 		});
 		
 		$this->OnBeforeColumnValueChanged(function($eventObject, $eventArgs){
-			if($GLOBALS['cancel-setting-change-val']){ //just a manual global trigger
+			if(!empty($GLOBALS['cancel-setting-change-val'])){ //just a manual global trigger
 				$eventArgs['cancel-event'] = true; //should not continue with delete
 			}
 		});
@@ -103,6 +103,20 @@ class JunkExtended extends Junk{
 		$this->DoJunk($debug);
 		$this['CommonFieldsName'] = "DoJunkExtended";
 		if($debug) echo "DoJunkExtended Val: {$this['CommonFieldsName']}<br>";
+	}
+}
+
+/**
+ * @package Tests
+ * @ignore
+ */
+class TestClass{
+	public $x = 0;
+	public $y = "\\1";
+	public $z = "some quote's\"";
+	public $a = null;
+	public function __toString(){
+		return "TestClass object";
 	}
 }
 
@@ -224,7 +238,7 @@ die();
  * @ignore
  */
 function SyncDbTables($t){
-	//$printResults = true;
+	$printResults = false;
 	$results = $t['database']->SyncStructureToDatabase($printResults);
 	if(strstr($results, "Fatal error") !== false || strstr($results, "exception") !== false){
 		throw new Exception("SyncDbTablesFailed");
@@ -317,6 +331,8 @@ function Test2($t, $debug=false){
 	Commit($i,$debug);
 	AssertCellVal($i['Id'], 69);
 	AssertCellVal($i['Name'], "test name");
+	if($i['datetime']() <= 0) throw new Exception("CURRENT_TIMESTAMP datetime did not save to database");
+	if($i['timestamp']() <= 0) throw new Exception("CURRENT_TIMESTAMP timestamp did not save to database");
 
 	//new instance
 	$i = new Setting($t['database']);
@@ -669,19 +685,19 @@ function Test7($t, $debug=false){
  */
 function Test8($t, $debug=false){
 	$db = $t['database'];
-	$allvalues = $db['Setting']['Name']->GetAllValues(array('sort-by'=>'Id','get-unique'=>true,'return-count'=>&$count));
+	$allvalues = $db['Setting']['Name']->GetAllValues(array('sort-by'=>'Name','get-unique'=>true,'return-count'=>&$count));
 	if($count!=2) Ex("invalid count returned");
 	if($debug) echo '$allvalues='.print_r($allvalues, true);
 	if(count($allvalues)!=2) Ex("invalid count of values returned");
 	
 	//LookupColumnValues() with empty array or null as second parameter should work the same as GetAllValues()
-	$allvalues = $db['Setting']->LookupColumnValues('Name', null, array('sort-by'=>'Id','get-unique'=>true,'return-count'=>&$count));
+	$allvalues = $db['Setting']->LookupColumnValues('Name', null, array('sort-by'=>'Name','get-unique'=>true,'return-count'=>&$count));
 	if($count!=2) Ex("invalid count returned");
 	if($debug) echo '$allvalues='.print_r($allvalues, true);
 	if(count($allvalues)!=2) Ex("invalid count of values returned");
 	
 	//LookupColumnValues() with first and second parameters switched
-	$allvalues = $db['Setting']->LookupColumnValues(null, 'Name', array('sort-by'=>'Id','get-unique'=>true,'return-count'=>&$count));
+	$allvalues = $db['Setting']->LookupColumnValues(null, 'Name', array('sort-by'=>'Name','get-unique'=>true,'return-count'=>&$count));
 	if($count!=2) Ex("invalid count returned");
 	if($debug) echo '$allvalues='.print_r($allvalues, true);
 	if(count($allvalues)!=2) Ex("invalid count of values returned");
@@ -789,7 +805,7 @@ function Test8($t, $debug=false){
  * helper function for test9 and test10 (at the least)
  * @ignore
  */
-function InsretSomeFastSettingRows($db){
+function InsretSomeFastSettingRows($db, $debug=false){
 		$i = new SmartRow('FastSetting', $db); //add some rows
 		$i->Table->AutoCommit=false;
 		$i['Id'] = 34;
@@ -1072,7 +1088,7 @@ function Test10($t, $debug=false){
 	if(count($values) !== 2) Ex("Wrong return count");
 	if($values[35] !== "my@name2.com") Ex("Row ShortName value not correct");
 	
-	$values = $db['FastSetting']->LookupColumnValues("ShortName",array("Name"=>array('or'=>array('my@name2.com','my@name.com'))),array('sort-by'=>array('Id'=>'DEsC'),'get-unique'=>true));
+	$values = $db['FastSetting']->LookupColumnValues("ShortName",array("Name"=>array('or'=>array('my@name2.com','my@name.com'))),array('sort-by'=>array('ShortName'=>'DEsC'),'get-unique'=>true));
 	if(count($values) !== 1) Ex("Wrong return count");
 	if($values[0] !== "short name") Ex("Row ShortName value not correct");
 
@@ -1167,7 +1183,8 @@ function Test10($t, $debug=false){
 		'return-count'=>&$totalCount,
 		'callback'=>function($row,$i) use(&$totalCallbackIterations){ //test inline callbacks here too
 			$totalCallbackIterations++;
-		}
+		},
+		'sort-by'=>["Id"=>"DESC"]
 	))){
 		//echo "$curCount - $totalCount - $row<br>";
 		$totalIterations++;
@@ -1368,17 +1385,17 @@ function Test14($t, $debug=false){
 	$row = $t['database']['User']();	$row['UserTypeSet'] = ['A'];	Commit($row, $debug);
 	$row = $t['database']['User']();	$row['UserTypeSet'] = ['B '];	Commit($row, $debug);
 	$row = $t['database']['User']();	$row['UserTypeSet'] = ' b';	Commit($row, $debug);
-	$row = $t['database']['User']();	$row['UserTypeSet'] = 'c/d';	Commit($row, $debug);
+	$row = $t['database']['User']();	$row['UserTypeSet'] = 'c/d (e.)';	Commit($row, $debug);
 	$row = $t['database']['User']();	$row['UserTypeSet'] = [' a ',' B '];	Commit($row, $debug);
 	$row = $t['database']['User']();	$row['UserTypeSet'] = 'a,b';	Commit($row, $debug);
-	$row = $t['database']['User']();	$row['UserTypeSet'] = ['B  ',' C/d   '];	Commit($row, $debug);
-	$row = $t['database']['User']();	$row['UserTypeSet'] = ' c/d ,B';	Commit($row, $debug);
-	$row = $t['database']['User']();	$row['UserTypeSet'] = 'c/D, a ';	Commit($row, $debug);
-	$row = $t['database']['User']();	$row['UserTypeSet'] = [' a ',' b ','c/d'];	Commit($row, $debug);
-	$row = $t['database']['User']();	$row['UserTypeSet'] = ' a , b ,c/d';	Commit($row, $debug);
-	$row = $t['database']['User']();	$row['UserTypeSet'] = [' a ','c/D '];	Commit($row, $debug);
-	$row = $t['database']['User']();	$row['UserTypeSet'] = ['B ','c/d '];	Commit($row, $debug);
-	$row = $t['database']['User']();	$row['UserTypeSet'] = ['B ','C/D '];	Commit($row, $debug);
+	$row = $t['database']['User']();	$row['UserTypeSet'] = ['B  ',' C/d (E.)   '];	Commit($row, $debug);
+	$row = $t['database']['User']();	$row['UserTypeSet'] = ' c/d (e.) ,B';	Commit($row, $debug);
+	$row = $t['database']['User']();	$row['UserTypeSet'] = 'c/D (e.), a ';	Commit($row, $debug);
+	$row = $t['database']['User']();	$row['UserTypeSet'] = [' a ',' b ','c/d (e.)'];	Commit($row, $debug);
+	$row = $t['database']['User']();	$row['UserTypeSet'] = ' a , b ,c/d (e.)';	Commit($row, $debug);
+	$row = $t['database']['User']();	$row['UserTypeSet'] = [' a ','c/D (e.) '];	Commit($row, $debug);
+	$row = $t['database']['User']();	$row['UserTypeSet'] = ['B ','c/d (e.) '];	Commit($row, $debug);
+	$row = $t['database']['User']();	$row['UserTypeSet'] = ['B ','C/D (E.) '];	Commit($row, $debug);
 	$row = $t['database']['User']();	$row['UserTypeSet'] = [''];	Commit($row, $debug);
 	$row = $t['database']['User']();	$row['UserTypeSet'] = '   ';	Commit($row, $debug);
 	$row = $t['database']['User']();	$row['UserTypeSet'] = null;		Commit($row, $debug);
@@ -1425,26 +1442,26 @@ function Test14($t, $debug=false){
 	//	$lookupAssoc = "a,c"
 	//	$lookupAssoc = "AND"=>['a','c']
 	//		...WHERE set = 'a,c' 
-	$row['UserTypeSet'] = 'c/d,b'; //valid type
+	$row['UserTypeSet'] = 'c/d (e.),b'; //valid type
 	Commit($row, $debug);
-	if($row['UserTypeSet']() != ['b','c/d']) Ex('set array doesnt match expected');
+	if($row['UserTypeSet']() != ['b','c/d (e.)']) Ex('set array doesnt match expected');
 	//echo '1: '.json_encode($row).'<br>';
 	
-	$row['UserTypeSet'] = ['c/d','a']; //valid type
+	$row['UserTypeSet'] = ['c/d (e.)','a']; //valid type
 	Commit($row, $debug);
-	if($row['UserTypeSet']() != ['a','c/d']) Ex('set array doesnt match expected');
+	if($row['UserTypeSet']() != ['a','c/d (e.)']) Ex('set array doesnt match expected');
 	//echo '2: '.json_encode($row).'<br>';
 
 	$rows = $t['database']['User']->LookupRows([
-		'UserTypeSet' => 'c/D ,a '
+		'UserTypeSet' => 'c/D (e.) ,a '
 	]);
-	if(count($rows)!=3 || $rows[2]['UserTypeSet']() != ['a','c/d']) Ex('set array doesnt match expected');
+	if(count($rows)!=3 || $rows[2]['UserTypeSet']() != ['a','c/d (e.)']) Ex('set array doesnt match expected');
 	//echo '2.5: '.json_encode($rows).'<br>';
 
 	$rows = $t['database']['User']->LookupRows([
-		'UserTypeSet' => ['c/D ','a ']
+		'UserTypeSet' => ['c/D (e.) ','a ']
 	]);
-	if(count($rows)!=3 || $rows[1]['UserTypeSet']() != ['a','c/d']) Ex('set array doesnt match expected');
+	if(count($rows)!=3 || $rows[1]['UserTypeSet']() != ['a','c/d (e.)']) Ex('set array doesnt match expected');
 	//echo '3: '.json_encode($rows).'<br>';
 	
 	$row['UserTypeSet'] = ['b','a']; //valid type
@@ -1458,16 +1475,16 @@ function Test14($t, $debug=false){
 	//echo '4: '.json_encode($row).'<br>';
 	
 	$row2 = new SmartRow('User', $t['database']);
-	$row2['UserTypeSet'] = 'C/d '; //valid type
+	$row2['UserTypeSet'] = 'C/d (e.) '; //valid type
 	Commit($row2, $debug);
-	if($row2['UserTypeSet']() != ['c/d']) Ex('set array doesnt match expected');
+	if($row2['UserTypeSet']() != ['c/d (e.)']) Ex('set array doesnt match expected');
 	//echo '5: '.json_encode($row2).'<br>';
 
 	//ONLY a OR ONLY c
 	//	$lookupAssoc = "OR"=>['a','c']
 	//		...WHERE set = 'a' OR set = 'c'
 	$rows = $t['database']['User']->LookupRows([
-		'UserTypeSet' => ['OR'=>['c/D ','a ']]
+		'UserTypeSet' => ['OR'=>['c/D (e.) ','a ']]
 	]);
 	if(count($rows)!=4) Ex('set array doesnt match expected');
 	//echo '6: '.json_encode($rows).'<br>';
@@ -1478,7 +1495,7 @@ function Test14($t, $debug=false){
 	//	$lookupAssoc = "LIKE"=>["AND"=>['%a%','%c%']]
 	//		...WHERE set LIKE '%a%' and set LIKE '%c%'
 	$rows = $t['database']['User']->LookupRows([
-		'UserTypeSet' => ['like'=>'c/D ,a ']
+		'UserTypeSet' => ['like'=>'c/D (e.) ,a ']
 	]);
 	if(count($rows)!=4) Ex('set array doesnt match expected');
 	//echo '7: '.json_encode($rows).'<br>';
@@ -1690,20 +1707,6 @@ function Test16($t, $debug=false){
 	if($val != 0) Ex("Invalid count-distinct: '$val' != 0");
 }
 
-/**
- * @package Tests
- * @ignore
- */
-class TestClass{
-	public $x = 0;
-	public $y = "\\1";
-	public $z = "some quote's\"";
-	public $a = null;
-	public function __toString(){
-		return "TestClass object";
-	}
-}
-
 //types
 function Test17($t, $debug=false){
 	$db = $t['database'];
@@ -1734,12 +1737,13 @@ function Test17($t, $debug=false){
 		$row['time'] = '16:20:01';
 		$row['binary'] = '1';
 		$row['binary8'] = 'abcd1234'; //gets padded with null characters (\0) to the length of the column
-		$row['enum'] = 'Option 2';
+		$row['enum'] = 'Option. 2';
 		$row['array'] = array();
 		$row['object'] = null;
 		$row['array-notnull'] = array(1,2,3);
 		$row['object-notnull'] = $testClass;
-		
+		$row['bool'] = 0;
+		$row['boolreq'] = 1;
 	
 		AssertIsDirty($row);
 		Commit($row,$debug);
@@ -1769,11 +1773,13 @@ function Test17($t, $debug=false){
 		AssertCellVal($row['time'], '16:20:01');
 		AssertCellVal($row['binary'], '1');
 		AssertCellVal($row['binary8'], 'abcd1234');
-		AssertCellVal($row['enum'], 'Option 2');
+		AssertCellVal($row['enum'], 'Option. 2');
 		AssertCellVal($row['array'], array());
 		AssertCellVal($row['object'], null);
 		AssertCellVal($row['array-notnull'], array(1,2,3));
 		AssertCellVal($row['object-notnull'], $testClass);
+		AssertCellVal($row['bool'], 0);
+		AssertCellVal($row['boolreq'], 1);
 	
 		Delete($row,$debug);
 	
@@ -1798,6 +1804,8 @@ function Test17($t, $debug=false){
 		$row['binary'] = true;
 		$row['array-notnull'] = array('1'=>11,'a2'=>'a"33','b'=>"b'z\\4");
 		$row['object-notnull'] = $testClass;
+		$row['bool'] = false;
+		$row['boolreq'] = true;
 	
 		AssertIsDirty($row);
 		Commit($row,$debug);
@@ -1824,7 +1832,9 @@ function Test17($t, $debug=false){
 		AssertCellVal($row['binary'], '1');
 		AssertCellVal($row['array-notnull'], array('1'=>11,'a2'=>'a"33','b'=>"b'z\\4"));
 		AssertCellVal($row['object-notnull'], $testClass);
-	
+		AssertCellVal($row['bool'], 0);
+		AssertCellVal($row['boolreq'], 1);
+		
 		Delete($row,$debug);
 		
 	//---- CHECK EXACT DATA TYPES BEFORE COMMIT ----
@@ -1851,10 +1861,11 @@ function Test17($t, $debug=false){
 		$row['time'] = '16:20:01';
 		$row['binary'] = '1';
 		$row['binary8'] = 'abcd1234'; //gets padded with null characters (\0) to the length of the column
-		$row['enum'] = 'Option 2';
+		$row['enum'] = 'Option. 2';
 		$row['array-notnull'] = array('1'=>11,'a2'=>'a"33','b'=>"b'z\\4");
 		$row['object-notnull'] = $testClass;
-		
+		$row['bool'] = '0';
+		$row['boolreq'] = '1';
 	
 		AssertIsDirty($row);
 
@@ -1880,7 +1891,9 @@ function Test17($t, $debug=false){
 		AssertCellVal($row['time'], '16:20:01');
 		AssertCellVal($row['binary'], '1');
 		AssertCellVal($row['binary8'], 'abcd1234');
-		AssertCellVal($row['enum'], 'Option 2');
+		AssertCellVal($row['enum'], 'Option. 2');
+		AssertCellVal($row['bool'], 0);
+		AssertCellVal($row['boolreq'], 1);
 	
 	//---- CHECK MIXED DATA TYPES BEFORE COMMIT ----
 		$row = $db['AllDataTypes']->GetNewRow();
@@ -1903,6 +1916,8 @@ function Test17($t, $debug=false){
 		$row['binary'] = true;
 		$row['array-notnull'] = array('1'=>11,'a2'=>'a"33','b'=>"b'z\\4");
 		$row['object-notnull'] = $testClass;
+		$row['bool'] = false;
+		$row['boolreq'] = true;
 		
 		AssertIsDirty($row);
 		
@@ -1923,6 +1938,8 @@ function Test17($t, $debug=false){
 		AssertCellVal($row['double'], 56.78);
 		AssertCellVal($row['decimal'], 100.001);
 		AssertCellVal($row['binary'], '1');
+		AssertCellVal($row['bool'], 0);
+		AssertCellVal($row['boolreq'], 1);
 		
 	//---- null,0,"",false,etc input required checks
 		//--test 1
@@ -1934,10 +1951,13 @@ function Test17($t, $debug=false){
 		$row['bigint'] = 0;
 		$row['binary'] = 0;
 		$row['binaryreq'] = 0; //error
+		$row['bool'] = 0;
+		$row['boolreq'] = 0; //error
 		$row['array-notnull'] = array('1'=>11,'a2'=>'a"33','b'=>"b'z\\4");
 		$row['object-notnull'] = $testClass;
-		if(count($row->GetColumnsInError())!=1) Ex('wrong number of cells in error');
-		if(!$row['binaryreq']->HasErrors()) Ex('binary field should be required!');
+		if(count($row->GetColumnsInError())!=2) Ex('wrong number of cells in error');
+		if(!$row['binaryreq']->HasErrors()) Ex('binaryreq field should be required!');
+		if(!$row['boolreq']->HasErrors()) Ex('boolreq field should be required!');
 
 		//--test 2
 		$row = $db['AllDataTypes']->GetNewRow();
@@ -1947,10 +1967,13 @@ function Test17($t, $debug=false){
 		$row['bigint'] = "0";
 		$row['binary'] = "0";
 		$row['binaryreq'] = "0"; //error
+		$row['bool'] = "0";
+		$row['boolreq'] = "0"; //error
 		$row['array-notnull'] = array('1'=>11,'a2'=>'a"33','b'=>"b'z\\4");
 		$row['object-notnull'] = $testClass;
-		if(count($row->GetColumnsInError())!=1) Ex('wrong number of cells in error');
-		if(!$row['binaryreq']->HasErrors()) Ex('binary field should be required!');
+		if(count($row->GetColumnsInError())!=2) Ex('wrong number of cells in error');
+		if(!$row['binaryreq']->HasErrors()) Ex('binaryreq field should be required!');
+		if(!$row['boolreq']->HasErrors()) Ex('boolreq field should be required!');
 		
 		//--test 3
 		$row = $db['AllDataTypes']->GetNewRow();
@@ -1960,10 +1983,14 @@ function Test17($t, $debug=false){
 		$row['bigint'] = false;
 		$row['binary'] = false;
 		$row['binaryreq'] = false; //error
+		$row['bool'] = false;
+		$row['boolreq'] = false; //error
 		$row['array-notnull'] = array('1'=>11,'a2'=>'a"33','b'=>"b'z\\4");
 		$row['object-notnull'] = $testClass;
-		if(count($row->GetColumnsInError())!=2) Ex('wrong number of cells in error');
+		if(count($row->GetColumnsInError())!=3) Ex('wrong number of cells in error');
 		if($row['int']->HasErrors()) Ex('int field should not have errors!');
+		if(!$row['binaryreq']->HasErrors()) Ex('binaryreq field should be required!');
+		if(!$row['boolreq']->HasErrors()) Ex('boolreq field should be required!');
 		
 		//test 4
 		$row = $db['AllDataTypes']->GetNewRow();
@@ -1973,9 +2000,12 @@ function Test17($t, $debug=false){
 		$row['bigint'] = null;
 		$row['binary'] = null;
 		$row['binaryreq'] = null; //error
+		$row['bool'] = null;
+		$row['boolreq'] = null; //error
 		$row['array-notnull'] = array('1'=>11,'a2'=>'a"33','b'=>"b'z\\4");
 		$row['object-notnull'] = $testClass;
-		if(count($row->GetColumnsInError())!=3) Ex('wrong number of cells in error');
+		if(count($row->GetColumnsInError())!=4) Ex('wrong number of cells in error');
+		if(!$row['boolreq']->HasErrors()) Ex('boolreq field should be required!');
 		
 		//test 5
 		$row = $db['AllDataTypes']->GetNewRow();
@@ -1985,9 +2015,11 @@ function Test17($t, $debug=false){
 		$row['bigint'] = "";
 		$row['binary'] = "";
 		$row['binaryreq'] = ""; //error
+		$row['bool'] = "";
+		$row['boolreq'] = ""; //error
 		$row['array-notnull'] = array('1'=>11,'a2'=>'a"33','b'=>"b'z\\4");
 		$row['object-notnull'] = $testClass;
-		if(count($row->GetColumnsInError())!=3) Ex('wrong number of cells in error');
+		if(count($row->GetColumnsInError())!=4) Ex('wrong number of cells in error');
 		
 		//test 6
 		$row = $db['AllDataTypes']->GetNewRow();
@@ -1997,6 +2029,8 @@ function Test17($t, $debug=false){
 		$row['bigint'] = true;
 		$row['binary'] = true;
 		$row['binaryreq'] = true; //1 - ok
+		$row['bool'] = true;
+		$row['boolreq'] = true; //1 - ok
 		$row['array-notnull'] = array('1'=>11,'a2'=>'a"33','b'=>"b'z\\4");
 		$row['object-notnull'] = $testClass;
 		if(count($row->GetColumnsInError())!=0) Ex('wrong number of cells in error');
@@ -2009,6 +2043,8 @@ function Test17($t, $debug=false){
 		$row['bigint'] = "1";
 		$row['binary'] = "1";
 		$row['binaryreq'] = "1"; //1 - ok
+		$row['bool'] = "1";
+		$row['boolreq'] = "1"; //1 - ok
 		$row['array-notnull'] = array('1'=>11,'a2'=>'a"33','b'=>"b'z\\4");
 		$row['object-notnull'] = $testClass;
 		if(count($row->GetColumnsInError())!=0) Ex('wrong number of cells in error');
@@ -2033,12 +2069,13 @@ function Test17($t, $debug=false){
 		$row['double'] = '056.780';
 		$row['decimal'] = '0100.0010';
 		$row['binary'] = true;
+		$row['boolreq'] = true;
 		$row['date'] = '2020-12-25';
 		$row['datetime'] = '1999-12-31 23:59:59';
 		$row['timestamp'] = strtotime('2000-01-01 00:00:00'); //using an integer timestamp directly
 		$row['time'] = '16:20:01';
 		$row['binary8'] = null;
-		$row['enum'] = 'Option 2';
+		$row['enum'] = 'Option. 2';
 		$row['array-notnull'] = array('1'=>11,'a2'=>'a"33','b'=>"b'z\\4");
 		$row['object-notnull'] = $testClass;
 		AssertIsDirty($row);
@@ -2060,12 +2097,13 @@ function Test17($t, $debug=false){
 			'double' => 56.780,
 			'decimal' => '0100.0010',
 			'binary' => true,
+			'boolreq' => true,
 			'date' => '2020-12-25',
 			'datetime' => '1999-12-31 23:59:59',
 			'timestamp' => '2000-01-01 00:00:00',
 			'time' => '16:20:01',
 			'binary8' => null,
-			'enum' => 'Option 2'
+			'enum' => 'Option. 2'
 		));
 		
 		AssertExists($row);
@@ -2090,6 +2128,8 @@ function Test17($t, $debug=false){
 		$row['decimal'] = true;
 		$row['binary'] = 1;
 		$row['binaryreq'] = true; 
+		$row['bool'] = 1;
+		$row['boolreq'] = true;
 		$row['array-notnull'] = array('1'=>11,'a2'=>'a"33','b'=>"b'z\\4");
 		$row['object-notnull'] = $testClass;
 		Commit($row,$debug);
@@ -2111,7 +2151,9 @@ function Test17($t, $debug=false){
 			'double' => null,
 			'decimal' => true,
 			'binary' => 1,
-			'binaryreq' => true
+			'binaryreq' => true,
+			'bool' => 1,
+			'boolreq' => true
 		));
 		AssertExists($row);
 		
@@ -2132,7 +2174,9 @@ function Test17($t, $debug=false){
 			'double' => null,
 			'decimal' => "1",
 			'binary' => true,
-			'binaryreq' => "1"
+			'binaryreq' => "1",
+			'bool' => true,
+			'boolreq' => "1"
 		));
 		AssertExists($row);
 		
@@ -2269,8 +2313,9 @@ function Test20($t, $debug=false){
 	$row['timestamp'] = '2000-01-01 00:00:00';
 	$row['time'] = '16:20:01';
 	$row['binary'] = '1';
+	$row['bool'] = '1';
 	$row['binary8'] = 'abcd1234'; //gets padded with null characters (\0) to the length of the column
-	$row['enum'] = 'Option 2';
+	$row['enum'] = 'Option. 2';
 	$row['array'] = array();
 	$row['object'] = null;
 	$row['array-notnull'] = array(1,2,3);
@@ -2312,7 +2357,7 @@ function Test21($t, $debug=false){
 	
 	$callbackRowsReturned = 0;
 	$finalRow = $db['Setting']->LookupRows(['Id'=>8811857], [
-		'callback' => function($row, $i) use(&$callbackRowsReturned){
+		'callback' => function($row, $i) use(&$callbackRowsReturned, $debug){
 			$callbackRowsReturned++;
 			if($i != $callbackRowsReturned){
 				Ex('Inline callback received wrong row number.');
@@ -2341,7 +2386,7 @@ function Test21($t, $debug=false){
 	
 	$callbackRowsReturned = 0;
 	$finalRow = $db['Setting']->LookupRows(['Id'=>['OR'=>[777111,777112]]], [
-		'callback' => function($row, $i) use(&$callbackRowsReturned){
+		'callback' => function($row, $i) use(&$callbackRowsReturned, $debug){
 			$callbackRowsReturned++;
 			if($i != $callbackRowsReturned){
 				Ex('Inline callback received wrong row number.');
@@ -2374,7 +2419,7 @@ function Test21($t, $debug=false){
 	
 	$callbackRowsReturned = 0;
 	$finalRow = $db['Setting']->GetAllRows([
-		'callback' => function($row, $i) use(&$callbackRowsReturned){
+		'callback' => function($row, $i) use(&$callbackRowsReturned, $debug){
 			$callbackRowsReturned++;
 			if($i != $callbackRowsReturned){
 				Ex('Inline callback received wrong row number.');
@@ -2422,7 +2467,7 @@ function Test21($t, $debug=false){
 	
 	$callbackRowsReturned = 0;
 	$finalRow = $db['Setting']['Id']->LookupRows(8811857, [
-			'callback' => function($row, $i) use(&$callbackRowsReturned){
+			'callback' => function($row, $i) use(&$callbackRowsReturned, $debug){
 				$callbackRowsReturned++;
 				if($i != $callbackRowsReturned){
 					Ex('Inline callback received wrong row number.');
@@ -2451,7 +2496,7 @@ function Test21($t, $debug=false){
 	
 	$callbackRowsReturned = 0;
 	$finalRow = $db['Setting']['Name']->LookupRows('TEST-NAME', [
-		'callback' => function($row, $i) use(&$callbackRowsReturned){
+		'callback' => function($row, $i) use(&$callbackRowsReturned, $debug){
 			$callbackRowsReturned++;
 			if($i != $callbackRowsReturned){
 				Ex('Inline callback received wrong row number.');
@@ -3474,8 +3519,8 @@ function TestForm($t, $debug=false){
 		<?
 		ob_start();
 		if($debug && $_POST) echo "POST:<br>".print_r($_POST,true)."<br>";
-		$i = new Questionare($t['database'],$_REQUEST['Questionare']['QuestionareId']);
-		if(!$i->Exists() && $_POST['submit']!='save'){
+		$i = new Questionare($t['database'], ($_REQUEST['Questionare']['QuestionareId'] ?? null) );
+		if(!$i->Exists() && !empty($_POST['submit']) && $_POST['submit']!='save'){
 			echo '<b>Id '.$_REQUEST['Questionare']['QuestionareId'].' does not exist</b><br>';
 			$i['QuestionareId']->ForceUnset();
 		}
@@ -3484,7 +3529,7 @@ function TestForm($t, $debug=false){
 			Msg($debug,"After set from POST",$i);
 			if($debug) echo "<br>\n";
 		}
-		if($_POST['submit']==='delete'){
+		if(!empty($_POST['submit']) && $_POST['submit']==='delete'){
 			if(!$i->Exists()) Msg($debug,"Row doesnt exist to delete",$i);
 			else{
 				if($debug) echo "<br>Before delete: <br>\n".$i;
@@ -3494,7 +3539,7 @@ function TestForm($t, $debug=false){
 				AssertNotExists($i);
 			}
 		}
-		else if($_POST['submit']==='save'){
+		else if(!empty($_POST['submit']) && $_POST['submit']==='save'){
 			if($errors=$i->HasErrors()){
 				if($debug) echo "Errors: $errors<br>\n";
 			}
@@ -3544,7 +3589,7 @@ function TestForm($t, $debug=false){
 				}
 				echo $Cell->GetFormObjectLabel().' '.$Cell->GetPasswordFormObject(array('id'=>null),array('custom-formatter-callback'=>'formatPassword','show-required-marker'=>true))."<br>\n";
 			}
-			else echo $Cell->GetFormObjectLabel().' '.$Cell->GetFormObject()."<br>\n";
+			else echo $Cell->GetFormObjectLabel(['for-id-suffix'=>'-suffixtest']).' '.$Cell->GetFormObject(null,null,['id-suffix'=>'-suffixtest'])."<br>\n";
 		}
 		?>
 		<input type="submit" value="save" name="submit">

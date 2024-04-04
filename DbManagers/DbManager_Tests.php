@@ -58,6 +58,8 @@ class DbManager_Tests extends DbManager_MySQL{
 	}
 	
 	private function TestMultiQuery(){
+		$failed = false;
+		$failMsg = '';
 		try{
 			$sql = 'insert into `FastSetting` (`Id`,`Name`,`ShortName`) values (444, "4@44.44", "444!");';
 			$sql .= 'select * from `FastSetting` where `Id`=444;';
@@ -110,6 +112,8 @@ class DbManager_Tests extends DbManager_MySQL{
 	
 	
 	private function TestWhereClause($array_where, $expectedResult, $testFuncName=null, $options=array()){
+		$failed = false;
+		$failMsg = '';
 		try{
 			$actualResult = trim($this->GenerateWhereClause("TEST_TABLE", $array_where, false, false, $options));
 			if(strcmp($actualResult,$expectedResult) != 0){
@@ -447,10 +451,10 @@ class DbManager_Tests extends DbManager_MySQL{
 
 
 //$tests = new DbManager_Tests('SERVER','USERNAME','PASSWORD','DATABASE_NAME');
-$tests = new DbManager_Tests('localhost','smartdb','smartdb123','smartdb_test', array(
-	'driver'=>'mysql'
-));
-$tests->TestAll();
+//$tests = new DbManager_Tests('localhost','smartdb','smartdb123','smartdb_test', array(
+//	'driver'=>'mysql'
+//));
+//$tests->TestAll();
 
 $tests = new DbManager_Tests('localhost','smartdb','smartdb123','smartdb_test', array(
 	'driver'=>'mysqli'

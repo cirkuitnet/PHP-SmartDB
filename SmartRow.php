@@ -166,7 +166,13 @@ class SmartRow implements ArrayAccess, JsonSerializable{
 			$this->_cells[$columnName] = new SmartCell($Column, $this);
 
 			if(isset($Column->DefaultValue) && $useDefaultValues) { //this column has a default value
-				$this->_cells[$columnName]->ForceValue($Column->DefaultValue);
+				if($Column->IsDateColumn && $Column->DefaultValue == 'CURRENT_TIMESTAMP'){
+					//special case for date columns and CURRENT_TIMESTAMP
+					$this->_cells[$columnName]->ForceValue( time() );
+				}
+				else{
+					$this->_cells[$columnName]->ForceValue($Column->DefaultValue);
+				}
 			}
 		}
 
@@ -317,7 +323,7 @@ class SmartRow implements ArrayAccess, JsonSerializable{
 	 * @ignore
 	 */
 	public function Cell($columnName){
-		if($this->_cells[$columnName]){ //the actual column exists
+		if(!empty($this->_cells[$columnName])){ //the actual column exists
 			return $this->_cells[$columnName];
 		}
 		else{
@@ -601,6 +607,7 @@ class SmartRow implements ArrayAccess, JsonSerializable{
 			$options['only-add-set-columns'] = true;
 		}
 		$defaultOptions = array( //default options
+			'only-add-set-columns'=>false,
 			'get-key-columns'=>true,
 			'get-non-key-columns'=>true,
 			'date-format'=>'' // set this to auto-format date columns. ref formarts that work with php's date() function (http://php.net/date)
@@ -674,8 +681,8 @@ class SmartRow implements ArrayAccess, JsonSerializable{
 		if($keyColumnCount == 0) throw new Exception("Table {$this->Table->TableName} does not have any key columns defined. Cannot run this function.");
 		if($keyColumnCount > 1) throw new Exception("Composite Keys not yet implemented. Shouldn't take much to do though...");
 
-		$limit = trim($options['limit']);
-		$sortByFinal = $this->Table->BuildSortArray($options['sort-by']);
+		$limit = trim($options['limit'] ?? '');
+		$sortByFinal = (!empty($options['sort-by']) ? $this->Table->BuildSortArray($options['sort-by']) : null);
 		if(!$this->DbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
 		$numRowsSelected = $this->DbManager->Select($selectArray, $this->Table, $whereArray, $sortByFinal, $limit, array('add-column-quotes'=>true, 'add-dot-notation'=>true) );
 		$options['return-count'] = $numRowsSelected;
@@ -706,13 +713,13 @@ class SmartRow implements ArrayAccess, JsonSerializable{
 			}
 
 			//check the 'return-count-only' option
-			if($options['return-count-only']) return $numRowsSelected;
+			if(!empty($options['return-count-only'])) return $numRowsSelected;
 
 			return $resultArray;
 		}
 		else { //num or rows selected != 1
 			//check the 'return-count-only' option
-			if($options['return-count-only']) return $numRowsSelected;
+			if(!empty($options['return-count-only'])) return $numRowsSelected;
 
 			$resultArray = array();
 			for($i=0; $i<$numRowsSelected; $i++){
@@ -828,8 +835,9 @@ class SmartRow implements ArrayAccess, JsonSerializable{
 
 		if($this->_existsInDb == false || !$this->Table->PrimaryKeyExists()){ //row is not in database yet. insert a new row
 			$numRowsInserted = 0; //event could be cancelled. make sure this is 0 at this point for our return value
-			if($this->_onBeforeCommit) $this->FireCallback($this->_onBeforeCommit, $e=array('cancel-event'=>&$cancelEvent));
-			if($this->_onBeforeInsert) $this->FireCallback($this->_onBeforeInsert, $e=array('cancel-event'=>&$cancelEvent));
+			$eventArgs = ['cancel-event'=>&$cancelEvent];
+			if($this->_onBeforeCommit) $this->FireCallback($this->_onBeforeCommit, $eventArgs);
+			if($this->_onBeforeInsert) $this->FireCallback($this->_onBeforeInsert, $eventArgs);
 			if(!$cancelEvent){
 				$numRowsInserted = $this->InsertAsNewRow(); //returns number of rows inserted. should be 1 on success, 0 on fail (or TRUE/FALSE)
 				if($this->_onAfterInsert) $this->FireCallback($this->_onAfterInsert);
@@ -841,8 +849,9 @@ class SmartRow implements ArrayAccess, JsonSerializable{
 			if(!$this->IsDirty()) return -1; //nothing to commit
 
 			$numRowsUpdated = 0; //event could be cancelled. make sure this is 0 at this point for our return value
-			if($this->_onBeforeCommit) $this->FireCallback($this->_onBeforeCommit, $e=array('cancel-event'=>&$cancelEvent));
-			if($this->_onBeforeUpdate) $this->FireCallback($this->_onBeforeUpdate, $e=array('cancel-event'=>&$cancelEvent));
+			$eventArgs = ['cancel-event'=>&$cancelEvent];
+			if($this->_onBeforeCommit) $this->FireCallback($this->_onBeforeCommit, $eventArgs);
+			if($this->_onBeforeUpdate) $this->FireCallback($this->_onBeforeUpdate, $eventArgs);
 			if(!$cancelEvent){
 				$updateVals = array();
 				$whereArray = array();
@@ -938,7 +947,11 @@ class SmartRow implements ArrayAccess, JsonSerializable{
 		if ($this->_initialized == false) $this->TryGetDatabaseValues(); //not initialized yet. need to initialize to see if this row exists in database
 		if ($this->_existsInDb == false) return false; //row does not exist to delete
 
-		if($this->_onBeforeDelete) $this->FireCallback($this->_onBeforeDelete, $e=array('cancel-event'=>&$cancelEvent));
+		$cancelEvent = false;
+		if($this->_onBeforeDelete){
+			$eventArgs = ['cancel-event'=>&$cancelEvent];
+			$this->FireCallback($this->_onBeforeDelete, $eventArgs);
+		}
 
 		if(!$cancelEvent){
 			$whereArray = array();
@@ -1062,7 +1075,10 @@ class SmartRow implements ArrayAccess, JsonSerializable{
 		$str = "";
 		foreach($this->_cells as $columnName=>$Cell){
 			if ($Cell->Column->AllowGet==false) continue;
-			$str .= $Cell->Column->ColumnName.": ".$Cell->GetValue()."<br>\n";
+			$val = $Cell->GetValue();
+			if(is_array($val)) $val = nl2br(print_r($val, true)); //convert array to string
+			else $val = $val."<br>\n";
+			$str .= $Cell->Column->ColumnName.": ".$val;
 		}
 		return $str;
 	}

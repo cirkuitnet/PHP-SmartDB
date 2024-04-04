@@ -25,7 +25,7 @@ require_once(dirname(__FILE__).'/SmartRow.php');
  * @package SmartDatabase
  */
 class SmartDatabase implements ArrayAccess, Countable{
-	const Version = "1.46"; //should update this for ANY change to structure at least. used for determining if a serialized SmartDatabase object is invalid/out of date
+	const Version = "1.47"; //should update this for ANY change to structure at least. used for determining if a serialized SmartDatabase object is invalid/out of date
 	
 	/////////////////////////////// SERIALIZATION - At top so we don't forget to update these when we add new vars //////////////////////////
 		/**
@@ -149,7 +149,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 	 * @return SmartTable The Table instance matching the given $tableName. An exception is thrown if the table does not exist.
 	 */
 	public function GetTable($tableName){
-		if(!$this->_tables[$tableName]) throw new Exception("Invalid table: '$tableName'");
+		if(empty($this->_tables[$tableName])) throw new Exception("Invalid table: '$tableName'");
 		return $this->_tables[$tableName];
 	}
 
@@ -167,7 +167,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 	 * @param string $tableName The name of the table to remove
 	 */
 	public function RemoveTable($tableName){
-		if(!$this->_tables[$tableName]) throw new Exception("Invalid table: '$tableName'");
+		if(empty($this->_tables[$tableName])) throw new Exception("Invalid table: '$tableName'");
 
 		$this->_tables[$tableName]->Database = null; //$this database is no longer the table's database
 		unset($this->_tables[$tableName]);
@@ -212,7 +212,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 	 * @param array $options [optional] See description
 	 */
 	public function LoadXmlSchema($xmlSchemaFilePath, array $options=null){
-		if($options['clear-current-schema']){
+		if(!empty($options['clear-current-schema'])){
 			$this->RemoveAllTables(); //clear old tables... new database schema coming in.
 		}
 
@@ -435,12 +435,19 @@ class SmartDatabase implements ArrayAccess, Countable{
 				$table = new SmartTable($tableName);
 
 				$table->ExtendedByClassName = $xmlClass['a']['Name'];
-				$table->AutoCommit = (strtolower($xmlDatabase['a']['CommitChangesAutomatically']) === 'true' ? true : false);
-				$table->IsAbstract = (strtolower($xmlDatabase['a']['IsAbstract']) === 'true' ? true : false);
+				$table->AutoCommit = (!empty($xmlDatabase['a']['CommitChangesAutomatically']) && strtolower($xmlDatabase['a']['CommitChangesAutomatically']) === 'true' ? true : false);
+				$table->IsAbstract = (!empty($xmlDatabase['a']['IsAbstract']) && strtolower($xmlDatabase['a']['IsAbstract']) === 'true' ? true : false);
 
 				//track inherited tables. will handle adding inherited columns after all regular tables/column have been added
 				//"InheritsTableName" attribute is old and deprecated. use the plural "InheritsTableNames" since it is supported now
-				if( ($inheritsTableNames = $xmlDatabase['a']['InheritsTableNames'] ?: $xmlDatabase['a']['InheritsTableName']) ){
+				$inheritsTableNames = null;
+				if (!empty($xmlDatabase['a']['InheritsTableNames'])) {
+				    $inheritsTableNames = $xmlDatabase['a']['InheritsTableNames'];
+				}
+				else if (!empty($xmlDatabase['a']['InheritsTableName'])) {
+				    $inheritsTableNames = $xmlDatabase['a']['InheritsTableName'];
+				}
+				if($inheritsTableNames){
 					//$inheritsTableNames could be CSV of multiple table names
 					$inheritTableNamesArr = explode(',', $inheritsTableNames);
 					foreach($inheritTableNamesArr as $inheritTableName){
@@ -457,7 +464,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 					$column = new SmartColumn($xmlColumnName);
 
 					//add column aliases
-					if( ($aliases = $xmlColumn['a']['Aliases']) ){ //if the "Aliases" attribute exists..
+					if(!empty($xmlColumn['a']['Aliases']) && ($aliases = $xmlColumn['a']['Aliases']) ){ //if the "Aliases" attribute exists..
 						if( ($aliases = explode(',', $aliases)) ){ //convert CSV string into array or FALSE if it's an empty string (false will avoid the foreach loop)
 							foreach($aliases as $alias){
 								$alias = trim($alias);
@@ -478,35 +485,37 @@ class SmartDatabase implements ArrayAccess, Countable{
 					}
 					else $column->DataType = strtolower($xmlColumn['a']['DataType']); //non-enum or set data type
 
+					$column->IsStringColumn = (stripos($column->DataType, "char") !== false || stripos($column->DataType, "text") !== false);
 					$column->IsDateColumn = (stripos($column->DataType, "date") !== false || $column->DataType==='timestamp');
 					$column->IsTimezoneColumn = ($column->DataType==='datetime' || $column->DataType==='timestamp');
 					$column->IsSerializedColumn = ($column->DataType==='array' || $column->DataType==='object');
 					$column->IsASet = ($column->DataType==='set');
 					$column->DisplayName = (!empty($xmlColumn['a']['DisplayName']) ? $xmlColumn['a']['DisplayName'] : $xmlColumnName);
-					$column->Collation = $xmlColumn['a']['Collation'];
-					$column->MinSize = $xmlColumn['a']['MinSize'];
-					$column->MaxSize = $xmlColumn['a']['MaxSize'];
-					$column->AllowGet = (strtolower($xmlColumn['a']['AllowGet']) === 'false' ? false : true); //default value is true
-					$column->AllowSet = (strtolower($xmlColumn['a']['AllowSet']) === 'false' ? false : true); //default value is true
-					$column->TrimAndStripTagsOnSet = (strtolower($xmlColumn['a']['TrimAndStripTagsOnSet']) === 'true' ? true : false);
-					$column->AllowLookup =(strtolower($xmlColumn['a']['AllowLookup']) === 'false' ? false : true); //default value is true
-					$column->AllowGetAll = (strtolower($xmlColumn['a']['AllowGetAll']) === 'false' ? false : true); //default value is true
-					$column->DefaultValue = $xmlColumn['a']['DefaultValue'];
-					$column->Example = $xmlColumn['a']['Example'];
-					$column->IsUnique = (strtolower($xmlColumn['a']['IsUnique']) === 'true' ? true : false);
-					$column->FulltextIndex = (strtolower($xmlColumn['a']['FulltextIndex']) === 'true' ? true : false);
-					$column->NonuniqueIndex = (strtolower($xmlColumn['a']['NonuniqueIndex']) === 'true' ? true : false);
-					$column->IsPrimaryKey = (strtolower($xmlColumn['a']['PrimaryKey']) === 'true' ? true : false);
-					$column->IsAutoIncrement = (strtolower($xmlColumn['a']['AutoIncrement']) === 'true' ? true : false);
-					$column->DefaultFormType = ($xmlColumn['a']['FormType'] ? $xmlColumn['a']['FormType'] : "text"); //"text" is default value
-					$column->IsRequired = (!$column->IsAutoIncrement && strtolower($xmlColumn['a']['InputRequired']) === 'true' ? true : false); //auto-increment shouldnt be required, otherwise we dont get the autoincrement value
-					$column->IsRequiredMessage = $xmlColumn['a']['InputEmptyError'];
-					$column->RegexCheck = $xmlColumn['a']['InputRegexCheck'];
-					$column->RegexFailMessage = $xmlColumn['a']['InputRegexFailError'];
-					$column->SortOrder = $xmlColumn['a']['SortOrder'];
+					$column->Collation = $xmlColumn['a']['Collation'] ?? null;
+					$column->MinSize = $xmlColumn['a']['MinSize'] ?? null;
+					$column->MaxSize = $xmlColumn['a']['MaxSize'] ?? null;
+					$column->AllowGet = (isset($xmlColumn['a']['AllowGet']) && strtolower($xmlColumn['a']['AllowGet']) === 'false' ? false : true); //default value is true
+					$column->AllowSet = (isset($xmlColumn['a']['AllowSet']) && strtolower($xmlColumn['a']['AllowSet']) === 'false' ? false : true); //default value is true
+					$column->TrimAndStripTagsOnSet = (isset($xmlColumn['a']['TrimAndStripTagsOnSet']) && strtolower($xmlColumn['a']['TrimAndStripTagsOnSet']) === 'true' ? true : false);
+					$column->AllowLookup =(isset($xmlColumn['a']['AllowLookup']) && strtolower($xmlColumn['a']['AllowLookup']) === 'false' ? false : true); //default value is true
+					$column->AllowGetAll = (isset($xmlColumn['a']['AllowGetAll']) && strtolower($xmlColumn['a']['AllowGetAll']) === 'false' ? false : true); //default value is true
+					$column->DefaultValue = $xmlColumn['a']['DefaultValue'] ?? null;
+					$column->Example = $xmlColumn['a']['Example'] ?? null;
+					$column->IsUnique = (!empty($xmlColumn['a']['IsUnique']) && strtolower($xmlColumn['a']['IsUnique']) === 'true' ? true : false);
+					$column->FulltextIndex = (!empty($xmlColumn['a']['FulltextIndex']) && strtolower($xmlColumn['a']['FulltextIndex']) === 'true' ? true : false);
+					$column->NonuniqueIndex = (!empty($xmlColumn['a']['NonuniqueIndex']) && strtolower($xmlColumn['a']['NonuniqueIndex']) === 'true' ? true : false);
+					$column->IsPrimaryKey = (!empty($xmlColumn['a']['PrimaryKey']) && strtolower($xmlColumn['a']['PrimaryKey']) === 'true' ? true : false);
+					$column->IsAutoIncrement = (!empty($xmlColumn['a']['AutoIncrement']) && strtolower($xmlColumn['a']['AutoIncrement']) === 'true' ? true : false);
+					$column->DefaultFormType = (!empty($xmlColumn['a']['FormType']) && $xmlColumn['a']['FormType'] ? $xmlColumn['a']['FormType'] : "text"); //"text" is default value
+					$column->IsRequired = (!$column->IsAutoIncrement && !empty($xmlColumn['a']['InputRequired']) && strtolower($xmlColumn['a']['InputRequired']) === 'true' ? true : false); //auto-increment shouldnt be required, otherwise we dont get the autoincrement value
+					$column->IsRequiredMessage = $xmlColumn['a']['InputEmptyError'] ?? null;
+					$column->RegexCheck = $xmlColumn['a']['InputRegexCheck'] ?? null;
+					$column->RegexFailMessage = $xmlColumn['a']['InputRegexFailError'] ?? null;
+					$column->SortOrder = $xmlColumn['a']['SortOrder'] ?? null;
 					
 					//add column possible values. if set and the data type is enum or set, these will be used as the only possible values instead of the enum/set values (ie you can use a subset of the possible values specified in the enum/set data type)
-					if( ($possibleValues = trim($xmlColumn['a']['PossibleValues'])) ){ //if the "PossibleValues" attribute exists..
+					$possibleValues = trim($xmlColumn['a']['PossibleValues'] ?? '');
+					if( $possibleValues ){ //if the "PossibleValues" attribute exists..
 						if( ($possibleValues = explode(',', $possibleValues)) ){ //convert CSV string into array or FALSE if it's an empty string
 							$column->PossibleValues = $possibleValues;
 						}
@@ -585,14 +594,15 @@ class SmartDatabase implements ArrayAccess, Countable{
 	 * @return
 	 */
 	private function BuildInheritedTables($tableName, &$allInheritedTables, &$queuedTables, &$completedTables){
-		if($completedTables[$tableName]) return; //this table is already ready to go. move along
+		if(!empty($completedTables[$tableName])) return; //this table is already ready to go. move along
 
-		if($queuedTables[$tableName]) throw new Exception("Table inheritance loop: ".print_r($queuedTables,true));
+		if(!empty($queuedTables[$tableName])) throw new Exception("Table inheritance loop: ".print_r($queuedTables,true));
 		$queuedTables[$tableName] = true;
 
-		if( ($inheritTableNamesArr = $allInheritedTables[$tableName]) ){
+		$inheritTableNamesArr = $allInheritedTables[$tableName] ?? [];
+		if( $inheritTableNamesArr ){
 			foreach($inheritTableNamesArr as $inheritTablename){
-				if(!$completedTables[$inheritTablename]){ //inherited table is not ready yet, build it first
+				if(empty($completedTables[$inheritTablename])){ //inherited table is not ready yet, build it first
 					$this->BuildInheritedTables($inheritTablename, $allInheritedTables, $queuedTables, $completedTables);
 				}
 	
@@ -641,7 +651,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 		  switch ($xml->nodeType) {
 		    case XMLReader::END_ELEMENT: return $assoc;
 		    case XMLReader::ELEMENT:
-		      $assoc[$xml->name][] = array('v' => $xml->isEmptyElement ? $GLOBALS['EMPTY_ELEMENT_PLACEHOLDER'] : $this->Xml2assoc($xml)); //v=value)
+		      $assoc[$xml->name][] = array('v' => $xml->isEmptyElement ? ($GLOBALS['EMPTY_ELEMENT_PLACEHOLDER'] ?? null) : $this->Xml2assoc($xml)); //v=value)
 		      if($xml->hasAttributes){
 		        $el =& $assoc[$xml->name][count($assoc[$xml->name]) - 1];
 		        while($xml->moveToNextAttribute()) $el['a'][$xml->name] = $xml->value; //a=attributes
@@ -727,6 +737,11 @@ class SmartDatabase implements ArrayAccess, Countable{
 	}
 
 	private function BuildSyncStructure(){
+		//mysql handles the sync structure differently based on version
+		$serverVersion = $this->DbManager->GetServerVersion(); //can use: version_compare($serverVersion,'1.2.3','>=');
+		$isServerVersion5 = (strpos($serverVersion,'5.') === 0);
+		//$isServerVersion8 = (strpos($serverVersion,'8.') === 0);
+
 		$structure = array();
 		foreach($this->_tables as $tableName=>$Table) {
 			if($Table->IsAbstract) continue; //abstract tables do not actually go in the database, but they can be inherited from
@@ -752,11 +767,17 @@ class SmartDatabase implements ArrayAccess, Countable{
 					$structure[$tableName][$columnName]["Type"] .= "({$Column->MaxSize})";
 				}
 				else if (strpos($dataTypeLower,"int")!==false){ //..int.. type
-					$size = (empty($Column->MaxSize) ? "1" : $Column->MaxSize);
-					$structure[$tableName][$columnName]["Type"] .= "($size)";
+					if ($isServerVersion5) { //older mysql adds sizes to int, not newer mysql, even if you specify one
+						$size = (empty($Column->MaxSize) ? "1" : $Column->MaxSize);
+						$structure[$tableName][$columnName]["Type"] .= "($size)";
+					}
 					if($Column->IsPrimaryKey){ //..int.. primary key
 						$structure[$tableName][$columnName]["Type"] .= " unsigned";
 					}
+				}
+				else if (strpos($dataTypeLower,"bool")!==false){ //..bool.. type
+					if($Column->MaxSize && $Column->MaxSize != "1") throw new Exception("'{$Column->DataType}' column type must be MaxSize 1 (or not set, which defaults to 1). Column: '{$Column->ColumnName}', Table: '{$Table->TableName}'");
+					$structure[$tableName][$columnName]["Type"] = "tinyint(1)"; //bool is actually tinyint(1). this is also the case in mysql
 				}
 				else if (strpos($dataTypeLower,"binary")!==false){ //..binary.. type
 					$size = (empty($Column->MaxSize) ? "1" : $Column->MaxSize);
@@ -830,8 +851,8 @@ class SmartDatabase implements ArrayAccess, Countable{
 				
 				//forced character set
 				//reference: http://dev.mysql.com/doc/refman/5.0/en/charset-charsets.html
-				if($structure[$tableName][$columnName]["Collation"]){
-					switch($structure[$tableName][$columnName]["Collation"]){
+				if($columnProps["Collation"]){
+					switch($columnProps["Collation"]){
 						case "utf8_general_ci":
 							$sqlCreateTable .= " CHARACTER SET utf8 COLLATE utf8_general_ci";
 							break;
@@ -843,46 +864,59 @@ class SmartDatabase implements ArrayAccess, Countable{
 							break;
 						//no need for more yet. also may need to add a collation option
 						default:
-							throw new Exception("Unsupported Collation '".$structure[$tableName][$columnName]["Collation"]."' set for table: '$tableName', column: '$columnName'");
+							throw new Exception("Unsupported Collation '".$columnProps["Collation"]."' set for table: '$tableName', column: '$columnName'");
 					}
 				}
 
 				//null
-				if($structure[$tableName][$columnName]["Null"] === "NO"){
+				if($columnProps["Null"] === "NO"){
 					$sqlCreateTable .= " NOT NULL";
 				}
 				else $sqlCreateTable .= " NULL";
 
 				//default value
-				if(isset($structure[$tableName][$columnName]["Default"]) && $structure[$tableName][$columnName]["Default"]!=="" && strcasecmp($columnProps['Type'], 'text')!=0 ){ // blob/text types cant have default values in mysql
-					$sqlCreateTable .= " DEFAULT '".$structure[$tableName][$columnName]["Default"]."'";
+				if($columnProps['Default']!=""){
+					$dataTypeLower = strtolower($columnProps['Type']);
+					if( strpos($dataTypeLower,'enum')!==0 && strpos($dataTypeLower,'set')!==0 && (strpos($dataTypeLower,'text')!==false || strpos($dataTypeLower,'blob')!==false) ){
+						// blob/text types cant have default values in mysql. make sure it's not an enum/set though that may contain the text 'text' or 'blob'
+						error_log("WARNING: '".$columnProps['Field']."' is type '".$columnProps['Type']." which does not support default values. Default value '".$columnProps['Default']."' ignored.");
+						//$sqlCreateTable .= ""; //no default allowed
+					}
+					else if( ($dataTypeLower == 'timestamp' || $dataTypeLower == 'datetime') && strtoupper($columnProps['Default']) == 'CURRENT_TIMESTAMP'){
+						//no quotes around default value
+						$sqlCreateTable .= " DEFAULT {$columnProps['Default']} ";
+					}
+					else{
+						//quote default value
+						$sqlCreateTable .= " DEFAULT '{$columnProps['Default']}' ";
+					}
 				}
 
 				//auto increment
-				if(stripos($structure[$tableName][$columnName]["Extra"],"auto_increment") !== false){
+				if(stripos($columnProps["Extra"],"auto_increment") !== false){
 					$sqlCreateTable .= " AUTO_INCREMENT";
 				}
 
 				//primary key
-				$isPrimarykey = $structure[$tableName][$columnName]["Key"] === "PRI";
+				$isPrimarykey = $columnProps["Key"] === "PRI";
 				if($isPrimarykey){
 					$primaryKeyColumnNames[] = $columnName;
 				}
 				
 				//unique
-				if($structure[$tableName][$columnName]["Key"] === "UNI" || $structure[$tableName][$columnName]["IndexType"] === "UNIQUE"){
+				if($columnProps["Key"] === "UNI" || $columnProps["IndexType"] === "UNIQUE"){
 					if(!$isPrimarykey){ //no need to specify as UNIQUE if it's a primary key. this will make 2 indexes
 						$sqlCreateTable .= " UNIQUE";
 					}
 				}
 				
 				//fulltext index
-				if($structure[$tableName][$columnName]["IndexType"] === "FULLTEXT"){
+				if($columnProps["IndexType"] === "FULLTEXT"){
 					$fulltextColumnNames[] = $columnName;
 				}
 				
 				//nonunique index
-				if($structure[$tableName][$columnName]["IndexType"] === "NONUNIQUE"){
+				if($columnProps["IndexType"] === "NONUNIQUE"){
 					$nonuniqueIndexColumnNames[] = $columnName;
 				}
 				
@@ -939,7 +973,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 		if(!$this->DbManager) throw new Exception("DbManager is not set. DbManager must be set to use function '".__FUNCTION__."'. ");
 		
 		//reset current database structure store in smartdb
-		if(!$options['preserve-current']){
+		if(empty($options['preserve-current'])){
 			$this->RemoveAllTables();
 		}
 
@@ -950,7 +984,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 		//print_nice($sqlStructure);
 		
 		foreach($sqlStructure as $tableName=>$tableProps){
-			if($options['ignore-table-prefix'] && strpos($tableName, $options['ignore-table-prefix']) === 0){
+			if(!empty($options['ignore-table-prefix']) && strpos($tableName, $options['ignore-table-prefix']) === 0){
 				continue; //ignoring this table due to prefix match
 			}
 			
@@ -1015,6 +1049,11 @@ class SmartDatabase implements ArrayAccess, Countable{
 					$dataType = $columnProps['Type'];
 				}
 				
+				$isString = false;
+				if(stripos($dataType, 'char') !== false || $dataType==='text'){
+					$isString = true;
+				}
+				
 				$isDate = false;
 				if(stripos($dataType, "date") !== false || $dataType==='timestamp'){
 					$isDate = true;
@@ -1042,6 +1081,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 				*/
 				
 				$column->DataType = $dataType;
+				$column->IsStringColumn = $isString;
 				$column->IsDateColumn = $isDate;
 				$column->IsTimezoneColumn = $isTimezoneColumn;
 				$column->IsSerializedColumn = $isSerialized;
@@ -1064,7 +1104,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 					$displayName = "";
 					$lastLetterUpper = false;
 					$lastWasLetter = false;
-					$lastWasValid = false;
+					$lastWasNumber = false;
 					$strlen = strlen($columnName);
 					for($i=0; $i<$strlen; $i++){
 						$letter = $columnName[$i];
@@ -1194,7 +1234,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 		$defaultOptions = array( //default options
 			//'db-manager' => null,
 			//'xml-schema-file-path' => null, //REQUIRED for caching to work properly!
-			//'default-timezone' => '' //if set, $SmartDb->DefaultTimezone will be set to this value
+			'default-timezone' => '', //if set, $SmartDb->DefaultTimezone will be set to this value
 			'dev-mode' => true,
 			'dev-mode-warnings' => true,
 			'memcached-key' => null, //REQUIRED for caching to work properly
@@ -1210,7 +1250,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 		else $options = $defaultOptions;
 		
 		//check for all required arguments
-		if(!$options['memcached-key'] || !$options['xml-schema-file-path']){
+		if(empty($options['memcached-key']) || empty($options['xml-schema-file-path'])){
 			throw new \Exception("'memcached-key' and 'xml-schema-file-path' are both required options for SmartDatabase::GetCached()");
 		}
 		
@@ -1244,7 +1284,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 		}
 		
 		//check if cachedDb is found and valid
-		if( $cachedDb ){
+		if( !empty($cachedDb) ){
 			//compare XML dates on cached schema to make sure cache is not expired. also make sure we're using the same version of the SmartDatabase
 			$xmlLastMod = filemtime($options['xml-schema-file-path']);
 			if( ($cachedDb->XmlSchemaDateModified && $cachedDb->XmlSchemaDateModified == $xmlLastMod)

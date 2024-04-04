@@ -26,8 +26,8 @@ $Customer = $GLOBALS["db"]["Customer"]->GetNewRow();
 $Customer["Name"] = "Jack Frost";
 $Customer["EmailAddress"] = "jfrost@winter.com";
 $Customer["Gender"] = "Male";
-$Customer["DateCreated"] = date("Y-m-d H:i:s");
-$Customer["DateLastModified"] = date("Y-m-d H:i:s");
+$Customer["DateCreated"] = gmdate("Y-m-d H:i:s T");
+$Customer["DateLastModified"] = gmdate("Y-m-d H:i:s T");
 
 // -- AFTER SET FIELDS, BEFORE COMMIT -- 
 

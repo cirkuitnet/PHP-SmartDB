@@ -31,10 +31,10 @@ $Customer["EmailVerified"] = 1;
 //attach customer row events to auto-update our date cells
 //it really doesn`t make sense to use callbacks like this. see advanced examples
 $Customer->OnBeforeInsert( function($eventObject, $eventArgs){
-	$eventObject["DateCreated"] = date("Y-m-d H:i:s");
+	$eventObject["DateCreated"] = gmdate("Y-m-d H:i:s T");
 });
 $Customer->OnBeforeCommit( function($eventObject, $eventArgs){
-	$eventObject["DateLastModified"] = date("Y-m-d H:i:s");
+	$eventObject["DateLastModified"] = gmdate("Y-m-d H:i:s T");
 });
 
 // -- AFTER SET FIELDS, BEFORE COMMIT --
@@ -72,10 +72,10 @@ $Customer['EmailVerified'] = 1;
 //attach customer row events to auto-update our date cells 
 //it really doesn`t make sense to use callbacks like this. see advanced examples 
 $Customer->OnBeforeInsert( function($eventObject, $eventArgs){
-	$eventObject['DateCreated'] = date("Y-m-d H:i:s");
+	$eventObject['DateCreated'] = gmdate("Y-m-d H:i:s T");
 });
 $Customer->OnBeforeCommit( function($eventObject, $eventArgs){
-	$eventObject['DateLastModified'] = date("Y-m-d H:i:s");
+	$eventObject['DateLastModified'] = gmdate("Y-m-d H:i:s T");
 });
 
 // -- AFTER SET FIELDS, BEFORE COMMIT -- 

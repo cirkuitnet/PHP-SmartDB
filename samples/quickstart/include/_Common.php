@@ -25,10 +25,10 @@ class _Common extends \SmartRow {
 		if($this->Table->AutoCommit){
 			//dont get stuck in a loop always updating the values
 			$this->Table->AutoCommit = false;
-			$this['DateLastModified'] = date("Y-m-d H:i:s");
+			$this['DateLastModified'] = gmdate("Y-m-d H:i:s T");
 			$this->Table->AutoCommit = true;
 		}
-		else $this['DateLastModified'] = date("Y-m-d H:i:s");
+		else $this['DateLastModified'] = gmdate("Y-m-d H:i:s T");
 	}
 
 	/**
@@ -38,10 +38,10 @@ class _Common extends \SmartRow {
 		if($this->Table->AutoCommit){
 			//dont get stuck in a loop always updating the values
 			$this->Table->AutoCommit = false;
-			$this['DateCreated'] = date("Y-m-d H:i:s");
+			$this['DateCreated'] = gmdate("Y-m-d H:i:s T");
 			$this->Table->AutoCommit = true;
 		}
-		else $this['DateCreated'] = date("Y-m-d H:i:s");
+		else $this['DateCreated'] = gmdate("Y-m-d H:i:s T");
 	}
 }
 ?>

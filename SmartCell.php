@@ -145,12 +145,10 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 		
 		//handle special return options (as described in the function comments)
 		//note- serialized columns (arrays, objects) do not have special return options, so ignore that parameter for those types. 
-		if($returnOption1 && !$this->Column->IsSerializedColumn){
+		if($returnOption1 && $value && !$this->Column->IsSerializedColumn){
 			if($this->Column->IsDateColumn){ //is a date column
-				if( $value ){
-					$value = strtotime($value);
-					if($value === false) $value = null; //if false, strtotime failed and couldn't parse a date
-				}
+				$value = strtotime($value);
+				if($value === false) $value = null; //if false, strtotime failed and couldn't parse a date
 			}
 			else{ //not a date column
 				$value = htmlspecialchars($value);
@@ -199,19 +197,29 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 		else { //changing a non primary key column value
 			if($this->Row->IsInitialized() == false) $this->Row->ForceInitialization();
 			$valueBeforeChanged = $this->_value;
-			if($this->_onSetValue) $this->FireCallback($this->_onSetValue, $e=array('cancel-event'=>&$cancelEvent, 'Cell'=>&$this, 'current-value'=>$valueBeforeChanged, 'new-value'=>&$value ) );
-			if($cancelEvent) return; //event cancelled, do not set the value
+			$cancelEvent = false;
+			if($this->_onSetValue) {
+				$eventArgs = ['cancel-event'=>&$cancelEvent, 'Cell'=>&$this, 'current-value'=>$valueBeforeChanged, 'new-value'=>&$value ];
+				$this->FireCallback($this->_onSetValue, $eventArgs);
+				if($cancelEvent) return; //event cancelled, do not set the value
+			}
 
 			if($this->Column->TrimAndStripTagsOnSet && $value!==null){
 				$value = strip_tags(trim($value));
 			}
 
 			if( (!isset($this->_value) && isset($value)) || $this->ValueDiffers($value)){
-				if($this->_onBeforeValueChanged) $this->FireCallback($this->_onBeforeValueChanged, $e=array('cancel-event'=>&$cancelEvent, 'Cell'=>&$this, 'current-value'=>$valueBeforeChanged, 'new-value'=>&$value ) );
+				if($this->_onBeforeValueChanged){
+					$eventArgs = ['cancel-event'=>&$cancelEvent, 'Cell'=>&$this, 'current-value'=>$valueBeforeChanged, 'new-value'=>&$value ];
+					$this->FireCallback($this->_onBeforeValueChanged, $eventArgs);
+				}
 				if(!$cancelEvent){
 					$this->_value = $value;
 					$this->Row->OnCellValueChanged(); //notify the row that a cell's value had changed
-					if($this->_onAfterValueChanged) $this->FireCallback($this->_onAfterValueChanged, $e=array('Cell'=>&$this, 'current-value'=>$this->_value, 'old-value'=>$valueBeforeChanged ));
+					if($this->_onAfterValueChanged){
+						$eventArgs = ['Cell'=>&$this, 'current-value'=>$this->_value, 'old-value'=>$valueBeforeChanged ];
+						$this->FireCallback($this->_onAfterValueChanged, $eventArgs);
+					}
 				}
 			}
 		}
@@ -280,6 +288,7 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 			case("float"):
 				return ((float)$this->_value !== (float)$compareValue);
 			case("binary"):
+			case("bool"):
 				$thisCompareVal = $this->_value;
 				if($thisCompareVal==="\0"){ //special case with \0 not recognized as null/false
 					$thisCompareVal = 0;
@@ -371,7 +380,7 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 		$relatedColumn = $relatedTable->GetColumn($columnName);
 		if(!$relatedColumn->IsUnique) throw new Exception("Function '".__FUNCTION__."' only works on columns specified as Unique. Table '$tableName', column '$columnName' is not specified as unique.");
 
-		return $relatedColumn->LookupRow($this->GetRawValue(), $options);
+		return $relatedColumn->LookupRow($this->GetRawValue());
 	}
 
 
@@ -523,6 +532,8 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 	 * $options = array(
 	 * 	'show-required-marker' => $this->IsRequired, //if true, a '*' will be appended to the end of the input field (note: default value may be set on the Column. use this field to overwrite the default value)
 	 * 	'custom-formatter-callback' =>null, //can be either: 1. array("functionName", $obj) if function belongs to $obj, 2. array("functionName", "className") if the function is static within class "classname", or 3. just "functionName" if function is in global scope. this function will be called when getting the form object and the value returned by it will be used as the form object's value. the callback's signiture is functionName($value), where $value is the current cell value
+	 *  'id-suffix' => '',		//suffix to add to the end of the default form object's html id
+	 *  'name-suffix' => '',		//suffix to add to the end of the default form object's html name
 	 * );
 	 * ```
 	 * @param array $customAttribs [optional] An assoc-array of attributes to set in this form object's html (ie 'class'=>'yourClass').
@@ -534,7 +545,10 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 	public function GetTextFormObject(array $customAttribs=null, array $options=null){
 		//OPTIONS
 		$defaultOptions = array( //default options
-			"show-required-marker"=>$this->Column->IsRequired
+			"show-required-marker"=>$this->Column->IsRequired,
+			"custom-formatter-callback" => null,
+			"id-suffix" => '',
+			"name-suffix" => ''
 		);
 		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
 			$options = array_merge($defaultOptions, $options);
@@ -553,8 +567,8 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 		//ATTRIBS
 		$defaultAttribs = array(
 			'type'=>'text',
-			'id'=>$this->GetDefaultFormObjectId(),
-			'name'=>$this->GetDefaultFormObjectName(),
+			'id'=>$this->GetDefaultFormObjectId( $options['id-suffix'] ),
+			'name'=>$this->GetDefaultFormObjectName( $options['name-suffix'] ),
 			'class'=>'inputText',
 			'value'=>$currentValue,
 			'size'=>$this->GetMaxLength(),
@@ -562,7 +576,9 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 			'disabled'=>(!$this->Column->AllowSet ? 'disabled' : null),
 			'pattern'=>($this->Column->RegexCheck ?: null),
 			'required'=>($this->Column->IsRequired ? 'required' : null),
-			'placeholder'=>($this->Column->Example ?: null)
+			'aria-required'=>($this->Column->IsRequired ? 'true' : null),
+			'placeholder'=>($this->Column->Example ?: null),
+			'aria-label'=>( $this->Column->DisplayName ? $this->Column->DisplayName : $this->Column->ColumnName )
 		);
 		if(is_array($customAttribs)){ //overwrite $defaultAttribs with any $customAttribs specified
 			$customAttribs = array_change_key_case($customAttribs, CASE_LOWER);
@@ -571,11 +587,11 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 		else $customAttribs = $defaultAttribs;
 
 		//formatter callback
-		if($options['custom-formatter-callback']) $customAttribs['value'] = call_user_func($options['custom-formatter-callback'], $customAttribs['value']);
+		if(!empty($options['custom-formatter-callback'])) $customAttribs['value'] = call_user_func($options['custom-formatter-callback'], $customAttribs['value']);
 
 		$attribsHtml = $this->BuildAttribsHtml($customAttribs);
 		$formObjHtml = '<input'.$attribsHtml.'>';
-		if($options['show-required-marker']) $formObjHtml .= '<span class="formFieldRequiredMarker">*</span>';
+		if(!empty($options['show-required-marker'])) $formObjHtml .= '<span class="formFieldRequiredMarker">*</span>';
 		return $formObjHtml;
 	}
 
@@ -590,6 +606,8 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 	 * $options = array(
 	 * 	'show-required-marker' => $this->IsRequired, //if true, a '*' will be appended to the end of the input field (note: default value may be set on the Column. use this field to overwrite the default value)
 	 * 	'custom-formatter-callback' =>null, //can be either: 1. array("functionName", $obj) if function belongs to $obj, 2. array("functionName", "className") if the function is static within class "classname", or 3. just "functionName" if function is in global scope. this function will be called when getting the form object and the value returned by it will be used as the form object's value. the callback's signiture is functionName($value), where $value is the current cell value
+	 *  'id-suffix' => '',		//suffix to add to the end of the default form object's html id
+	 *  'name-suffix' => '',		//suffix to add to the end of the default form object's html name
 	 * );
 	 * ```
 	 * @param array $customAttribs [optional] An assoc-array of attributes to set in this form object's html (ie 'class'=>'yourClass').
@@ -601,7 +619,10 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 	public function GetPasswordFormObject(array $customAttribs=null, array $options=null){
 		//OPTIONS
 		$defaultOptions = array( //default options
-			"show-required-marker"=>$this->Column->IsRequired
+			"show-required-marker"=>$this->Column->IsRequired,
+			"custom-formatter-callback" => null,
+			"id-suffix" => '',
+			"name-suffix" => ''
 		);
 		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
 			$options = array_merge($defaultOptions, $options);
@@ -624,8 +645,8 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 		//ATTRIBS
 		$defaultAttribs = array(
 			'type'=>'password',
-			'id'=>$this->GetDefaultFormObjectId(),
-			'name'=>$this->GetDefaultFormObjectName(),
+			'id'=>$this->GetDefaultFormObjectId( $options['id-suffix'] ),
+			'name'=>$this->GetDefaultFormObjectName( $options['name-suffix'] ),
 			'class'=>'inputText inputPassword',
 			'value'=>$pwd,
 			'size'=>$this->GetMaxLength(),
@@ -633,7 +654,9 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 			'disabled'=>(!$this->Column->AllowSet ? 'disabled' : null),
 			'autocomplete'=>'off',
 			'pattern'=>($this->Column->RegexCheck ?: null),
-			'required'=>($this->Column->IsRequired ? 'required' : null)
+			'required'=>($this->Column->IsRequired ? 'required' : null),
+			'aria-required'=>($this->Column->IsRequired ? 'true' : null),
+			'aria-label'=>( $this->Column->DisplayName ? $this->Column->DisplayName : $this->Column->ColumnName )
 		);
 		if(is_array($customAttribs)){ //overwrite $defaultAttribs with any $customAttribs specified
 			$customAttribs = array_change_key_case($customAttribs, CASE_LOWER);
@@ -642,11 +665,11 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 		else $customAttribs = $defaultAttribs;
 
 		//formatter callback
-		if($options['custom-formatter-callback']) $customAttribs['value'] = call_user_func($options['custom-formatter-callback'], $customAttribs['value']);
+		if(!empty($options['custom-formatter-callback'])) $customAttribs['value'] = call_user_func($options['custom-formatter-callback'], $customAttribs['value']);
 
 		$attribsHtml = $this->BuildAttribsHtml($customAttribs);
 		$formObjHtml = '<input'.$attribsHtml.'>';
-		if($options['show-required-marker']) $formObjHtml .= '<span class="formFieldRequiredMarker">*</span>';
+		if(!empty($options['show-required-marker'])) $formObjHtml .= '<span class="formFieldRequiredMarker">*</span>';
 		return $formObjHtml;
 	}
 
@@ -658,6 +681,10 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 	 * $options = array(
 	 * 	'show-required-marker' => $this->IsRequired, //if true, a '*' will be appended to the end of the input field (note: default value may be set on the Column. use this field to overwrite the default value)
 	 * 	'custom-formatter-callback' =>null, //can be either: 1. array("functionName", $obj) if function belongs to $obj, 2. array("functionName", "className") if the function is static within class "classname", or 3. just "functionName" if function is in global scope. this function will be called when getting the form object and the value returned by it will be used as the form object's value. the callback's signiture is functionName($value), where $value is the current cell value
+	 *  'id-suffix' => '',		//suffix to add to the end of the default form object's html id
+	 *  'name-suffix' => '',		//suffix to add to the end of the default form object's html name,
+	 *	'multiple' => $this->Column->IsASet	//if true, shows multiple checkbox options that can be selected as a set/enum for this one cell
+	 *	'force-selected-key' => null, //string. if set, the given key within $keyValuePairs will be forced as the selected option (if found. if not found, the browser's default choice will be selected, probably the first in the list)
 	 * );
 	 * ```
 	 * @param array $customAttribs [optional] An assoc-array of attributes to set in this form object's html (ie 'class'=>'yourClass').
@@ -670,7 +697,12 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 	public function GetCheckboxFormObject(array $customAttribs=null, $hiddenNotifierCustomAttribs=null, array $options=null){
 		//OPTIONS
 		$defaultOptions = array( //default options
-			"show-required-marker"=>$this->Column->IsRequired
+			"show-required-marker"=>$this->Column->IsRequired,
+			"multiple"=>$this->Column->IsASet,
+			"custom-formatter-callback" => null,
+			"id-suffix" => '',
+			"name-suffix" => '',
+			"force-selected-key" => null
 		);
 		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
 			$options = array_merge($defaultOptions, $options);
@@ -683,56 +715,107 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 			$currentValue = $this->GetSerializedValue($currentValue);
 		}
 		
-		if($this->Column->IsASet){ //set columns should present the 'raw' csv text data
-			$currentValue = implode(',', $currentValue);
-		}
+		$defaultName = $this->GetDefaultFormObjectName( $options['name-suffix'] );
+		$defaultName .= ($options['multiple'] ? '[]' : '');
 		
-		$checked = null;
-		if(!$currentValue || ($currentValue==="\0")){
-			//not checked. but need a value for the checkbox in case user checks it
-			if($this->Column->PossibleValues){ //set columns should present the 'raw' csv text data
-				$currentValue = (string)$this->Column->PossibleValues[0]; //use first item, if we have one
+		$formObjHtml = '';
+		if($options['multiple']){
+			//multi select (multiple current values)
+			if(!is_array($currentValue)){ //currentValue should be array here, but might be a CSV
+				$currentValue = explode(',', $currentValue);
 			}
-			else{
-				$currentValue = "1";
+			
+			$keyValuePairs = array_combine(($pv=$this->Column->PossibleValues), $pv);	//populate values from xml
+			
+			//show required marker above the list of options as it will likely appear next to the main group label this way
+			if(!empty($options['show-required-marker'])) $formObjHtml .= '<span class="formFieldRequiredMarker">*</span>';
+			
+			//list all options
+			$formObjHtml .= '<div class="multiInputCheckbox '.$this->GetDefaultFormObjectId( $options['id-suffix'] ).'">';
+			foreach ($keyValuePairs as $key => $value){
+				$checked = null;
+				foreach ($currentValue as $thisCurrentValue){
+					if( (!$options['force-selected-key'] && $key==$thisCurrentValue) || ($options['force-selected-key']==$key) ){
+						$checked = 'checked';
+					}
+				}
+				
+				//ATTRIBS
+				$defaultAttribs = array(
+					'type'=>'checkbox',
+					'id'=>null,
+					'name'=>$defaultName,
+					'class'=>'inputMultiCheckbox',
+					'value'=>$key,
+					'disabled'=>(!$this->Column->AllowSet ? 'disabled' : null),
+					'checked'=>$checked,
+					'aria-label'=>$value
+				);
+				if(is_array($customAttribs)){ //overwrite $defaultAttribs with any $customAttribs specified
+					$customAttribs = array_change_key_case($customAttribs, CASE_LOWER);
+					$customAttribsFinal = array_merge($defaultAttribs, $customAttribs);
+				}
+				else $customAttribsFinal = $defaultAttribs;
+
+				//formatter callback
+				if(!empty($options['custom-formatter-callback'])) $customAttribsFinal['value'] = call_user_func($options['custom-formatter-callback'], $customAttribsFinal['value']);
+
+				$attribsHtml = $this->BuildAttribsHtml($customAttribsFinal);
+				$formObjHtml .= '<div class="'.$this->GetDefaultFormObjectId( $options['id-suffix'] ).'_'.self::MakeValidHtmlId($value).'"><label>'
+									.'<input'.$attribsHtml.'><span class="multiInputCheckboxValue">'.htmlspecialchars($value).'</span>'
+								.'</label></div>';
 			}
+			$formObjHtml .= '</div>';
 		}
-		else{ //current value is set
-			$checked = 'checked';
+		else {
+			//single checkbox
+			$checked = null;
+			if(!$currentValue || ($currentValue==="\0")){
+				//not checked. but need a value for the checkbox in case user checks it
+				if($this->Column->PossibleValues){ //set columns should present the 'raw' csv text data. this case shouldn't really come up as set columns are handled above
+					$currentValue = (string)$this->Column->PossibleValues[0]; //use first item, if we have one
+				}
+				else{
+					$currentValue = "1";
+				}
+			}
+			else{ //current value is set
+				$checked = 'checked';
+			}
+
+			//ATTRIBS
+			$defaultAttribs = array(
+				'type'=>'checkbox',
+				'id'=>$this->GetDefaultFormObjectId( $options['id-suffix'] ),
+				'name'=>$defaultName,
+				'class'=>'inputCheckbox',
+				'value'=>$currentValue,
+				'disabled'=>(!$this->Column->AllowSet ? 'disabled' : null),
+				'checked'=>$checked,
+				'required'=>($this->Column->IsRequired ? 'required' : null),
+				'aria-required'=>($this->Column->IsRequired ? 'true' : null),
+				'aria-label'=>( $this->Column->DisplayName ? $this->Column->DisplayName : $this->Column->ColumnName )
+			);
+			if(is_array($customAttribs)){ //overwrite $defaultAttribs with any $customAttribs specified
+				$customAttribs = array_change_key_case($customAttribs, CASE_LOWER);
+				$customAttribs = array_merge($defaultAttribs, $customAttribs);
+			}
+			else $customAttribs = $defaultAttribs;
+
+			//formatter callback
+			if(!empty($options['custom-formatter-callback'])) $customAttribs['value'] = call_user_func($options['custom-formatter-callback'], $customAttribs['value']);
+
+			$attribsHtml = $this->BuildAttribsHtml($customAttribs);
+			$formObjHtml = '<input'.$attribsHtml.'>';
+			
+			if(!empty($options['show-required-marker'])) $formObjHtml .= '<span class="formFieldRequiredMarker">*</span>';
 		}
-
-
-		//ATTRIBS
-		$defaultAttribs = array(
-			'type'=>'checkbox',
-			'id'=>$this->GetDefaultFormObjectId(),
-			'name'=>$this->GetDefaultFormObjectName(),
-			'class'=>'inputCheckbox',
-			'value'=>$currentValue,
-			'disabled'=>(!$this->Column->AllowSet ? 'disabled' : null),
-			'checked'=>$checked,
-			'required'=>($this->Column->IsRequired ? 'required' : null)
-		);
-		if(is_array($customAttribs)){ //overwrite $defaultAttribs with any $customAttribs specified
-			$customAttribs = array_change_key_case($customAttribs, CASE_LOWER);
-			$customAttribs = array_merge($defaultAttribs, $customAttribs);
-		}
-		else $customAttribs = $defaultAttribs;
-
-		//formatter callback
-		if($options['custom-formatter-callback']) $customAttribs['value'] = call_user_func($options['custom-formatter-callback'], $customAttribs['value']);
-
-
-		$attribsHtml = $this->BuildAttribsHtml($customAttribs);
-		$formObjHtml = '<input'.$attribsHtml.'>';
-		if($options['show-required-marker']) $formObjHtml .= '<span class="formFieldRequiredMarker">*</span>';
-
 
 		//HIDDEN NOTIFIER ATTRIBS
 		$defaultNotifierAttribs = array(
 			'type'=>'hidden',
-			'id'=>$this->GetDefaultFormObjectId('_Notifier'),
-			'name'=>$this->GetDefaultFormObjectName('_Notifier'),
+			'id'=>$this->GetDefaultFormObjectId($options['id-suffix'].'_Notifier'),
+			'name'=>$this->GetDefaultFormObjectName($options['name-suffix'].'_Notifier'),
 			'class'=>'inputHidden',
 			'value'=>'0',
 			'disabled'=>(!$this->Column->AllowSet ? 'disabled' : null),
@@ -746,8 +829,7 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 
 		$notifierAttribsHtml = $this->BuildAttribsHtml($hiddenNotifierCustomAttribs);
 		$hiddenNotifier = '<input'.$notifierAttribsHtml.'>';
-
-
+		
 		return $formObjHtml . $hiddenNotifier;
 	}
 
@@ -761,6 +843,8 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 	 * 	'print-empty-option' => !$this->IsRequired, //if true, an empty option will be the first option printed
 	 * 	'force-selected-key' => null, //string. if set, the given key within $keyValuePairs will be forced as the selected option (if found. if not found, the browser's default choice will be selected, probably the first in the list)
 	 * 	'use-possible-values' => false, //if true, this will populate the select object with the "PossibleValues" for this particular column (as defined in the xml db schema)
+	 *  'id-suffix' => '',		//suffix to add to the end of the default form object's html id
+	 *  'name-suffix' => '',		//suffix to add to the end of the default form object's html name
 	 * );
 	 * ```
 	 * @param mixed $keyValuePairs [optional] (see below)
@@ -776,7 +860,12 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 		//OPTIONS
 		$defaultOptions = array( //default options
 			"show-required-marker"=>$this->Column->IsRequired,
-			"print-empty-option"=>!$this->Column->IsRequired
+			"print-empty-option"=>!$this->Column->IsRequired && !$this->Column->IsASet,
+			"custom-formatter-callback" => null,
+			"use-possible-values" => false,
+			"id-suffix" => '',
+			"name-suffix" => '',
+			"force-selected-key" => null
 		);
 		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
 			$options = array_merge($defaultOptions, $options);
@@ -787,19 +876,28 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 			$options['use-possible-values'] = true;
 		}
 		
-		$multiple = ($this->Column->IsASet || $customAttribs['multiple'] ? 'multiple' : null);
+		//determine multiple now for DefaultFormObjectName, needs array syntax [] if so 
+		$multiple = null;
+		if($this->Column->IsASet){
+			$multiple = 'multiple';
+		}
+		if(!empty($customAttribs['multiple'])){
+			$multiple = $customAttribs['multiple'];
+		}
 
 		//add brackets (array notation) for multi-selects going into php
-		$defaultName = $this->GetDefaultFormObjectName();
+		$defaultName = $this->GetDefaultFormObjectName( $options['name-suffix'] );
 		$defaultName .= ($multiple ? '[]' : '');
 		
 		//ATTRIBS
 		$defaultAttribs = array(
-			'id'=>$this->GetDefaultFormObjectId(),
+			'id'=>$this->GetDefaultFormObjectId( $options['id-suffix'] ),
 			'name'=>$defaultName,
 			'class'=>'inputSelect',
 			'disabled'=>(!$this->Column->AllowSet ? 'disabled' : null),
-			'multiple'=>$multiple //sets allow multiple select
+			'multiple'=>$multiple, //sets allow multiple select
+			//'size' => count($keyValuePairs) IF between 2 and 10
+			'aria-label'=>( $this->Column->DisplayName ? $this->Column->DisplayName : $this->Column->ColumnName )
 		);
 		if(is_array($customAttribs)){ //overwrite $defaultAttribs with any $customAttribs specified
 			$customAttribs = array_change_key_case($customAttribs, CASE_LOWER);
@@ -807,9 +905,6 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 		}
 		else $customAttribs = $defaultAttribs;
 		
-		//SELECT TAG
-		$attribsHtml = $this->BuildAttribsHtml($customAttribs);
-		$formObjHtml = '<select'.$attribsHtml.'>';
 
 		//get $currentValue
 		$currentValue = $this->GetValue();
@@ -817,11 +912,12 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 			$currentValue = $this->GetSerializedValue($currentValue);
 		}
 		
-		//OPTIONS		
+		//OPTIONS
+		$selectObjHtml  = '';
 		if($options['print-empty-option']){
-			$formObjHtml .= '<option value=""';
-			if( !$currentValue && !$options['force-selected-key'] ) { $formObjHtml .= ' selected="selected"'; }
-			$formObjHtml.='> </option>';
+			$selectObjHtml= '<option value=""';
+			if( !$currentValue && !$options['force-selected-key'] ) { $selectObjHtml .= ' selected="selected"'; }
+			$selectObjHtml.='> </option>';
 		}
 		
 		if($options['use-possible-values']){
@@ -835,20 +931,29 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 					$currentValue = explode(',', $currentValue);
 				}
 
+				$optionCount = 0;
 				foreach ($keyValuePairs as $key => $value){
 					$key = htmlspecialchars($key);
 					$value = htmlspecialchars($value);
-					$formObjHtml .= '<option value="'.$key.'"';
+					$selectObjHtml .= '<option value="'.$key.'"';
 					foreach ($currentValue as $thisCurrentValue){
 						//get formatted $currentValue
 						$thisCurrentValue = htmlspecialchars($thisCurrentValue);
 						
 						if( (!$options['force-selected-key'] && $key==$thisCurrentValue) || ($options['force-selected-key']==$key) ){
-							$formObjHtml .= ' selected="selected"';
+							$selectObjHtml .= ' selected="selected"';
 							break;
 						}
 					}
-					$formObjHtml .= '>'.$value.'</option>';
+					$selectObjHtml .= '>'.$value.'</option>';
+					$optionCount++;
+				}
+				
+				//try to make the multiple selects the right size (within reasonable limits)
+				if(empty($customAttribs['size'])){
+					if($optionCount >= 2 && $optionCount <= 25){
+						$customAttribs['size'] = $optionCount;
+					}
 				}
 			}
 			else{
@@ -859,15 +964,20 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 				foreach ($keyValuePairs as $key => $value){
 					$key = htmlspecialchars($key);
 					$value = htmlspecialchars($value);
-					$formObjHtml .= '<option value="'.$key.'"';
+					$selectObjHtml .= '<option value="'.$key.'"';
 				
-					if( (!$options['force-selected-key'] && $key==$currentValue) || ($options['force-selected-key']==$key) ) $formObjHtml .= ' selected="selected"';
-					$formObjHtml .= '>'.$value.'</option>';
+					if( (!$options['force-selected-key'] && $key==$currentValue) || ($options['force-selected-key']==$key) ) $selectObjHtml .= ' selected="selected"';
+					$selectObjHtml .= '>'.$value.'</option>';
 				}
 			}
 		}
+		
+		//SELECT TAG
+		$attribsHtml = $this->BuildAttribsHtml($customAttribs);
+		$formObjHtml = '<select'.$attribsHtml.'>';
+		$formObjHtml .= 	$selectObjHtml;
 		$formObjHtml .= '</select>';
-		if($options['show-required-marker']) $formObjHtml .= '<span class="formFieldRequiredMarker">*</span>';
+		if(!empty($options['show-required-marker'])) $formObjHtml .= '<span class="formFieldRequiredMarker">*</span>';
 		return $formObjHtml;
 	}
 
@@ -879,6 +989,8 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 	 * 	'show-required-marker' => $this->IsRequired, //if true, a '*' will be appended to the end of the input field (note: default value may be set on the Column. use this field to overwrite the default value)
 	 * 	'custom-formatter-callback' =>null, //can be either: 1. array("functionName", $obj) if function belongs to $obj, 2. array("functionName", "className") if the function is static within class "classname", or 3. just "functionName" if function is in global scope. this function will be called when getting the form object and the value returned by it will be used as the form object's value. the callback's signiture is functionName($value), where $value is the current cell value
 	 * 	'value' => null, //the actual shown value of the text area (if not using the default value from this cell)
+	 *  'id-suffix' => '',		//suffix to add to the end of the default form object's html id
+	 *  'name-suffix' => '',		//suffix to add to the end of the default form object's html name
 	 * );
 	 * ```
 	 * @param array $customAttribs [optional] An assoc-array of attributes to set in this form object's html (ie 'class'=>'yourClass').
@@ -903,7 +1015,10 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 		//OPTIONS
 		$defaultOptions = array( //default options
 			"show-required-marker"=>$this->Column->IsRequired,
-			"value"=>$currentValue
+			"value"=>$currentValue,
+			"custom-formatter-callback" => null,
+			"id-suffix" => '',
+			"name-suffix" => ''
 		);
 		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
 			$options = array_merge($defaultOptions, $options);
@@ -913,13 +1028,15 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 
 		//ATTRIBS
 		$defaultAttribs = array(
-			'id'=>$this->GetDefaultFormObjectId(),
-			'name'=>$this->GetDefaultFormObjectName(),
+			'id'=>$this->GetDefaultFormObjectId( $options['id-suffix'] ),
+			'name'=>$this->GetDefaultFormObjectName( $options['name-suffix'] ),
 			'class'=>'inputText inputTextarea',
 			'disabled'=>(!$this->Column->AllowSet ? 'disabled' : null),
 			'maxlength'=>$this->GetMaxLength(),
 			'required'=>($this->Column->IsRequired ? 'required' : null),
-			'placeholder'=>($this->Column->Example ?: null)
+			'aria-required'=>($this->Column->IsRequired ? 'true' : null),
+			'placeholder'=>($this->Column->Example ?: null),
+			'aria-label'=>( $this->Column->DisplayName ? $this->Column->DisplayName : $this->Column->ColumnName )
 		);
 		if(is_array($customAttribs)){ //overwrite $defaultAttribs with any $customAttribs specified
 			$customAttribs = array_change_key_case($customAttribs, CASE_LOWER);
@@ -928,11 +1045,11 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 		else $customAttribs = $defaultAttribs;
 
 
-		if($options['custom-formatter-callback']) $options['value'] = call_user_func($options['custom-formatter-callback'], $options['value']);
+		if(!empty($options['custom-formatter-callback'])) $options['value'] = call_user_func($options['custom-formatter-callback'], $options['value']);
 
 		$attribsHtml = $this->BuildAttribsHtml($customAttribs);
 		$formObjHtml = '<textarea '.$attribsHtml.'>'.$options['value'].'</textarea>';
-		if($options['show-required-marker']) $formObjHtml .= '<span class="formFieldRequiredMarker">*</span>';
+		if(!empty($options['show-required-marker'])) $formObjHtml .= '<span class="formFieldRequiredMarker">*</span>';
 		return $formObjHtml;
 	}
 
@@ -942,6 +1059,8 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 	 * ``` php
 	 * $options = array(
 	 * 	'custom-formatter-callback' =>null, //can be either: 1. array("functionName", $obj) if function belongs to $obj, 2. array("functionName", "className") if the function is static within class "classname", or 3. just "functionName" if function is in global scope. this function will be called when getting the form object and the value returned by it will be used as the form object's value. the callback's signiture is functionName($value), where $value is the current cell value
+	 *  'id-suffix' => '',		//suffix to add to the end of the default form object's html id
+	 *  'name-suffix' => '',		//suffix to add to the end of the default form object's html name
 	 * );
 	 * ```
 	 * @param array $customAttribs [optional] An assoc-array of attributes to set in this form object's html (ie 'class'=>'yourClass').
@@ -952,14 +1071,15 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 	 */
 	public function GetHiddenFormObject(array $customAttribs=null, array $options=null){
 		//OPTIONS
-		/*
-		 $defaultOptions = array( //default options
-		 );
-		 if(is_array($options)){ //overwrite $defaultOptions with any $options specified
-			$options = array_merge($defaultOptions, $options);
-		 }
-		 else $options = $defaultOptions;
-		*/
+		$defaultOptions = array( //default options
+			"custom-formatter-callback" => null,
+			"id-suffix" => '',
+			"name-suffix" => ''
+		);
+		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
+		   $options = array_merge($defaultOptions, $options);
+		}
+		else $options = $defaultOptions;
 
 		//get $currentValue (note: BuildAttribsHtml() does htmlspecialchars)
 		$currentValue = $this->GetValue();
@@ -973,11 +1093,12 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 		//ATTRIBS
 		$defaultAttribs = array(
 			'type'=>'hidden',
-			'id'=>$this->GetDefaultFormObjectId(),
-			'name'=>$this->GetDefaultFormObjectName(),
+			'id'=>$this->GetDefaultFormObjectId( $options['id-suffix'] ),
+			'name'=>$this->GetDefaultFormObjectName( $options['name-suffix'] ),
 			'class'=>'inputHidden',
 			'value'=>$currentValue,
 			'disabled'=>(!$this->Column->AllowSet ? 'disabled' : null)
+			//'aria-label'=>( $this->Column->DisplayName ? $this->Column->DisplayName : $this->Column->ColumnName ) //HIDDEN inputs cannot have aria-labels as per html specs (w3.org)
 		);
 		if(is_array($customAttribs)){ //overwrite $defaultAttribs with any $customAttribs specified
 			$customAttribs = array_change_key_case($customAttribs, CASE_LOWER);
@@ -986,7 +1107,7 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 		else $customAttribs = $defaultAttribs;
 
 		//formatter callback
-		if($options['custom-formatter-callback']) $customAttribs['value'] = call_user_func($options['custom-formatter-callback'], $customAttribs['value']);
+		if(!empty($options['custom-formatter-callback'])) $customAttribs['value'] = call_user_func($options['custom-formatter-callback'], $customAttribs['value']);
 
 		$attribsHtml = $this->BuildAttribsHtml($customAttribs);
 
@@ -1006,6 +1127,8 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 	 * 	'label-text' => "", //a string for the text of the label next to the radio button. if this field is left empty, no label will be included with the button
 	 * 	'label-position' => "left", //can be "left" or "right", relative to the radio button (only if ['include-label']=true)
 	 * 	'custom-formatter-callback' =>null, //can be either: 1. array("functionName", $obj) if function belongs to $obj, 2. array("functionName", "className") if the function is static within class "classname", or 3. just "functionName" if function is in global scope. this function will be called when getting the form object and the value returned by it will be used as the form object's value. the callback's signiture is functionName($value), where $value is the current cell value
+	 *  'id-suffix' => '',		//suffix to add to the end of the default form object's html id
+	 *  'name-suffix' => '',		//suffix to add to the end of the default form object's html name
 	 * );
 	 * ```
 	 * @param string $labelText [optional] The text for the html label that is included. Empty string or null will not print a label.
@@ -1023,7 +1146,10 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 			"checked-if-null"=>false, //defaults to true if the current value is 0 or empty string
 			"checked-if-dbtable-value-is-null"=>false, //deprecated. alias to checked-if-null
 			"label-text"=>$labelText,
-			"label-position"=>"left"
+			"label-position"=>"left",
+			"custom-formatter-callback" => null,
+			"id-suffix" => '',
+			"name-suffix" => ''
 		);
 		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
 			$options = array_merge($defaultOptions, $options);
@@ -1059,12 +1185,13 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 		//ATTRIBS
 		$defaultAttribs = array(
 			'type'=>'radio',
-			'id'=>$this->GetDefaultFormObjectId("_".self::MakeValidHtmlId($formValue)),
-			'name'=>$this->GetDefaultFormObjectName(),
+			'id'=>$this->GetDefaultFormObjectId($options['id-suffix']."_".self::MakeValidHtmlId($formValue)),
+			'name'=>$this->GetDefaultFormObjectName( $options['name-suffix'] ),
 			'class'=>'inputRadio',
 			'value'=>$formValue,
 			'disabled'=>(!$this->Column->AllowSet ? 'disabled' : null),
-			'checked'=>$checked
+			'checked'=>$checked,
+			'aria-label'=>( $this->Column->DisplayName ? $this->Column->DisplayName : $this->Column->ColumnName )
 		);
 		if(is_array($customAttribs)){ //overwrite $defaultAttribs with any $customAttribs specified
 			$customAttribs = array_change_key_case($customAttribs, CASE_LOWER);
@@ -1073,7 +1200,7 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 		else $customAttribs = $defaultAttribs;
 
 		//formatter callback
-		if($options['custom-formatter-callback']) $customAttribs['value'] = call_user_func($options['custom-formatter-callback'], $customAttribs['value']);
+		if(!empty($options['custom-formatter-callback'])) $customAttribs['value'] = call_user_func($options['custom-formatter-callback'], $customAttribs['value']);
 
 		if ($options['label-text']){
 			$labelTag = '<label for="'.$customAttribs['id'].'">'.$options['label-text'].'</label>';
@@ -1091,7 +1218,7 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 	 */
 	public static function MakeValidHtmlId($str){ //strips any characters not valid for an HTML ID
 		$lastIsUnderscore=false;
-		$strlen = strlen($str);
+		$strlen = strlen($str??'');
 		$final = "";
 		for($i=0; $i<$strlen; $i++){
 			if(!ctype_alnum($str[$i])){
@@ -1109,6 +1236,8 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 	 * $options = array(
 	 * 	'show-required-marker' => $this->IsRequired, //if true, a '*' will be appended to the end of the input field (note: default value may be set on the Column. use this field to overwrite the default value)
 	 * 	'custom-formatter-callback' =>null, //can be either: 1. array("functionName", $obj) if function belongs to $obj, 2. array("functionName", "className") if the function is static within class "classname", or 3. just "functionName" if function is in global scope. this function will be called when getting the form object and the value returned by it will be used as the form object's value. the callback's signiture is functionName($value), where $value is the current cell value
+	 *  'id-suffix' => '',		//suffix to add to the end of the default form object's html id
+	 *  'name-suffix' => '',		//suffix to add to the end of the default form object's html name
 	 * );
 	 * ```
 	 * @param array $customAttribs [optional] An assoc-array of attributes to set in this form object's html (ie 'class'=>'yourClass').
@@ -1121,6 +1250,9 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 		//OPTIONS
 		$defaultOptions = array( //default options
 			"show-required-marker"=>$this->Column->IsRequired,
+			"custom-formatter-callback" => null,
+			"id-suffix" => '',
+			"name-suffix" => ''
 		);
 		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
 			$options = array_merge($defaultOptions, $options);
@@ -1139,16 +1271,18 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 		//ATTRIBS
 		$defaultAttribs = array(
 			'type'=>'text',
-			'id'=>$this->GetDefaultFormObjectId(),
-			'name'=>$this->GetDefaultFormObjectName(),
-			'class'=>'inputText inputColorpicker',
+			'id'=>$this->GetDefaultFormObjectId( $options['id-suffix'] ),
+			'name'=>$this->GetDefaultFormObjectName( $options['name-suffix'] ),
+			'class'=>'inputText inputColorpicker colorpicker',
 			'value'=>$currentValue,
 			'size'=>$this->GetMaxLength(),
 			'maxlength'=>$this->GetMaxLength(),
 			'disabled'=>(!$this->Column->AllowSet ? 'disabled' : null),
 			'pattern'=>($this->Column->RegexCheck ?: null),
 			'required'=>($this->Column->IsRequired ? 'required' : null),
-			'placeholder'=>($this->Column->Example ?: null)
+			'aria-required'=>($this->Column->IsRequired ? 'true' : null),
+			'placeholder'=>($this->Column->Example ?: null),
+			'aria-label'=>( $this->Column->DisplayName ? $this->Column->DisplayName : $this->Column->ColumnName )
 		);
 		if(is_array($customAttribs)){ //overwrite $defaultAttribs with any $customAttribs specified
 			$customAttribs = array_change_key_case($customAttribs, CASE_LOWER);
@@ -1157,11 +1291,11 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 		else $customAttribs = $defaultAttribs;
 
 		//formatter callback
-		if($options['custom-formatter-callback']) $customAttribs['value'] = call_user_func($options['custom-formatter-callback'], $customAttribs['value']);
+		if(!empty($options['custom-formatter-callback'])) $customAttribs['value'] = call_user_func($options['custom-formatter-callback'], $customAttribs['value']);
 
 		$attribsHtml = $this->BuildAttribsHtml($customAttribs);
 		$formObjHtml = '<input'.$attribsHtml.'>';
-		if($options['show-required-marker']) $formObjHtml .= '<span class="formFieldRequiredMarker">*</span>';
+		if(!empty($options['show-required-marker'])) $formObjHtml .= '<span class="formFieldRequiredMarker">*</span>';
 		return $formObjHtml;
 	}
 
@@ -1172,6 +1306,8 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 	 * $options = array(
 	 * 	'show-required-marker' => $this->IsRequired, //if true, a '*' will be appended to the end of the input field (note: default value may be set on the Column. use this field to overwrite the default value)
 	 * 	'custom-formatter-callback' =>null, //can be either: 1. array("functionName", $obj) if function belongs to $obj, 2. array("functionName", "className") if the function is static within class "classname", or 3. just "functionName" if function is in global scope. this function will be called when getting the form object and the value returned by it will be used as the form object's value. the callback's signiture is functionName($value), where $value is the current cell value
+	 *  'id-suffix' => '',		//suffix to add to the end of the default form object's html id
+	 *  'name-suffix' => '',		//suffix to add to the end of the default form object's html name
 	 * );
 	 * ```
 	 * @param array $customAttribs [optional] An assoc-array of attributes to set in this form object's html (ie 'class'=>'yourClass').
@@ -1183,7 +1319,10 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 	public function GetDatepickerFormObject(array $customAttribs=null, array $options=null){
 		//OPTIONS
 		$defaultOptions = array( //default options
-			"show-required-marker"=>$this->Column->IsRequired
+			"show-required-marker"=>$this->Column->IsRequired,
+			"custom-formatter-callback" => null,
+			"id-suffix" => '',
+			"name-suffix" => ''
 		);
 		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
 			$options = array_merge($defaultOptions, $options);
@@ -1202,8 +1341,8 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 		//ATTRIBS
 		$defaultAttribs = array(
 			'type'=>'text',
-			'id'=>$this->GetDefaultFormObjectId(),
-			'name'=>$this->GetDefaultFormObjectName(),
+			'id'=>$this->GetDefaultFormObjectId( $options['id-suffix'] ),
+			'name'=>$this->GetDefaultFormObjectName( $options['name-suffix'] ),
 			'class'=>'inputText inputDatepicker',
 			'value'=>$currentValue,
 			'size'=>$this->GetMaxLength(),
@@ -1211,7 +1350,9 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 			'disabled'=>(!$this->Column->AllowSet ? 'disabled' : null),
 			'pattern'=>($this->Column->RegexCheck ?: null),
 			'required'=>($this->Column->IsRequired ? 'required' : null),
-			'placeholder'=>($this->Column->Example ?: null)
+			'aria-required'=>($this->Column->IsRequired ? 'true' : null),
+			'placeholder'=>($this->Column->Example ?: null),
+			'aria-label'=>( $this->Column->DisplayName ? $this->Column->DisplayName : $this->Column->ColumnName )
 		);
 		if(is_array($customAttribs)){ //overwrite $defaultAttribs with any $customAttribs specified
 			$customAttribs = array_change_key_case($customAttribs, CASE_LOWER);
@@ -1220,11 +1361,11 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 		else $customAttribs = $defaultAttribs;
 
 		//formatter callback
-		if($options['custom-formatter-callback']) $customAttribs['value'] = call_user_func($options['custom-formatter-callback'], $customAttribs['value']);
+		if(!empty($options['custom-formatter-callback'])) $customAttribs['value'] = call_user_func($options['custom-formatter-callback'], $customAttribs['value']);
 
 		$attribsHtml = $this->BuildAttribsHtml($customAttribs);
 		$formObjHtml = '<input'.$attribsHtml.'>';
-		if($options['show-required-marker']) $formObjHtml .= '<span class="formFieldRequiredMarker">*</span>';
+		if(!empty($options['show-required-marker'])) $formObjHtml .= '<span class="formFieldRequiredMarker">*</span>';
 		return $formObjHtml;
 	}
 
@@ -1235,6 +1376,8 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 	 * $options = array(
 	 * 	'show-required-marker' => $this->IsRequired, //if true, a '*' will be appended to the end of the input field (note: default value may be set on the Column. use this field to overwrite the default value)
 	 * 	'custom-formatter-callback' =>null, //can be either: 1. array("functionName", $obj) if function belongs to $obj, 2. array("functionName", "className") if the function is static within class "classname", or 3. just "functionName" if function is in global scope. this function will be called when getting the form object and the value returned by it will be used as the form object's value. the callback's signiture is functionName($value), where $value is the current cell value
+	 *  'id-suffix' => '',		//suffix to add to the end of the default form object's html id
+	 *  'name-suffix' => '',		//suffix to add to the end of the default form object's html name
 	 * );
 	 * ```
 	 * @param array $customAttribs [optional] An assoc-array of attributes to set in this form object's html (ie 'class'=>'yourClass').
@@ -1246,7 +1389,10 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 	public function GetSliderFormObject(array $customAttribs=null, array $options=null){
 		//OPTIONS
 		$defaultOptions = array( //default options
-			"show-required-marker"=>$this->Column->IsRequired
+			"show-required-marker"=>$this->Column->IsRequired,
+			"custom-formatter-callback" => null,
+			"id-suffix" => '',
+			"name-suffix" => ''
 		);
 		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
 			$options = array_merge($defaultOptions, $options);
@@ -1265,13 +1411,14 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 		//ATTRIBS
 		$defaultAttribs = array(
 			'type'=>'text',
-			'id'=>$this->GetDefaultFormObjectId(),
-			'name'=>$this->GetDefaultFormObjectName(),
+			'id'=>$this->GetDefaultFormObjectId( $options['id-suffix'] ),
+			'name'=>$this->GetDefaultFormObjectName( $options['name-suffix'] ),
 			'class'=>'inputText inputSlider',
 			'value'=>$currentValue,
 			'size'=>$this->GetMaxLength(),
 			'maxlength'=>$this->GetMaxLength(),
-			'disabled'=>(!$this->Column->AllowSet ? 'disabled' : null)
+			'disabled'=>(!$this->Column->AllowSet ? 'disabled' : null),
+			'aria-label'=>( $this->Column->DisplayName ? $this->Column->DisplayName : $this->Column->ColumnName )
 		);
 		if(is_array($customAttribs)){ //overwrite $defaultAttribs with any $customAttribs specified
 			$customAttribs = array_change_key_case($customAttribs, CASE_LOWER);
@@ -1280,12 +1427,12 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 		else $customAttribs = $defaultAttribs;
 
 		//formatter callback
-		if($options['custom-formatter-callback']) $customAttribs['value'] = call_user_func($options['custom-formatter-callback'], $customAttribs['value']);
+		if(!empty($options['custom-formatter-callback'])) $customAttribs['value'] = call_user_func($options['custom-formatter-callback'], $customAttribs['value']);
 
 		$attribsHtml = $this->BuildAttribsHtml($customAttribs);
 		$formObjHtml = '<input'.$attribsHtml.'>';
 		$slider = '<div class="ui-slider"><div class="ui-slider-handle"></div></div>';
-		if($options['show-required-marker']) $requiredMark = '<span class="formFieldRequiredMarker">*</span>';
+		if(!empty($options['show-required-marker'])) $requiredMark = '<span class="formFieldRequiredMarker">*</span>';
 		return $formObjHtml.$slider.$requiredMark;
 	}
 
@@ -1312,6 +1459,7 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 	 * ``` php
 	 * $options = array(
 	 * 	'for' => $this->Table->TableName.$this->ColumnName, //the id of the form object that this label is for. this should be left as default on most cases as the default name will be generated so it can be tracked by this class; custom names require you to handle organization of matching label names to form object ids
+	 *  'for-id-suffix' => '',	//suffix to add to the end of the default form object's html "for" attribute (only if the default is used)
 	 * 	'label-text' => $this->DisplayName, //the text or html of the label. empty will use the column's DisplayName (if set), otherwise uses the ColumnName
 	 * 	'prefix' => "", //adds a text or html prefix to the label
 	 * 	'suffix' => ": ", //adds a text or html suffix to the label
@@ -1321,10 +1469,11 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 	 * @param array $options [optional] See description
 	 * @return string a string of HTML representing a label for this cell's form input object
 	 */
-	public function GetFormObjectLabel(array $options=null){
-		if($options['for-form-obj-name']) $options['for'] = $options['for-form-obj-name']; //reverse compatible
+	public function GetFormObjectLabel(array $options=null){		
+		if(!empty($options['for-form-obj-name'])) $options['for'] = $options['for-form-obj-name']; //reverse compatible
 		$defaultOptions = array( //default options
-			"for"=>$this->GetDefaultFormObjectId(),
+			"for"=>$this->GetDefaultFormObjectId( $options['for-id-suffix'] ?? '' ),
+			"for-id-suffix"=>"",
 			"label-text"=>( $this->Column->DisplayName ? $this->Column->DisplayName : $this->Column->ColumnName ),
 			"prefix"=>"",
 			"suffix"=>": ",
@@ -1334,6 +1483,21 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 			$options = array_merge($defaultOptions, $options);
 		}
 		else $options = $defaultOptions;
+		
+		//if label-text ends with punctuation and the suffix is default ": ", remove the default suffix to avoid things like this from happening "?: "
+		if($options['label-text'] && $options['suffix'] == ": "){
+			$lastchar = $options['label-text'][-1];
+			switch ($lastchar){
+				case '?':
+				case ':':
+				case ',':
+				case '.':
+				case '!':
+				case ';':
+					$options['suffix'] = "";
+					break;
+			}
+		}
 		
 		//if true, will html-special-chars the prefix, label-text, and suffix
 		if($options['html-special-chars']){
@@ -1373,13 +1537,14 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 
 		$value = $this->GetRawValue();
 
-		if ($this->Column->IsPrimaryKey && $options['ignore-key-errors']) return false;
-		if($options['only-verify-set-cells'] && !isset($value)) return false;
+		if ($this->Column->IsPrimaryKey && !empty($options['ignore-key-errors'])) return false;
+		if(!empty($options['only-verify-set-cells']) && !isset($value)) return false;
 
 		$errors = false;
 
 		if($this->Column->PossibleValues){ //need to validate that the value is valid (mostly for enumerations and sets)
-			//for mysql, enum has null and "" as separate valid values and "" is ALWAYS valid... wtf? make it so "" and null are equal and always valid. will be caught later if null is not allowed
+			//for older mysql, enum has null and "" as separate valid values and "" is ALWAYS valid... wtf? make it so "" and null are equal. will be caught later if null is not allowed
+			//newer mysql now throws a "data truncated" error if you try to set an enum as "" and it's not a valid value of the enum
 			if($value !== '0' && !$value){
 				$value = null;
 			}
@@ -1407,12 +1572,13 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 			}
 		}
 
+		$inputRequiredErrorFound = false;
 		if ($this->Column->IsRequired){
-			//int 0 is different from "0" (http://php.net/manual/en/types.comparisons.php). int 0 will consider the column as set for all datatypes except binary
-			//so.. if the column is binary and the value is int 0, this is an error. if the column is anything else besides binary, this is NOT an error
-			$dontAllowZero = ($this->Column->DataType == "binary");
+			//int 0 is different from "0" (http://php.net/manual/en/types.comparisons.php). int 0 will consider the column as set for all datatypes except binary & bool
+			//so.. if the column is binary or bool and the value is int 0, this is an error. if the column is anything else besides binary or bool, this is NOT an error
+			$dontAllowZero = ($this->Column->DataType == "binary" || $this->Column->DataType == "bool");
 			$valueIsZero = ($value === 0 || $value === "0");
-			if( ($value==null && !$valueIsZero) || ($valueIsZero && $dontAllowZero) || strlen($value)<=0 ){
+			if( ($value==null && !$valueIsZero) || ($valueIsZero && $dontAllowZero) || strlen($value??'')<=0 ){
 				$errorMsg = ( trim($this->Column->IsRequiredMessage)!="" ? $this->Column->IsRequiredMessage : "'{$this->Column->DisplayName}' field is required." );
 				$errors .= $errorMsg . $options['error-message-suffix'];
 				$inputRequiredErrorFound = true;
@@ -1421,7 +1587,7 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 
 		$maxLength = $this->Column->GetMaxLength();
 		if($maxLength) {
-			if (strlen($value) > $maxLength){
+			if (strlen($value??'') > $maxLength){
 				$errors .= "Number of characters allowed for '{$this->Column->DisplayName}' exceeds the $maxLength character limit.";
 				$errors .= $options['error-message-suffix'];
 			}
@@ -1429,7 +1595,7 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 
 		if($this->Column->MinSize) {
 			if(!$inputRequiredErrorFound){ //ignore this if the field is required and empty. already have that error message
-				$strlen = strlen($value);
+				$strlen = strlen($value??'');
 				if(!$this->Column->IsRequired && $strlen == 0){
 					//let this case pass because input is not required
 				}
@@ -1440,9 +1606,10 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 			}
 		}
 
+		$inputRegexCheckErrorFound = false;
 		if($this->Column->RegexCheck) {
 			if(!$inputRequiredErrorFound){ //ignore regex if the field is required and empty. already have that error message
-				if(!$this->Column->IsRequired && strlen($value) == 0){
+				if(!$this->Column->IsRequired && strlen($value??'') == 0){
 					//let this case pass because input is not required
 				}
 				else if (!preg_match('/'.$this->Column->RegexCheck.'/i', $value)){ //both PHP and javascript do case-insensitive regex checking
@@ -1517,7 +1684,7 @@ class SmartCell implements ArrayAccess, Countable, IteratorAggregate{
 	public function offsetGet($key){
 		if($this->Column->DataType !== 'array') throw new \Exception('Cannot use SmartCell "'.$this->Column->ColumnName.'" ('.$this->Column->DataType.') as array');
 		$array = $this->GetValue();
-		return $array[$key];
+		return ($array[$key] ?? null);
 	}
 	/**
 	 * Unsets the value in the cell at the given column name ($key)

@@ -35,6 +35,8 @@ class DbManager_MySQL implements DbManager {
 	const MYSQL_DRIVER = 1; //deprecated in PHP v5.5. not recommended
 	const MYSQLI_DRIVER = 2;
 	
+	protected $_serverVersion;
+	
 	private $PHP_INT_MAX; //the PHP_INT_MAX constant doesnt work in some encrypters
 	private $PHP_INT_MAX_HALF;
 	
@@ -187,7 +189,17 @@ class DbManager_MySQL implements DbManager {
 	 * @return bool true when connected (or already connected), throws exception if there is an error
 	 * @see DbManager_MySQL::CloseConnection() DbManager_MySQL::CloseConnection()
 	 */
-	public function OpenConnection($options = null){
+	private static $_links = [];
+	public function OpenConnection($options=null){
+		//OPTIONS
+		$defaultOptions = [ //default options
+			'skip-select-db' => false
+		];
+		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
+			$options = array_merge($defaultOptions, $options);
+		}
+		else $options = $defaultOptions;
+		
 		if($this->_isConnected){
 			if(!$this->_isDbSelected && !$options['skip-select-db']) $this->SelectDatabase();
 			return true;
@@ -203,9 +215,8 @@ class DbManager_MySQL implements DbManager {
 				//see http://php.net/manual/en/mysqli.persistconns.php - "To open a persistent connection you must prepend p: to the hostname when connecting."
 				if(!$this->_connectParams['new_link']){
 					//store active 'links' for each server/username combination for reuse
-					static $links;
-					$this->_connection = $links[$this->_server][$this->_user];
-					if(!$this->_connection) $this->_connection = $links[$this->_server][$this->_user] = mysqli_init(); //no connection yet, create one and cache in static links array
+					$this->_connection = self::$_links[$this->_server][$this->_user] ?? null;
+					if(!$this->_connection) $this->_connection = self::$_links[$this->_server][$this->_user] = mysqli_init(); //no connection yet, create one and cache in static links array
 					if(!$this->_connection) throw new Exception("Error opening cached connection. MySQLi Error No: ".mysqli_connect_errno()." - ".mysqli_connect_error());
 					
 					//connect to database using cached link
@@ -267,7 +278,7 @@ class DbManager_MySQL implements DbManager {
 	
 	/**
 	 * Closes the MySQL connection if connected. Note that the connection is automatically closed when the PHP script has finished executing.
-	 * @return bool true if the connection is successfull closed, false if there is no connection to close
+	 * @return bool true if the connection is successfully closed, false if there is no connection to close
 	 * @see DbManager_MySQL::OpenConnection() DbManager_MySQL::OpenConnection() 
 	 */
 	public function CloseConnection() {
@@ -279,9 +290,32 @@ class DbManager_MySQL implements DbManager {
 		}
 		else{ //-- mysqli
 			mysqli_close($this->_connection);
+			unset( self::$_links[$this->_server][$this->_user] );
 		}
 		$this->_isConnected = false;
 		return true;
+	}
+       
+	/**
+	 * Returns the version of MySQL server currently connected to. Can use something like: version_compare($serverVersion,'1.2.3','>='); to compare versions
+	 * @return string - version of the mysql server if successful, false on failure
+	 * @see DbManager_MySQL::GetServerVersion() DbManager_MySQL::GetServerVersion() 
+	 */
+	public function GetServerVersion() {
+		if($this->_serverVersion) return $this->_serverVersion;
+		if(!$this->_isConnected){
+			$this->OpenConnection(array(
+				'skip-select-db' => false
+			));
+		}
+		if($this->_driver == self::MYSQL_DRIVER){ //-- mysql
+			$this->_serverVersion = preg_replace('#[^0-9\.]#', '', mysql_get_server_info($this->_connection));
+		}
+		else{ //-- mysqli
+			//return mysqli_get_server_version($this->_connection);
+			$this->_serverVersion = preg_replace('#[^0-9\.]#', '', mysqli_get_server_info($this->_connection));
+		}
+		return $this->_serverVersion;
 	}
 
 	/**
@@ -297,6 +331,15 @@ class DbManager_MySQL implements DbManager {
 	 * @see DbManager_MySQL::GetDatabaseName() DbManager_MySQL::GetDatabaseName()
 	 */
 	public function SetDatabaseName($databaseName, $options=null){
+		//OPTIONS
+		$defaultOptions = [ //default options
+			'force-select-db' => false
+		];
+		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
+			$options = array_merge($defaultOptions, $options);
+		}
+		else $options = $defaultOptions;
+		
 		$this->_databaseName = $databaseName;
 		if($this->_isConnected && $options['force-select-db'] && $this->_databaseName){
 			$this->SelectDatabase();
@@ -367,6 +410,25 @@ class DbManager_MySQL implements DbManager {
 	 * @see DbManager_MySQL::FetchArray() DbManager_MySQL::FetchArray()
 	 */
 	public function Select($array_select_fields, $table, $array_where='', $array_order='', $limit = '', $options=null) {
+		//OPTIONS
+		$defaultOptions = [ //default options
+			'distinct' => false,
+			'add-column-quotes' => false,
+			'add-select-fields-column-quotes' => false,
+			'add-where-clause-column-quotes' => false,
+			'add-order-clause-column-quotes' => false,
+			'add-dot-notation' => false,
+			'add-select-fields-dot-notation' => false,
+			'add-where-clause-dot-notation' => false,
+			'add-order-clause-dot-notation' => false,
+			'quote-numerics' => false,
+			'force-select-db' => false
+		];
+		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
+			$options = array_merge($defaultOptions, $options);
+		}
+		else $options = $defaultOptions;
+		
 		if(!is_array($array_select_fields) || count($array_select_fields)==0){
 			$array_select_fields = array("*"); //default to "SELECT * ..."
 		}
@@ -377,9 +439,21 @@ class DbManager_MySQL implements DbManager {
 			$array_order = null;
 		}
 
+        $distinct = '';
 		if($options['distinct']){
 			if(count($array_select_fields) > 1) throw new Exception("Cannot SELECT DISTINCT on more than 1 column.");
 			$distinct = "DISTINCT ";
+
+			//DISTINCT and ORDER BY have some restrictions when used together. we cant order-by a column not selected as distinct: it's illogical.
+			if($array_order){ 
+				if( !in_array("*", $array_select_fields) ){ //if selecting individual columns and not *, all sort columns MUST be in the select array
+					$sortCols = $this->OrderArrayToColArray($array_order);
+					$intersectedCols = array_intersect($array_select_fields, $sortCols); //all sort columns MUST also be in the select array
+					if(count($intersectedCols) != count($sortCols)){ //these must match
+						throw new Exception("Cannot order restults of a distinct set by a column that is not selected as distinct. It's illogical."); //mysql will error out here too
+					}
+				}
+			}
 		}
 		$select_items = $this->ArrayToCSV($table, $array_select_fields, ($options['add-dot-notation'] || $options['add-select-fields-dot-notation']), ($options['add-column-quotes'] || $options['add-select-fields-column-quotes']) );
 		$order_clause = $this->OrderArrayToString($table, $array_order, ($options['add-dot-notation'] || $options['add-order-clause-dot-notation']), ($options['add-column-quotes'] || $options['add-order-clause-column-quotes']));
@@ -388,6 +462,7 @@ class DbManager_MySQL implements DbManager {
 			'quote-numerics'=>$options['quote-numerics'],
 		));
 
+		$validLimit = false;
 		if($limit){ //should handle $limit==0, which is invalid.
 			$validLimit = preg_match('/^\d+(,[1-9]+\d*)?$/',$limit); //matches "10" or "100,10". will incorrectly match "0", but "0,10" is correct. the if statement above should handle the "0" case though
 			if($validLimit) $limit = "LIMIT ".$limit;
@@ -396,7 +471,7 @@ class DbManager_MySQL implements DbManager {
 
 		$sql_select = "SELECT ".$distinct.$select_items." FROM ".$this->GetDotNotation($table)." ".$where_clause." ".$order_clause." ".$limit;
 
-		$this->Query($sql_select, $options['force-select-db']);
+		$this->Query($sql_select, $options);
 
 		return $this->AffectedRows();
 	}
@@ -423,6 +498,17 @@ class DbManager_MySQL implements DbManager {
 	 * @see DbManager_MySQL::FetchArray() DbManager_MySQL::FetchArray()
 	 */
 	public function Insert($table, $field_val_array, $options=null) {
+		//OPTIONS
+		$defaultOptions = [ //default options
+			'add-column-quotes' => false,
+			'add-dot-notation' => false,
+			'force-select-db' => false
+		];
+		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
+			$options = array_merge($defaultOptions, $options);
+		}
+		else $options = $defaultOptions;
+		
 		$sql_fields = "";
 		$sql_values = null;
 		foreach ($field_val_array as $field => $value) {
@@ -449,7 +535,7 @@ class DbManager_MySQL implements DbManager {
 		}
 		$sql_insert = "INSERT INTO ".$this->GetDotNotation($table)." (".$sql_fields.") VALUES (".$sql_values.")";
 
-		$this->Query($sql_insert, $options['force-select-db']);
+		$this->Query($sql_insert, $options);
 
 		return $this->AffectedRows();
 	}
@@ -479,6 +565,18 @@ class DbManager_MySQL implements DbManager {
 	 * @see DbManager_MySQL::FetchArray() DbManager_MySQL::FetchArray()
 	 */
 	public function Update($table, $field_val_array, $array_where='', $limit = '', $options=null) {
+		//OPTIONS
+		$defaultOptions = [ //default options
+			'add-column-quotes' => false,
+			'add-dot-notation' => false,
+			'force-select-db' => false,
+			'quote-numerics' => false
+		];
+		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
+			$options = array_merge($defaultOptions, $options);
+		}
+		else $options = $defaultOptions;
+		
 		$arg = "";
 		foreach ($field_val_array as $field => $value) {
 			if ($arg) {$arg .= ", ";}
@@ -512,7 +610,7 @@ class DbManager_MySQL implements DbManager {
 
 		$sql_update = "UPDATE ".$this->GetDotNotation($table)." SET ".$arg." ".$where_clause." ".$limit;
 
-		$this->Query($sql_update, $options['force-select-db']);
+		$this->Query($sql_update, $options);
 
 		return $this->AffectedRows();
 	}
@@ -541,6 +639,18 @@ class DbManager_MySQL implements DbManager {
 	 * @see DbManager_MySQL::FetchArray() DbManager_MySQL::FetchArray()
 	 */
 	public function Delete($table, $array_where='', $limit='', $options=null) {
+		//OPTIONS
+		$defaultOptions = [ //default options
+			'add-column-quotes' => false,
+			'add-dot-notation' => false,
+			'force-select-db' => false,
+			'quote-numerics' => false
+		];
+		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
+			$options = array_merge($defaultOptions, $options);
+		}
+		else $options = $defaultOptions;
+		
 		$where_clause = $this->GenerateWhereClause($table, $array_where, $options['add-dot-notation'], $options['add-column-quotes'], array(
 			//extended options
 			'quote-numerics'=>$options['quote-numerics'],
@@ -578,7 +688,18 @@ class DbManager_MySQL implements DbManager {
 	 * @see DbManager_MySQL::FetchArray() DbManager_MySQL::FetchArray()
 	 */
 	public function Query($query, $options=null) {
-		if($GLOBALS['SQL_DEBUG_MODE']){
+		//OPTIONS
+		$defaultOptions = [ //default options
+			'force-select-db' => false,
+			'skip-select-db' => false,
+			'multi-query' => false
+		];
+		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
+			$options = array_merge($defaultOptions, $options);
+		}
+		else $options = $defaultOptions;
+		
+		if(!empty($GLOBALS['SQL_DEBUG_MODE'])){
 			error_log( "DbManager->Query - ".$query );
 		}
 		
@@ -942,7 +1063,7 @@ class DbManager_MySQL implements DbManager {
 				$colName = $direction;
 				$direction = "ASC";
 			}
-			if($dotNotation) $colName = $this->GetDotNotation($table, $colName, $options['add-column-quotes']);
+			if($dotNotation) $colName = $this->GetDotNotation($table, $colName, $addColumnQuotes);
 			else if($addColumnQuotes) $colName = "`$colName`";
 			//else $colName = $colName;
 
@@ -953,6 +1074,23 @@ class DbManager_MySQL implements DbManager {
 			$firstFound = true;
 		}
 		return $sortOrder;
+	}
+	
+	/**
+	 * Converts a sort array of structure array("id"=>"asc", "col1"=>"desc") into an array of only the column names array("id","col1")
+	 * @param array $array_order
+	 * @return array Returns a sort array of structure array("id"=>"asc", "col1"=>"desc") into an array of only the column names array("id","col1")
+	 */
+	private function OrderArrayToColArray($array_order) {
+		if(!is_array($array_order)) return array();
+		$cols = array();
+		foreach($array_order as $colName => $direction){
+			if(is_numeric($colName)){ //$direction is actually the col name them because user input array like array("id","col1");
+				$colName = $direction;
+			}
+			$cols[] = $colName;
+		}
+		return $cols;
 	}
 
 	/**
@@ -1016,7 +1154,7 @@ class DbManager_MySQL implements DbManager {
 	 * @param array $options See description above
 	 * @return string
 	 */
-	protected function GenerateWhereClause($table, $array_where, $dotNotation=false, $addColumnQuotes=false, $options=array()) {
+	protected function GenerateWhereClause($table, $array_where, $dotNotation=false, $addColumnQuotes=false, $options=null) {
 		if( !is_array($array_where) || count($array_where)<=0 ) return '';
 	
 		$where_clause = '';
@@ -1046,11 +1184,10 @@ class DbManager_MySQL implements DbManager {
 	 * @param string $condition
 	 * @param string $operator
 	 * @param array $options
-	 * @param bool $first Ignore this. only used for recursion
 	 * @return string
 	 * @see DbManager_MySQL::GenerateWhereClause() DbManager_MySQL::GenerateWhereClause()
 	 */
-	private function GenerateWhereRecursive($table, $key, $val, $dotNotation=false, $addColumnQuotes=false, $column='', $condition='=', $operator='AND', $options=array(), $first=true){
+	private function GenerateWhereRecursive($table, $key, $val, $dotNotation=false, $addColumnQuotes=false, $column='', $condition='=', $operator='AND', $options=null){
 		$key = trim($key);
 	 
 		if( ($newCondition = $this->IsCondition($key)) ){ //check if key is a condition
@@ -1067,7 +1204,7 @@ class DbManager_MySQL implements DbManager {
 		//$val can either be a scalar or an array
 		if( is_array($val) ){ //value is an array, recurse.
 			foreach($val as $nextKey=>$nextVal){
-				$thisWhere = $this->GenerateWhereRecursive($table, $nextKey, $nextVal, $dotNotation, $addColumnQuotes, $column, $condition, $operator, $options, false);
+				$thisWhere = $this->GenerateWhereRecursive($table, $nextKey, $nextVal, $dotNotation, $addColumnQuotes, $column, $condition, $operator, $options);
 				
 				//need to add an " AND " or " OR " in between clauses
 				if($thisWhere){
@@ -1095,7 +1232,7 @@ class DbManager_MySQL implements DbManager {
 	 * @return string
 	 * @see DbManager_MySQL::GenerateWhereRecursive() DbManager_MySQL::GenerateWhereRecursive()
 	 */
-	private function GenerateWhereSingle($table, $column, $condition, $val, $dotNotation, $addColumnQuotes, $options=array()){
+	private function GenerateWhereSingle($table, $column, $condition, $val, $dotNotation, $addColumnQuotes, $options=null){
 		$ret = ""; //the value returned
 		$column = trim($column,"` "); //clean up field name
 		
@@ -1232,14 +1369,14 @@ class DbManager_MySQL implements DbManager {
 	 * @return mixed Returns the given $value with appropriate casts and quotes for SQL queries
 	 */
 	private function CastQuoteValue($table, $column, $value, $options=null){
-		/*
-		$defaultOptions = array( //default options
-		);
+		//OPTIONS
+		$defaultOptions = [ //default options
+			'quote-numerics' => false
+		];
 		if(is_array($options)){ //overwrite $defaultOptions with any $options specified
 			$options = array_merge($defaultOptions, $options);
 		}
 		else $options = $defaultOptions;
-		*/
 				
 		//HACKish - handle SmartCells in case someone accidentally forgets to call ->GetValue() on the smart cell
 		if( is_object($value) && get_class($value)=="SmartCell" ){
@@ -1585,8 +1722,16 @@ class DbManager_MySQL implements DbManager {
 		$connectOptions = array(
 			"skip-select-db" => true
 		);
-
-		$sql = "SET PASSWORD FOR '".$this->EscapeString($username, $connectOptions)."'@'".$this->EscapeString($host, $connectOptions)."' = PASSWORD('".$this->EscapeString($password, $connectOptions)."')";
+		
+		// For mysql database server version 5.7.6, see https://www.cyberciti.biz/faq/mysql-change-user-password/
+		$serverVersion = $this->GetServerVersion();
+		if (version_compare($serverVersion,'5.7.6','>=')) { 
+			$sql = "ALTER USER '".$this->EscapeString($username, $connectOptions)."'@'".$this->EscapeString($host, $connectOptions)."' IDENTIFIED BY '".$this->EscapeString($password, $connectOptions)."'";
+		}
+		else{ //older mysql
+			$sql = "SET PASSWORD FOR '".$this->EscapeString($username, $connectOptions)."'@'".$this->EscapeString($host, $connectOptions)."' = PASSWORD('".$this->EscapeString($password, $connectOptions)."')";
+		}
+		
 		$this->Query($sql, $connectOptions);
 		return $this->AffectedRows();
 	}
@@ -1693,4 +1838,3 @@ class DbManager_MySQL implements DbManager {
 	}
 
 }
-?>

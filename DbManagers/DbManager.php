@@ -38,6 +38,7 @@ interface DbManager {
 	public function AffectedRows();
 	public function OpenConnection($options = null);
     public function CloseConnection();
+    public function GetServerVersion();
     
     //utility functions
     public function IsOperator($keyword);
