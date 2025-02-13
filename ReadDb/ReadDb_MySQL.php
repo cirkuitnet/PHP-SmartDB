@@ -23,8 +23,8 @@
  * 			"Null"=>"<YES|NO>",
  * 			"Key"=>"<PRI|UNI|MUL|empty>", //note: PRI=Primary Key, UNI=Unique index, MUL=multiple... seems to mean the same as UNI though
  * 			"Default"=>"<default value|empty>",
- * 			"Extra"=>"<auto_increment|empty>",
- * 			"Collation"=>"<utf8_general_ci|utf8mb4_unicode_ci|latin1_swedish_ci|empty>", //other collations can easily be added if needed
+ * 			"Extra"=>"<auto_increment|DEFAULT_GENERATED|empty>",
+ * 			"Collation"=>"<utf8_general_ci|utf8mb4_unicode_ci|utf8mb4_general_ci|latin1_swedish_ci|empty>", //other collations can easily be added if needed
  * 			"IndexType"=>"<UNIQUE|NONUNIQUE|FULLTEXT|empty>", //UNIQUE when Key=PRI,UNI, or MUL. FULLTEXT for fulltext index
  * 		),
  * 		...(more columns)...
@@ -109,8 +109,8 @@ class ReadDb_MySQL{
  	 * 			"Null"=>"<YES|NO>",
  	 * 			"Key"=>"<PRI|UNI|MUL|empty>", //note: PRI=Primary Key, UNI=Unique index, MUL=multiple... seems to mean the same as UNI though
  	 * 			"Default"=>"<default value|empty>",
-	 * 			"Extra"=>"<auto_increment|empty>",
- 	 * 			"Collation"=>"<utf8_general_ci|utf8mb4_unicode_ci|latin1_swedish_ci|empty>", //other collations can easily be added if needed
+	 * 			"Extra"=>"<auto_increment|DEFAULT_GENERATED|empty>",
+ 	 * 			"Collation"=>"<utf8_general_ci|utf8mb4_unicode_ci|utf8mb4_general_ci|latin1_swedish_ci|empty>", //other collations can easily be added if needed
  	 * 			"IndexType"=>"UNIQUE|NONUNIQUE|FULLTEXT|empty",
 	 *		),
 	 *		"COLUMN NAME 2" => array(
@@ -183,7 +183,9 @@ class ReadDb_MySQL{
         	$rows = $dbManager->FetchAssocList();
         	foreach($rows as $row){
         		$colName = $row['Column_name'];
-        		
+				
+        		$results[$tableName][$colName]['IndexPrefixLength'] = $row['Sub_part'];
+				
         		if($row['Index_type'] == "FULLTEXT"){
         			$results[$tableName][$colName]['IndexType'] = "FULLTEXT";
         		}

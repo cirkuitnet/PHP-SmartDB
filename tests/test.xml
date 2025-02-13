@@ -66,9 +66,9 @@
 		<Field Name="char" DataType="char" MaxSize="20" InputRequired="true" />
 		<Field Name="varchar" DataType="varchar" MaxSize="40" FulltextIndex="true" />
 		<Field Name="varcharKey" DataType="varchar" MaxSize="40" NonuniqueIndex="true" />
-		<Field Name="text" DataType="text" Collation="utf8_general_ci" />
+		<Field Name="text" DataType="text" Collation="utf8mb4_general_ci" />
 		<Field Name="mediumtext" DataType="mediumtext" Collation="latin1_swedish_ci" />
-		<Field Name="longtext" DataType="longtext"  />
+		<Field Name="longtext" DataType="longtext"  NonuniqueIndex="true" IndexPrefixLength="255" />
 		<Field Name="blob" DataType="blob" />
 		<Field Name="mediumblob" DataType="mediumblob" />
 		<Field Name="longblob" DataType="longblob" />
@@ -97,7 +97,36 @@
 		<Field Name="boolreq" DataType="bool" InputRequired="true" DefaultValue="1" />
   	</Database>
   </Class>
-
+  
+  <Class Name="AllIndexes">
+    <Database CommitChangesAutomatically="false" TableName="AllIndexes">
+      <Field Name="Field1" DataType="bigint" PrimaryKey="true" AutoIncrement="true" />
+	  <Field Name="Field2" DataType="bigint" IsUnique="true" />
+	  <Field Name="Field3" DataType="varchar" MaxSize="10" InputRequired="true" NonuniqueIndex="true"  />
+	  
+	  <Field Name="Field4" DataType="text" NonuniqueIndex="true" IndexPrefixLength="5" />
+	  <Field Name="Field5" DataType="text" IsUnique="true" IndexPrefixLength="5" />
+	  <Field Name="Field6" DataType="text" FulltextIndex="true" />
+	  
+	  <Field Name="Field7" DataType="varchar" MaxSize="10" NonuniqueIndex="true" />
+	  <Field Name="Field8" DataType="varchar" MaxSize="10" IsUnique="true" />
+	  <Field Name="Field9" DataType="varchar" MaxSize="10" FulltextIndex="true" />
+	  
+	  <Field Name="Field10" DataType="text" NonuniqueIndex="true" IndexPrefixLength="5" />
+	  <Field Name="Field11" DataType="text" IsUnique="true" IndexPrefixLength="5" />
+	  <Field Name="Field12" DataType="text" FulltextIndex="true" IndexPrefixLength="5" />
+	  
+	  <Field Name="Field13" DataType="varchar" MaxSize="10" NonuniqueIndex="true" IndexPrefixLength="5" />
+	  <Field Name="Field14" DataType="varchar" MaxSize="10" IsUnique="true" IndexPrefixLength="5" />
+	  <Field Name="Field15" DataType="varchar" MaxSize="10" FulltextIndex="true" IndexPrefixLength="5" />
+	  
+	  <Field Name="Field16" DataType="timestamp" DefaultValue="CURRENT_TIMESTAMP" InputRequired="true" />
+	  <Field Name="Field17" DataType="datetime" DefaultValue="CURRENT_TIMESTAMP" InputRequired="false" />
+	  
+	  <Field Name="Field18" DataType="timestamp" DefaultValue="CURRENT_TIMESTAMP" InputRequired="true" NonuniqueIndex="true" />
+	  <Field Name="Field19" DataType="datetime" DefaultValue="CURRENT_TIMESTAMP" InputRequired="false" IsUnique="true" />
+    </Database>
+  </Class>
 
   <Class Name="JunkExtended">
     <Database TableName="JunkExtended" InheritsTableName="Junk">

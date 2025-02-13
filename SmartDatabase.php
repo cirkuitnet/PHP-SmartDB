@@ -364,6 +364,9 @@ class SmartDatabase implements ArrayAccess, Countable{
 				if($Column->NonuniqueIndex){
 					$xml .= ' NonuniqueIndex="'.bs($Column->NonuniqueIndex).'"';
 				}
+				if($Column->IndexPrefixLength){
+					$xml .= ' IndexPrefixLength="'.$Column->IndexPrefixLength.'"';
+				}
 				if($Column->SortOrder){
 					//SortOrder not yet implemented
 					//$xml .= ' SortOrder="'.$Column->SortOrder.'"';
@@ -434,7 +437,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 
 				$table = new SmartTable($tableName);
 
-				$table->ExtendedByClassName = $xmlClass['a']['Name'];
+				$table->ExtendedByClassName = ($xmlClass['a']['Name'] ?? '');
 				$table->AutoCommit = (!empty($xmlDatabase['a']['CommitChangesAutomatically']) && strtolower($xmlDatabase['a']['CommitChangesAutomatically']) === 'true' ? true : false);
 				$table->IsAbstract = (!empty($xmlDatabase['a']['IsAbstract']) && strtolower($xmlDatabase['a']['IsAbstract']) === 'true' ? true : false);
 
@@ -504,6 +507,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 					$column->IsUnique = (!empty($xmlColumn['a']['IsUnique']) && strtolower($xmlColumn['a']['IsUnique']) === 'true' ? true : false);
 					$column->FulltextIndex = (!empty($xmlColumn['a']['FulltextIndex']) && strtolower($xmlColumn['a']['FulltextIndex']) === 'true' ? true : false);
 					$column->NonuniqueIndex = (!empty($xmlColumn['a']['NonuniqueIndex']) && strtolower($xmlColumn['a']['NonuniqueIndex']) === 'true' ? true : false);
+					$column->IndexPrefixLength = $xmlColumn['a']['IndexPrefixLength'] ?? null;
 					$column->IsPrimaryKey = (!empty($xmlColumn['a']['PrimaryKey']) && strtolower($xmlColumn['a']['PrimaryKey']) === 'true' ? true : false);
 					$column->IsAutoIncrement = (!empty($xmlColumn['a']['AutoIncrement']) && strtolower($xmlColumn['a']['AutoIncrement']) === 'true' ? true : false);
 					$column->DefaultFormType = (!empty($xmlColumn['a']['FormType']) && $xmlColumn['a']['FormType'] ? $xmlColumn['a']['FormType'] : "text"); //"text" is default value
@@ -547,7 +551,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 		} //is_array($allXmlClasses)
 
 		//related columns
-		$allXmlForeignKeys = $xmlAssoc['CodeGenSchema'][0]['v']['ForeignKey'];
+		$allXmlForeignKeys = $xmlAssoc['CodeGenSchema'][0]['v']['ForeignKey'] ?? null;
 		if(is_array($allXmlForeignKeys)){
 			foreach($allXmlForeignKeys as $foreignKey){
 				$xmlRelations = $foreignKey['v']['Relation'];
@@ -805,22 +809,27 @@ class SmartDatabase implements ArrayAccess, Countable{
 				if($Column->IsPrimaryKey){
 					$structure[$tableName][$columnName]["Key"] = "PRI";
 					$structure[$tableName][$columnName]["IndexType"] = "UNIQUE";
+					$structure[$tableName][$columnName]["IndexPrefixLength"] = "";
 				}
 				else if($Column->IsUnique){
 					$structure[$tableName][$columnName]["Key"] = "UNI";
 					$structure[$tableName][$columnName]["IndexType"] = "UNIQUE";
+					$structure[$tableName][$columnName]["IndexPrefixLength"] = $Column->IndexPrefixLength;
 				}
 				else if($Column->FulltextIndex){ //Fulltext index
 					$structure[$tableName][$columnName]["Key"] = "MUL";
 					$structure[$tableName][$columnName]["IndexType"] = "FULLTEXT";
+					$structure[$tableName][$columnName]["IndexPrefixLength"] = ""; //FULLTEXT Indexing always takes place over the entire column and column prefix indexing is not supported. - https://dev.mysql.com/doc/refman/8.4/en/column-indexes.html
 				}
 				else if($Column->NonuniqueIndex){ //Nonunique index
 					$structure[$tableName][$columnName]["Key"] = "MUL";
 					$structure[$tableName][$columnName]["IndexType"] = "NONUNIQUE";
+					$structure[$tableName][$columnName]["IndexPrefixLength"] = $Column->IndexPrefixLength;
 				}
 				else{
 					$structure[$tableName][$columnName]["Key"] = "";
 					$structure[$tableName][$columnName]["IndexType"] = "";
+					$structure[$tableName][$columnName]["IndexPrefixLength"] = "";
 				}
 				
 				//Default
@@ -842,8 +851,9 @@ class SmartDatabase implements ArrayAccess, Countable{
 
 			//all columns
 			$primaryKeyColumnNames = array();
+			$uniqueIndexColumns = array();
+			$nonuniqueIndexColumns = array();
 			$fulltextColumnNames = array();
-			$nonuniqueIndexColumnNames = array();
 			$first = true;
 			foreach($columns as $columnName=>$columnProps){
 				if(!$first) $sqlCreateTable .= ", ";
@@ -858,6 +868,9 @@ class SmartDatabase implements ArrayAccess, Countable{
 							break;
 						case "utf8mb4_unicode_ci":
 							$sqlCreateTable .= " CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci";
+							break;
+						case "utf8mb4_general_ci":
+							$sqlCreateTable .= " CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci";
 							break;
 						case "latin1_swedish_ci":
 							$sqlCreateTable .= " CHARACTER SET latin1 COLLATE latin1_swedish_ci";
@@ -906,7 +919,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 				//unique
 				if($columnProps["Key"] === "UNI" || $columnProps["IndexType"] === "UNIQUE"){
 					if(!$isPrimarykey){ //no need to specify as UNIQUE if it's a primary key. this will make 2 indexes
-						$sqlCreateTable .= " UNIQUE";
+						$uniqueIndexColumns[$columnName] = $columnProps["IndexPrefixLength"];
 					}
 				}
 				
@@ -917,7 +930,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 				
 				//nonunique index
 				if($columnProps["IndexType"] === "NONUNIQUE"){
-					$nonuniqueIndexColumnNames[] = $columnName;
+					$nonuniqueIndexColumns[$columnName] = $columnProps["IndexPrefixLength"];
 				}
 				
 				$first = false;
@@ -930,14 +943,19 @@ class SmartDatabase implements ArrayAccess, Countable{
 				$sqlCreateTable .= "`)";
 			}
 			
-			//fulltext columns
-			foreach($fulltextColumnNames as $ftColumnName){
-				$sqlCreateTable .= ",FULLTEXT KEY `".$ftColumnName."` (`".$ftColumnName."`)";
+			//unique columns
+			foreach($uniqueIndexColumns as $uiColumnName=>$indexPrefixLength){
+				$sqlCreateTable .= ",UNIQUE `".$uiColumnName."` (`".$uiColumnName."`" . ($indexPrefixLength ? "(".$indexPrefixLength.")" : "") . ")";
 			}
 			
 			//nonunique columns
-			foreach($nonuniqueIndexColumnNames as $nuiColumnName){
-				$sqlCreateTable .= ",KEY `".$nuiColumnName."` (`".$nuiColumnName."`)";
+			foreach($nonuniqueIndexColumns as $nuiColumnName=>$indexPrefixLength){
+				$sqlCreateTable .= ",KEY `".$nuiColumnName."` (`".$nuiColumnName."`" . ($indexPrefixLength ? "(".$indexPrefixLength.")" : "") . ")";
+			}
+			
+			//fulltext columns
+			foreach($fulltextColumnNames as $ftColumnName){
+				$sqlCreateTable .= ",FULLTEXT KEY `".$ftColumnName."` (`".$ftColumnName."`)";
 			}
 			
 			$sqlCreateTable .= ");";
@@ -1016,6 +1034,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 				$extra = $columnProps['Extra'];
 				$collation = $columnProps['Collation'];
 				$indexType = $columnProps['IndexType'];
+				$indexPrefixLength = $columnProps['IndexPrefixLength'];
 				*/ 
 				
 				//use datatype to determine each of the following vars: 
@@ -1096,6 +1115,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 				$column->IsAutoIncrement = ( (strpos($columnProps['Extra'], "auto_increment") !== false) ? true : false);
 				$column->FulltextIndex = ( ($columnProps['IndexType'] === "FULLTEXT") ? true : false);
 				$column->NonuniqueIndex = (!$column->IsUnique && ($columnProps['IndexType'] === "NONUNIQUE") ? true : false);
+				$column->IndexPrefixLength = $columnProps['IndexPrefixLength'];
 				$column->IsRequired = ( !$column->IsAutoIncrement && ($columnProps['Null']==="NO" || $column->IsPrimaryKey) ? true : false); //auto-increment shouldnt be required, otherwise we dont get the autoincrement value
 				$column->SortOrder = $colNum++;
 				
@@ -1291,7 +1311,7 @@ class SmartDatabase implements ArrayAccess, Countable{
 					&& ($cachedDb->Version == self::Version)
 				){
 					//dates and smartdb version match. valid cached db
-					$cachedDb->DbManager = $options['db-manager']; //update the db manager. this can't be cached
+					$cachedDb->DbManager = ($options['db-manager'] ?? null); //update the db manager. this can't be cached
 					
 					//timezone could change from what was cached
 					if($cachedDb->DefaultTimezone != $options['default-timezone']){

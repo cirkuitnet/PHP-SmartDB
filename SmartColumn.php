@@ -50,6 +50,7 @@ class SmartColumn{
 				'IsAutoIncrement',
 				'FulltextIndex',
 				'NonuniqueIndex',
+				'IndexPrefixLength',
 				'DefaultFormType',
 				'IsRequired',
 				'IsRequiredMessage',
@@ -87,7 +88,7 @@ class SmartColumn{
 	 */
 	public $DataType;
 	/**
-	 * @var string The SQL collation for this column (ie "latin1_swedish_ci", "utf8_general_ci", "utf8mb4_unicode_ci", etc)
+	 * @var string The SQL collation for this column (ie "latin1_swedish_ci", "utf8_general_ci", "utf8mb4_unicode_ci", "utf8mb4_general_ci", etc)
 	 */
 	public $Collation;
 	/**
@@ -198,6 +199,10 @@ class SmartColumn{
 	 * @var bool True if this column is specified as a non-unique index for searching
 	 */
 	public $NonuniqueIndex;
+	/**
+	 * @var int You can create an index that uses only the first N characters of the column. Indexing only a prefix of column values in this way can make the index file much smaller. When you index a BLOB or TEXT column, you must specify a prefix length for the index. Has max limits based on underlying db.
+	 */
+	public $IndexPrefixLength;
 	/**
 	 * @var string Default it "text". See XmlSchema.xsd for possible values (Last I checked, it was: "text", "password", "checkbox", "radio", "select", "textarea", "hidden", "colorpicker", "datepicker", "slider" ... the last 3, are for use with jQuery UI)
 	 * @see SmartCell::GetFormObject() SmartCell::GetFormObject()

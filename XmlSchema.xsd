@@ -27,18 +27,19 @@
                             </xs:restriction>
                           </xs:simpleType>
                         </xs:attribute>
-						<xs:attribute name="Collation" id="Collation" use="optional">
+                        <xs:attribute name="Collation" id="Collation" use="optional">
                           <xs:simpleType>
                             <xs:restriction base="xs:string">
                               <xs:enumeration value="" />
                               <xs:enumeration value="utf8_general_ci" id="utf8_general_ci" />
                               <xs:enumeration value="latin1_swedish_ci" id="latin1_swedish_ci" />
                               <xs:enumeration value="utf8mb4_unicode_ci" id="utf8mb4_unicode_ci" />
+                              <xs:enumeration value="utf8mb4_general_ci" id="utf8mb4_general_ci" />
                             </xs:restriction>
                           </xs:simpleType>
                         </xs:attribute>
-						<xs:attribute name="PossibleValues" use="optional">
-							<xs:simpleType>
+                        <xs:attribute name="PossibleValues" use="optional">
+                          <xs:simpleType>
                             <xs:restriction base="xs:string">
                               <xs:pattern value="(\s*[a-zA-Z0-9_-]+\s*,?)+" />
                             </xs:restriction>
@@ -80,8 +81,9 @@
                           </xs:simpleType>
                         </xs:attribute>
                         <xs:attribute name="IsUnique" type="xs:boolean" default="false" />
-						<xs:attribute name="FulltextIndex" type="xs:boolean" default="false" />
-						<xs:attribute name="NonuniqueIndex" type="xs:boolean" default="false" />
+                        <xs:attribute name="FulltextIndex" type="xs:boolean" default="false" />
+                        <xs:attribute name="NonuniqueIndex" type="xs:boolean" default="false" />
+                        <xs:attribute name="IndexPrefixLength" type="xs:integer" use="optional" />
                         <xs:attribute name="SortOrder" type="xs:integer" use="optional" />
                         <xs:attribute name="PrimaryKey" type="xs:boolean" use="optional" />
                         <xs:attribute name="AutoIncrement" type="xs:boolean" use="optional" />

@@ -1796,8 +1796,29 @@ class DbManager_MySQL implements DbManager {
 	}
 	
 	//********************* password management ********************************
+	
+	//it's recommended to change these defaults
+	private $_encryptMethod = 'AES-256-CFB';
+	private $_encryptSalt = 'SmartDb';
+	
 	/**
-	 * key must be length of 16, 24, or 32
+	 * Set encrypt method for internal password storage. See https://www.php.net/manual/en/function.openssl-get-cipher-methods.php
+	 * @param string $method ssl method to use, ref: https://www.php.net/manual/en/function.openssl-get-cipher-methods.php
+	 */
+	public function SetEncryptMethod($method){
+		$this->_encryptMethod = $method;
+	}
+	
+	/**
+	 * Set encrypt salt for internal password.
+	 * @param string $salt private salt text for additional encrypting security beyond encrypt key alone
+	 */
+	public function SetEncryptSalt($salt){
+		$this->_encryptSalt = $salt;
+	}
+	
+	/**
+	 * Key must be length of 16, 24, or 32
 	 * @return string the unique encrypt key used internally
 	 */
 	private function PadEncryptKey($key){
@@ -1817,11 +1838,14 @@ class DbManager_MySQL implements DbManager {
 	 * @param string $key key to encrypt against
 	 */
 	private function Encrypt($encrypt,$key) {
+		$key = $key.$this->_encryptSalt;
 		$key = $this->PadEncryptKey($key);
-		$iv = mcrypt_create_iv(mcrypt_get_iv_size(MCRYPT_RIJNDAEL_256, MCRYPT_MODE_ECB), MCRYPT_RAND);
-		$passcrypt = mcrypt_encrypt(MCRYPT_RIJNDAEL_256, $key, $encrypt, MCRYPT_MODE_ECB, $iv);
-		$encode = base64_encode($passcrypt);
-		return trim($encode);
+		$cipher = $this->_encryptMethod;
+
+		$iv = openssl_random_pseudo_bytes( openssl_cipher_iv_length($cipher) );
+		$ciphertext_raw = openssl_encrypt($encrypt, $cipher, $key, OPENSSL_RAW_DATA, $iv);
+		$hmac = hash_hmac('sha256', $ciphertext_raw, $key, true);
+		return base64_encode( $iv.$hmac.$ciphertext_raw );
 	}
 
 	/**
@@ -1830,11 +1854,26 @@ class DbManager_MySQL implements DbManager {
 	 * @param string $key key to decrypt w
 	 */
 	private function Decrypt($decrypt,$key) {
+		$key = $key.$this->_encryptSalt;
 		$key = $this->PadEncryptKey($key);
-		$decoded = base64_decode($decrypt);
-		$iv = mcrypt_create_iv(mcrypt_get_iv_size(MCRYPT_RIJNDAEL_256, MCRYPT_MODE_ECB), MCRYPT_RAND);
-		$decrypted = mcrypt_decrypt(MCRYPT_RIJNDAEL_256, $key, $decoded, MCRYPT_MODE_ECB, $iv);
-		return trim($decrypted);
+		$cipher = $this->_encryptMethod;
+
+		$c = base64_decode($decrypt);
+		$ivlen = openssl_cipher_iv_length($cipher);
+		$iv = substr($c, 0, $ivlen);
+		$sha2len=32;
+		//$hmac = substr($c, $ivlen, $sha2len);
+		$ciphertext_raw = substr($c, $ivlen+$sha2len);
+		$original_plaintext = openssl_decrypt($ciphertext_raw, $cipher, $key, OPENSSL_RAW_DATA, $iv);
+
+		//verify. (no need to do this here. failure will cause connection issue regardless. removing for performance.)
+		//$calcmac = hash_hmac('sha256', $ciphertext_raw, $key, $as_binary=true);
+		//if (hash_equals($hmac, $calcmac)){ // timing attack safe comparison 
+		//	return $original_plaintext;
+		//}
+		//else return false; //decryption failed
+		
+		return $original_plaintext;
 	}
 
 }

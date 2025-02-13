@@ -240,6 +240,7 @@ die();
 function SyncDbTables($t){
 	$printResults = false;
 	$results = $t['database']->SyncStructureToDatabase($printResults);
+	echo $results;
 	if(strstr($results, "Fatal error") !== false || strstr($results, "exception") !== false){
 		throw new Exception("SyncDbTablesFailed");
 	}
